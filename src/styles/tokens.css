@@ -1,0 +1,92 @@
+/*
+ * Plotune brand tokens for the Bridge workspace: one file, light theme only.
+ *
+ * Every value is copied from the public plotune/plotune-web repository, branch `master`
+ * at commit f31745c (the Plotune Stream workspace). No colour here is new.
+ * Value -> source file:line is listed in docs/ux-notes.md.
+ *   W = src/StreamWorkspace/workspace.css   I = src/index.css   T = tailwind.config.js
+ */
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --color-paper: #f7f6f2;          /* I:11 --paper, W:2017 --sw-bg: page background */
+  --color-chrome: #eeeee6;         /* W:2018 topbar, W:2021 sidebar, W:2032 table head */
+  --color-chrome-border: #cbd2c6;  /* W:2018 topbar/sidebar rule */
+  --color-panel: #ffffff;          /* W:519 .sw-panel background (written #fff) */
+  --color-border: #d2d5ce;         /* I:14 --line, W:2017 --sw-border */
+  --color-row-rule: #e8eded;       /* W:531 panel head and table head rule */
+  --color-row-rule-soft: #edf0f1;  /* W:583 table row rule */
+
+  /* Text */
+  --color-ink: #1c242b;            /* I:12 --ink, W:2017 --sw-ink */
+  --color-text: #354249;           /* W:2033 table cell text */
+  --color-muted: #526067;          /* W:2017 --sw-muted */
+
+  /* Accent */
+  --color-teal: #00796b;           /* I:13 --teal, T:26 primary */
+  --color-teal-hover: #00695d;     /* W:451 .sw-primary:hover */
+  --color-teal-link-hover: #005b50;/* W:469 .sw-link:hover */
+  --color-on-teal: #fffffc;        /* W:2023 active navigation text */
+  --color-violet: #5b62a7;         /* T:28 secondary */
+  --color-teal-tint: #e7eee4;      /* W:2017 --sw-teal-light */
+  --color-violet-tint: #f1f1fa;    /* T:6 violet 50 */
+
+  /* Controls */
+  --button-border: #d7e0e1;        /* W:429 .sw-button */
+  --button-text: #51656c;          /* W:431 */
+  --button-hover-bg: #eff5f3;      /* W:442 */
+  --button-hover-border: #c2d6d0;  /* W:443 */
+  --icon-text: #63757b;            /* W:208 .sw-icon-button */
+  --icon-hover-bg: #edf3f2;        /* W:212 */
+  --nav-text: #5b6b72;             /* W:287 sidebar item */
+  --nav-hover-bg: #eef3f2;         /* W:295 */
+
+  /* Status. Badge pairs are Stream's own; text shades are the darkened ones from T:14-16 (see app.css) */
+  --status-good-fg: #007968;    /* W:621 */
+  --status-good-bg: #eaf5f0;    /* W:622 */
+  --status-bad-fg: #ae4a42;     /* W:625 */
+  --status-bad-bg: #fbece9;     /* W:626 */
+  --status-warn-fg: #946b28;    /* W:629 */
+  --status-warn-bg: #fcf3e2;    /* W:630 */
+  --status-neutral-fg: #718188; /* W:633 */
+  --status-neutral-bg: #eff3f4; /* W:634 */
+  --text-good: #1f6e42;            /* T:14 */
+  --text-bad: #a8261f;             /* T:15 */
+  --text-warn: #7a5200;            /* T:16 */
+
+  /* Overlays */
+  --color-backdrop: #1c242b70;     /* W:2036 dialog backdrop */
+  --shadow-menu: 0 6px 20px #233a4020; /* stream.css:104 account menu */
+  --shadow-dialog: 0 20px 70px #24383f26; /* W:1237 dialog */
+  --color-dialog-border: #d5e0df;  /* W:1228 */
+
+  /* Type */
+  --font-sans: 'Inter', system-ui, sans-serif;                 /* I:19 */
+  --font-mono: 'Roboto Mono', ui-monospace, monospace;         /* I:26 */
+  --text-base: 13px;               /* W:12 */
+  --leading-base: 1.5;             /* W:13 */
+  --text-h1: 30px;                 /* W:2026 */
+  --tracking-h1: -0.035em;         /* W:2026 */
+  --text-label: 9px;               /* W:271 navigation group label size */
+  --tracking-label: 1.2px;         /* W:272 */
+  --text-table-head: 10px;         /* W:2032 */
+  --tracking-table-head: 0.035em;  /* W:2032 */
+
+  /* Shape and spacing */
+  --radius-control: 2px;           /* W:2027-2028 panels, buttons, nav */
+  --radius-input: 5px;             /* W:67 select and input */
+  --radius-badge: 3px;             /* W:610 */
+  --radius-dialog: 8px;            /* W:1229 */
+  --size-topbar: 64px;             /* W:114 */
+  --size-sidebar: 218px;           /* W:219 */
+  --size-control: 40px;            /* W:432 button min-height */
+  --size-nav-item: 36px;           /* W:282 */
+  --gap-grid: 20px;                /* W:830 */
+  --pad-main: 25px 30px 0;         /* W:336 */
+  --pad-panel-head: 13px 18px;     /* W:527 */
+  --pad-table-head: 11px 18px;     /* W:578 */
+  --pad-table-cell: 10px 18px;     /* W:582 */
+  --focus-ring: 2px solid #00796b; /* W:42 */
+  --focus-offset: 3px;             /* W:43 */
+}
