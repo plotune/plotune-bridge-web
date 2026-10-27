@@ -1,0 +1,1004 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:plotune:bridge-can:contract:0.1.0",
+  "title": "Plotune Bridge CAN device contract",
+  "description": "Logical, transport-neutral messages for a Classic CAN Bridge device. Version 0.1.0. See ../SPEC.md. Any message on any transport validates against this schema's root.",
+  "x-contract-version": "0.1.0",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Request_hello"
+    },
+    {
+      "$ref": "#/$defs/Request_get_channel_status"
+    },
+    {
+      "$ref": "#/$defs/Request_start_rx"
+    },
+    {
+      "$ref": "#/$defs/Request_stop_rx"
+    },
+    {
+      "$ref": "#/$defs/Request_transmit"
+    },
+    {
+      "$ref": "#/$defs/Request_set_bitrate"
+    },
+    {
+      "$ref": "#/$defs/Request_set_termination"
+    },
+    {
+      "$ref": "#/$defs/Request_get_statistics"
+    },
+    {
+      "$ref": "#/$defs/ResponseOk"
+    },
+    {
+      "$ref": "#/$defs/ResponseError"
+    },
+    {
+      "$ref": "#/$defs/Event_frames"
+    },
+    {
+      "$ref": "#/$defs/Event_channel_status"
+    }
+  ],
+  "$defs": {
+    "ChannelId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2,
+      "description": "1-based product channel (CAN1, CAN2). Prototype 1 exposes only 1."
+    },
+    "ErrorCode": {
+      "enum": [
+        "INVALID_ID",
+        "INVALID_DLC",
+        "INVALID_DATA",
+        "UNKNOWN_CHANNEL",
+        "UNSUPPORTED_BITRATE",
+        "UNSUPPORTED_FEATURE",
+        "MALFORMED_REQUEST",
+        "UNKNOWN_OPERATION",
+        "UNSUPPORTED_VERSION",
+        "CHANNEL_NOT_CONFIGURED",
+        "CHANNEL_BUSY",
+        "BUS_OFF",
+        "TX_QUEUE_FULL",
+        "NOT_CONNECTED",
+        "DEVICE_DISCONNECTED",
+        "TIMEOUT",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "Direction": {
+      "enum": [
+        "rx",
+        "tx"
+      ]
+    },
+    "BusState": {
+      "enum": [
+        "error_active",
+        "error_warning",
+        "error_passive",
+        "bus_off"
+      ]
+    },
+    "TxFrame": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ChannelId"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 536870911,
+          "description": "11-bit when extended=false (max 2047), 29-bit when extended=true."
+        },
+        "extended": {
+          "type": "boolean"
+        },
+        "rtr": {
+          "type": "boolean"
+        },
+        "dlc": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "data": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{2}){0,8}$",
+          "description": "Lowercase hex, no separators. Empty for RTR. For data frames its byte length MUST equal dlc (not expressible in JSON Schema; enforced by implementations)."
+        }
+      },
+      "required": [
+        "channel",
+        "id",
+        "extended",
+        "rtr",
+        "dlc",
+        "data"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "extended": {
+                "const": false
+              }
+            },
+            "required": [
+              "extended"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "maximum": 2047
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rtr": {
+                "const": true
+              }
+            },
+            "required": [
+              "rtr"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "const": ""
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "dlc": {
+                "const": 0
+              }
+            },
+            "required": [
+              "dlc"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "const": ""
+              }
+            }
+          }
+        }
+      ]
+    },
+    "CanFrame": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ChannelId"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 536870911,
+          "description": "11-bit when extended=false (max 2047), 29-bit when extended=true."
+        },
+        "extended": {
+          "type": "boolean"
+        },
+        "rtr": {
+          "type": "boolean"
+        },
+        "dlc": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "data": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{2}){0,8}$",
+          "description": "Lowercase hex, no separators. Empty for RTR. For data frames its byte length MUST equal dlc (not expressible in JSON Schema; enforced by implementations)."
+        },
+        "timestamp_ns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Device-side monotonic capture time in ns; per-channel non-decreasing; never receipt time."
+        },
+        "direction": {
+          "$ref": "#/$defs/Direction"
+        }
+      },
+      "required": [
+        "channel",
+        "id",
+        "extended",
+        "rtr",
+        "dlc",
+        "data",
+        "timestamp_ns",
+        "direction"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "extended": {
+                "const": false
+              }
+            },
+            "required": [
+              "extended"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "maximum": 2047
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rtr": {
+                "const": true
+              }
+            },
+            "required": [
+              "rtr"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "const": ""
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "dlc": {
+                "const": 0
+              }
+            },
+            "required": [
+              "dlc"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "const": ""
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ChannelStatus": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ChannelId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "bitrate": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "null until configured."
+        },
+        "termination": {
+          "type": "boolean",
+          "description": "120 ohm termination; OFF at power-up."
+        },
+        "bus_state": {
+          "$ref": "#/$defs/BusState"
+        },
+        "streaming": {
+          "type": "boolean"
+        },
+        "rx_queue_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rx_queue_capacity": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel",
+        "name",
+        "bitrate",
+        "termination",
+        "bus_state",
+        "streaming",
+        "rx_queue_depth",
+        "rx_queue_capacity"
+      ],
+      "additionalProperties": false
+    },
+    "ChannelStatistics": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ChannelId"
+        },
+        "rx_received": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rx_forwarded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rx_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rx_overflow": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tx_sent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tx_failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tx_echo_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bus_errors": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel",
+        "rx_received",
+        "rx_forwarded",
+        "rx_dropped",
+        "rx_overflow",
+        "tx_sent",
+        "tx_failed",
+        "tx_echo_dropped",
+        "bus_errors"
+      ],
+      "additionalProperties": false
+    },
+    "ClockInfo": {
+      "type": "object",
+      "properties": {
+        "monotonic_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wall_clock_ns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "wall_clock_synced": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "monotonic_ns",
+        "wall_clock_ns",
+        "wall_clock_synced"
+      ],
+      "additionalProperties": false
+    },
+    "DeviceDescriptor": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "device_id": {
+          "type": "string"
+        },
+        "firmware": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "can_fd": {
+          "const": false,
+          "description": "Always false in V1; CAN FD is not advertised."
+        },
+        "supported_bitrates": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "contains": {
+            "const": 1000000
+          }
+        },
+        "rx_queue_capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "clock": {
+          "$ref": "#/$defs/ClockInfo"
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChannelStatus"
+          },
+          "minItems": 1,
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "contract_version",
+        "session_id",
+        "device_id",
+        "firmware",
+        "profile",
+        "can_fd",
+        "supported_bitrates",
+        "rx_queue_capacity",
+        "clock",
+        "channels"
+      ],
+      "additionalProperties": false
+    },
+    "FrameBatch": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "channel": {
+          "$ref": "#/$defs/ChannelId"
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Frames lost on this channel since its previous batch."
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CanFrame"
+          }
+        }
+      },
+      "required": [
+        "seq",
+        "channel",
+        "dropped",
+        "frames"
+      ],
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Request_hello": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "hello"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "contract_version": {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+\\.\\d+$"
+            },
+            "client": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "contract_version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_get_channel_status": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "get_channel_status"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "channels": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ChannelId"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Omit to address all channels."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_start_rx": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "start_rx"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "channels": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ChannelId"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Omit to address all channels."
+            },
+            "include_tx": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_stop_rx": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "stop_rx"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "channels": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ChannelId"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Omit to address all channels."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_transmit": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "transmit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "frame": {
+              "$ref": "#/$defs/TxFrame"
+            }
+          },
+          "required": [
+            "frame"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_set_bitrate": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "set_bitrate"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "channel": {
+              "$ref": "#/$defs/ChannelId"
+            },
+            "bitrate": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "channel",
+            "bitrate"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_set_termination": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "set_termination"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "channel": {
+              "$ref": "#/$defs/ChannelId"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "channel",
+            "enabled"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Request_get_statistics": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "request"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "op": {
+          "const": "get_statistics"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "channels": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ChannelId"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Omit to address all channels."
+            },
+            "reset": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "op",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "Result_hello": {
+      "$ref": "#/$defs/DeviceDescriptor"
+    },
+    "Result_channels": {
+      "type": "object",
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChannelStatus"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "channels"
+      ],
+      "additionalProperties": false
+    },
+    "Result_channel": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ChannelStatus"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false
+    },
+    "Result_transmit": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "const": true
+        }
+      },
+      "required": [
+        "accepted"
+      ],
+      "additionalProperties": false
+    },
+    "Result_get_statistics": {
+      "type": "object",
+      "properties": {
+        "timestamp_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "since_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "statistics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChannelStatistics"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "timestamp_ns",
+        "since_ns",
+        "statistics"
+      ],
+      "additionalProperties": false
+    },
+    "ResponseOk": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "response"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ok": {
+          "const": true
+        },
+        "result": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "ok",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "ResponseError": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "response"
+        },
+        "id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "$ref": "#/$defs/Error"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "Event_frames": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "event"
+        },
+        "event": {
+          "const": "frames"
+        },
+        "data": {
+          "$ref": "#/$defs/FrameBatch"
+        }
+      },
+      "required": [
+        "type",
+        "event",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "Event_channel_status": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "event"
+        },
+        "event": {
+          "const": "channel_status"
+        },
+        "data": {
+          "$ref": "#/$defs/ChannelStatus"
+        }
+      },
+      "required": [
+        "type",
+        "event",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

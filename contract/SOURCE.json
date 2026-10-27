@@ -1,0 +1,10 @@
+{
+  "repo": "plotune-nexus",
+  "path": "plotune-bridge/plotune-bridge-can/contract",
+  "commit": "366138c174241f78810fe21be996d83d9e1ab843",
+  "contractVersion": "0.1.0",
+  "files": {
+    "schema/bridge-can-contract.v0.1.0.schema.json": "49d1345376dc2e86a3c183b141e54ca610adfefce6487df9d746cdc5913af456",
+    "examples/session-v0.1.0.ndjson": "69d06bc8abaa90372860a65af911dfb72981a090ff2396a2a6f757f26e67dc56"
+  }
+}
