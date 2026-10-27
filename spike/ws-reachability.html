@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bridge CAN WebSocket reachability spike</title>
+<style>
+  :root { color-scheme: light; font-family: system-ui, sans-serif; }
+  body { max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #111; }
+  h1 { font-size: 1.4rem; }
+  p, li { line-height: 1.45; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid #bbb; padding: .45rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #f2f2f2; }
+  button { margin: .25rem .3rem .25rem 0; padding: .45rem .7rem; cursor: pointer; }
+  code { background: #f4f4f4; padding: .1rem .25rem; }
+  #summary { font-weight: 600; }
+  #log { white-space: pre-wrap; background: #111; color: #e8e8e8; padding: .75rem; border-radius: 4px; min-height: 8rem; }
+</style>
+</head>
+<body>
+<h1>Bridge CAN browser &rarr; LAN WebSocket reachability</h1>
+<p>
+  This page runs from an HTTPS origin and attempts a WebSocket connection to a
+  Bridge CAN virtual device. It sends the contract <code>hello</code> request and
+  records whether the connection opened, the response, any browser error and the
+  close code. It is a spike, not a product transport.
+</p>
+<p>
+  Page origin: <code id="origin"></code><br>
+  User agent: <code id="ua"></code>
+</p>
+<p>
+  Variants are fixed defaults for the recorded spike. Override them with query
+  parameters <code>ip</code>, <code>hostname</code>, <code>wss</code>, and
+  <code>localhost</code>. Add <code>?autorun=1</code> to run all variants and
+  write the result to <code>window.__SPIKE_RESULTS__</code>.
+</p>
+<table id="variants">
+  <thead><tr><th>Variant</th><th>Target</th><th>Result</th><th>Close code</th><th>Detail</th></tr></thead>
+  <tbody></tbody>
+</table>
+<p>
+  <button data-run="ip">Run ws:// IP</button>
+  <button data-run="hostname">Run ws:// hostname</button>
+  <button data-run="wss">Run wss:// self-signed</button>
+  <button data-run="localhost">Run ws:// localhost</button>
+  <button id="run-all">Run all</button>
+</p>
+<p id="summary"></p>
+<pre id="log" aria-live="polite"></pre>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const variants = [
+    { id: "ip", label: "ws:// to LAN IP", target: params.get("ip") || "ws://10.99.0.2:9101" },
+    { id: "hostname", label: "ws:// to .local/hostname", target: params.get("hostname") || "ws://bridge-can-spike.local:9101" },
+    { id: "wss", label: "wss:// with self-signed cert", target: params.get("wss") || "wss://10.99.0.2:9443" },
+    { id: "localhost", label: "ws:// localhost (loopback control)", target: params.get("localhost") || "ws://localhost:9101" },
+  ];
+  const results = {};
+  const tbody = document.querySelector("#variants tbody");
+  const log = document.querySelector("#log");
+  const summary = document.querySelector("#summary");
+  document.querySelector("#origin").textContent = location.origin;
+  document.querySelector("#ua").textContent = navigator.userAgent;
+
+  const emit = (message) => {
+    console.log("SPIKE " + message);
+    log.textContent += message + "\n";
+  };
+
+  for (const variant of variants) {
+    const tr = document.createElement("tr");
+    tr.id = "row-" + variant.id;
+    tr.innerHTML = `<td>${variant.label}</td><td><code>${variant.target}</code></td><td class="result">not run</td><td class="close">-</td><td class="detail">-</td>`;
+    tbody.appendChild(tr);
+  }
+
+  const setRow = (variant, result) => {
+    const tr = document.querySelector("#row-" + variant.id);
+    tr.querySelector(".result").textContent = result.result;
+    tr.querySelector(".close").textContent = result.closeCode == null ? "-" : String(result.closeCode);
+    tr.querySelector(".detail").textContent = result.detail || "-";
+  };
+
+  const runVariant = (variant) => new Promise((resolve) => {
+    const result = {
+      variant: variant.id,
+      label: variant.label,
+      target: variant.target,
+      origin: location.origin,
+      result: "pending",
+      closeCode: null,
+      closeReason: null,
+      error: null,
+      hello: null,
+      startedAt: new Date().toISOString(),
+    };
+    setRow(variant, result);
+    let settled = false;
+    let ws = null;
+    const finish = (next) => {
+      if (settled) return;
+      settled = true;
+      Object.assign(result, next);
+      results[variant.id] = result;
+      setRow(variant, result);
+      emit(JSON.stringify(result));
+      resolve(result);
+    };
+
+    try {
+      ws = new WebSocket(variant.target);
+    } catch (error) {
+      finish({ result: "constructor-error", error: String(error) });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try { ws.close(); } catch (_) {}
+      finish({ result: "timeout", error: "no open/close event within 5 s" });
+    }, 5000);
+    ws.onopen = () => {
+      result.result = "connected";
+      emit("connected to " + variant.target);
+      ws.send(JSON.stringify({
+        type: "request",
+        id: 1,
+        op: "hello",
+        params: { contract_version: "0.1.0", client: "browser-reachability-spike" },
+      }));
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        result.hello = message;
+        emit("hello response: " + event.data);
+      } catch (error) {
+        result.hello = { parseError: String(error), raw: String(event.data).slice(0, 500) };
+        emit("hello parse error: " + String(error));
+      }
+      clearTimeout(timer);
+      try { ws.close(1000, "spike complete"); } catch (_) {}
+      finish({ result: "connected", closeCode: 1000, closeReason: "spike complete" });
+    };
+    ws.onerror = () => {
+      // Browsers intentionally hide details here; the console hosts the useful text.
+      result.error = "WebSocket 'error' event";
+      emit("WebSocket error event for " + variant.target + " (details are browser console only)");
+      // Some engines (observed in WebKit) report a mixed-content block only through
+      // 'error' and never fire 'close'. Give a real close event a short window first.
+      setTimeout(() => {
+        if (!settled) {
+          finish({ result: "blocked-or-failed", closeCode: null, closeReason: "", error: result.error });
+        }
+      }, 1000);
+    };
+    ws.onclose = (event) => {
+      clearTimeout(timer);
+      if (!settled) {
+        finish({
+          result: result.result === "connected" ? "closed" : "blocked-or-failed",
+          closeCode: event.code,
+          closeReason: event.reason,
+        });
+      }
+    };
+  });
+
+  const runAll = async () => {
+    for (const variant of variants) {
+      await runVariant(variant);
+    }
+    window.__SPIKE_RESULTS__ = results;
+    const connected = Object.values(results).filter((r) => r.result === "connected").length;
+    summary.textContent = `DONE: ${connected}/${variants.length} variants connected. Full JSON is in window.__SPIKE_RESULTS__ and the console.`;
+    emit("DONE " + summary.textContent);
+  };
+
+  document.querySelectorAll("[data-run]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const variant = variants.find((item) => item.id === button.dataset.run);
+      runVariant(variant);
+    });
+  });
+  document.querySelector("#run-all").addEventListener("click", runAll);
+  if (params.get("autorun") === "1") runAll();
+})();
+</script>
+</body>
+</html>
