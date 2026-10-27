@@ -147,6 +147,13 @@
       // Browsers intentionally hide details here; the console hosts the useful text.
       result.error = "WebSocket 'error' event";
       emit("WebSocket error event for " + variant.target + " (details are browser console only)");
+      // Some engines (observed in WebKit) report a mixed-content block only through
+      // 'error' and never fire 'close'. Give a real close event a short window first.
+      setTimeout(() => {
+        if (!settled) {
+          finish({ result: "blocked-or-failed", closeCode: null, closeReason: "", error: result.error });
+        }
+      }, 1000);
     };
     ws.onclose = (event) => {
       clearTimeout(timer);
