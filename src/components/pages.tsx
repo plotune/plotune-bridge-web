@@ -67,7 +67,7 @@ export function Dashboard({ page, panels, head }: { page: PageId; panels: PanelD
       {head(<PanelsMenu panels={panels} hidden={hidden} onToggle={toggle} />)}
       <div className="bw-grid" data-page={page}>
         {panels.filter((p) => !hidden.has(p.id)).map((p) => (
-          <div key={p.id} className={p.wide ? 'bw-span-2' : ''}>{p.render()}</div>
+          <div key={p.id} className={`bw-tile-${p.id} ${p.wide ? 'bw-span-2' : ''}`}>{p.render()}</div>
         ))}
         {panels.every((p) => hidden.has(p.id)) && <p className="bw-empty">All panels are hidden. Use Panels to show them again.</p>}
       </div>
@@ -76,9 +76,9 @@ export function Dashboard({ page, panels, head }: { page: PageId; panels: PanelD
 }
 
 export const capturePanels: PanelDef[] = [
+  { id: 'trace', label: 'Trace', wide: true, render: () => <TracePanel /> },
   { id: 'channels', label: 'Channels', wide: true, render: () => <ChannelsPanel /> },
   { id: 'stats', label: 'Statistics', wide: true, render: () => <StatsPanel /> },
-  { id: 'trace', label: 'Trace', wide: true, render: () => <TracePanel /> },
   { id: 'transmit', label: 'Send frame', wide: true, render: () => <TransmitPanel /> },
 ];
 

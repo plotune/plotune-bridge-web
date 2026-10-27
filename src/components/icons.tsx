@@ -60,3 +60,15 @@ export const IconCheck = (p: SVGProps<SVGSVGElement>) => (
 export const IconCopy = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><rect x="5.5" y="5.5" width="7.5" height="7.5" rx="1" /><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" /></Icon>
 );
+
+export const IconPlus = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M8 3.2v9.6M3.2 8h9.6" />
+  </Icon>
+);
+
+export const IconClose = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M4 4l8 8M12 4l-8 8" />
+  </Icon>
+);

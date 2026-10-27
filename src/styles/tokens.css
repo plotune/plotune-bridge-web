@@ -79,11 +79,8 @@
   --radius-badge: 3px;             /* W:610 */
   --radius-dialog: 8px;            /* W:1229 */
   --size-topbar: 64px;             /* W:114 */
-  --size-sidebar: 218px;           /* W:219 */
+  --size-setup: 260px;             /* device list width: not a Stream value (its sidebar is 218px, W:219), widened to fit device names */
   --size-control: 40px;            /* W:432 button min-height */
-  --size-nav-item: 36px;           /* W:282 */
-  --gap-grid: 20px;                /* W:830 */
-  --pad-main: 25px 30px 0;         /* W:336 */
   --pad-panel-head: 13px 18px;     /* W:527 */
   --pad-table-head: 11px 18px;     /* W:578 */
   --pad-table-cell: 10px 18px;     /* W:582 */

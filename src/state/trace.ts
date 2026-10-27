@@ -1,12 +1,15 @@
 import type { CanFrame } from '../protocol/types';
 
-export type TraceRow =
+export type TraceRowBase =
   | { kind: 'frame'; key: number; frame: CanFrame }
   /** The device reported lost frames. Where in the stream they were lost is not known; this marks where the news arrived. */
   | { kind: 'drop'; key: number; channel: number; count: number }
   /** The transport lost whole batches (a gap in the stream sequence). */
   | { kind: 'gap'; key: number; batches: number }
   | { kind: 'session'; key: number; text: string };
+
+/** In a merged trace every row also names the device it came from and that device's own time origin. */
+export type TraceRow = TraceRowBase & { device?: string; originNs?: bigint };
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -20,6 +23,8 @@ export class TraceBuffer {
   evicted = 0;
   version = 0;
   originNs: bigint | null = null;
+  /** Called for every pushed row, so a merged view can follow this buffer. */
+  onPush: ((row: TraceRow) => void) | null = null;
 
   constructor(readonly capacity = 20_000) {}
 
@@ -42,6 +47,7 @@ export class TraceBuffer {
       this.evicted += excess;
     }
     this.version += 1;
+    this.onPush?.(full);
   }
 
   clear(): void {
