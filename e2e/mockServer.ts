@@ -1,5 +1,6 @@
 // A WebSocket host for MockDeviceCore: one UTF-8 JSON text frame per message, replace-on-connect (close 4001),
 // an Origin allow-list, binary frames refused (1003), and controls for tests (drop the link with a chosen close code).
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { MockDeviceCore, serialize, type MockDeviceOptions } from '../tests/helpers/mockDevice';
@@ -11,11 +12,15 @@ export interface MockServerOptions extends MockDeviceOptions {
   /** Extra origins allowed besides localhost ones. Requests without an Origin header are always allowed. */
   origins?: string[];
   tickMs?: number;
+  /** Serve wss:// with this certificate (tests pass a throwaway self-signed one). */
+  tls?: { cert: string; key: string };
 }
 
 export class MockDeviceServer {
   readonly core: MockDeviceCore;
   private readonly wss: WebSocketServer;
+  private readonly https: HttpsServer | null;
+  private readonly scheme: 'ws' | 'wss';
   private current: WebSocket | null = null;
   private readonly timer: NodeJS.Timeout;
   private generators: NodeJS.Timeout[] = [];
@@ -25,28 +30,34 @@ export class MockDeviceServer {
   connections = 0;
 
   constructor(options: MockServerOptions = {}) {
-    const { port = 0, origins = [], tickMs = 10, ...device } = options;
+    const { port = 0, origins = [], tickMs = 10, tls, ...device } = options;
     this.origins = origins;
     this.core = new MockDeviceCore(device);
+    this.scheme = tls ? 'wss' : 'ws';
+    this.https = tls ? createHttpsServer(tls) : null;
     this.wss = new WebSocketServer({
-      host: '127.0.0.1',
-      port,
+      ...(this.https ? { server: this.https } : { host: '127.0.0.1', port }),
       maxPayload: 64 * 1024,
       verifyClient: ({ origin }, done) => {
         this.seenOrigins.push(origin);
         done(origin === undefined || LOCALHOST.test(origin) || this.origins.includes(origin), 403, 'Origin not allowed');
       },
     });
+    this.https?.listen(port, '127.0.0.1');
     this.wss.on('connection', (ws) => this.onConnection(ws));
     this.timer = setInterval(() => this.core.deliver(), tickMs);
   }
 
+  private get address(): AddressInfo | string | null {
+    return this.https ? this.https.address() : this.wss.address();
+  }
+
   get url(): string {
-    return `ws://127.0.0.1:${(this.wss.address() as AddressInfo).port}`;
+    return `${this.scheme}://127.0.0.1:${(this.address as AddressInfo).port}`;
   }
 
   async ready(): Promise<this> {
-    if (!this.wss.address()) await new Promise<void>((resolve) => this.wss.once('listening', resolve));
+    if (!this.address) await new Promise<void>((resolve) => (this.https ?? this.wss).once('listening', resolve));
     return this;
   }
 
@@ -95,5 +106,6 @@ export class MockDeviceServer {
     this.generators.forEach(clearInterval);
     this.wss.clients.forEach((c) => c.terminate());
     await new Promise<void>((resolve) => this.wss.close(() => resolve()));
+    if (this.https) await new Promise<void>((resolve) => this.https!.close(() => resolve()));
   }
 }
