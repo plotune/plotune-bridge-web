@@ -9,11 +9,11 @@ import './styles/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { createStore } from './createStore';
+import { createHub } from './createStore';
 import { detectBrowser } from './lib/browser';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App store={createStore()} browser={detectBrowser()} />
+    <App hub={createHub()} browser={detectBrowser()} />
   </StrictMode>,
 );

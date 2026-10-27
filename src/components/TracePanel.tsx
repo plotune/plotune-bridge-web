@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { bytesToHex, formatId, formatRelativeNs } from '../lib/bytes';
-import { useStore, useWorkspace } from '../state/context';
+import { useHub, useHubState } from '../state/context';
 import type { TraceRow } from '../state/trace';
 import { IconClear } from './icons';
 import { Badge } from './Badge';
@@ -9,13 +9,14 @@ import { Panel } from './Panel';
 const ROW_HEIGHT = 26;
 const OVERSCAN = 12;
 
-const Row = memo(function Row({ row, originNs, top }: { row: TraceRow; originNs: bigint | null; top: number }) {
+const Row = memo(function Row({ row, originNs, top, showDevice }: { row: TraceRow; originNs: bigint | null; top: number; showDevice: boolean }) {
   const style = { top };
   if (row.kind === 'frame') {
     const f = row.frame;
     return (
       <div className={`bw-trace-row bw-ch-${f.channel} bw-dir-${f.direction}`} style={style} role="row" data-channel={f.channel} data-direction={f.direction}>
-        <span role="cell" className="bw-mono bw-c-time">{formatRelativeNs(f.timestampNs, originNs ?? f.timestampNs)}</span>
+        <span role="cell" className="bw-mono bw-c-time">{formatRelativeNs(f.timestampNs, row.originNs ?? originNs ?? f.timestampNs)}</span>
+        {showDevice && <span role="cell" className="bw-c-dev">{row.device}</span>}
         <span role="cell" className="bw-c-ch"><span className="bw-chip">CAN{f.channel}</span></span>
         <span role="cell" className="bw-mono bw-c-id">{formatId(f.id, f.extended)}</span>
         <span role="cell" className="bw-c-type">{f.extended ? 'Ext' : 'Std'} {f.rtr ? 'Remote' : 'Data'}</span>
@@ -29,7 +30,7 @@ const Row = memo(function Row({ row, originNs, top }: { row: TraceRow; originNs:
     return (
       <div className="bw-trace-row bw-trace-marker bw-trace-drop" style={style} role="row" data-marker="drop" data-channel={row.channel}>
         <span role="cell" className="bw-marker-text">
-          CAN{row.channel}: the device dropped {row.count.toLocaleString()} {row.count === 1 ? 'frame' : 'frames'} (its buffer was full). Reported here; the exact position is not known.
+          {row.device ? `${row.device} · ` : ''}CAN{row.channel}: the device dropped {row.count.toLocaleString()} {row.count === 1 ? 'frame' : 'frames'} (its buffer was full). Reported here; the exact position is not known.
         </span>
       </div>
     );
@@ -37,21 +38,31 @@ const Row = memo(function Row({ row, originNs, top }: { row: TraceRow; originNs:
   if (row.kind === 'gap') {
     return (
       <div className="bw-trace-row bw-trace-marker bw-trace-drop" style={style} role="row" data-marker="gap">
-        <span role="cell" className="bw-marker-text">Lost in transit: {row.batches} {row.batches === 1 ? 'batch' : 'batches'} of frames did not arrive from the device.</span>
+        <span role="cell" className="bw-marker-text">{row.device ? `${row.device}: ` : ''}Lost in transit: {row.batches} {row.batches === 1 ? 'batch' : 'batches'} of frames did not arrive from the device.</span>
       </div>
     );
   }
   return (
     <div className="bw-trace-row bw-trace-marker bw-trace-session" style={style} role="row" data-marker="session">
-      <span role="cell" className="bw-marker-text">{row.text}</span>
+      <span role="cell" className="bw-marker-text">{row.device ? `${row.device}: ` : ''}{row.text}</span>
     </div>
   );
 });
 
 export function TracePanel() {
-  const store = useStore();
-  const state = useWorkspace();
-  const trace = store.trace;
+  const hub = useHub();
+  const { slots, traceView } = useHubState();
+  const trace = hub.traceBuffer();
+  const multi = slots.length > 1;
+  const shown = multi && traceView !== 'all' ? slots.filter((s) => s.id === traceView) : slots;
+  const shownStates = shown.map((s) => s.store.getState());
+  const state = {
+    capturing: shownStates.some((s) => s.capturing),
+    lostBatches: shownStates.reduce((n, s) => n + s.lostBatches, 0),
+    droppedReported: Object.fromEntries(shownStates.flatMap((s, i) => Object.entries(s.droppedReported).map(([ch, n]) => [`${i}:${ch}`, n]))) as Record<string, number>,
+    traceVersion: trace.version,
+  };
+  const showDevice = multi && traceView === 'all';
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewport, setViewport] = useState(360);
@@ -81,7 +92,7 @@ export function TracePanel() {
   const rows: React.ReactNode[] = [];
   for (let i = first; i < last; i += 1) {
     const row = trace.at(i);
-    rows.push(<Row key={row.key} row={row} originNs={trace.originNs} top={i * ROW_HEIGHT} />);
+    rows.push(<Row key={row.key} row={row} originNs={trace.originNs} top={i * ROW_HEIGHT} showDevice={showDevice} />);
   }
 
   const frames = total; // rows, including markers
@@ -106,19 +117,36 @@ export function TracePanel() {
       }
       actions={
         <>
+          {multi && (
+            <label className="bw-inline-check">
+              Show
+              <select value={traceView} onChange={(e) => hub.setTraceView(e.target.value)} aria-label="Trace source">
+                <option value="all">All devices</option>
+                {slots.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="bw-inline-check">
             <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Follow
           </label>
-          <button type="button" className="bw-button bw-small" onClick={() => store.clearTrace()} disabled={total === 0}>
+          <button type="button" className="bw-button bw-small" onClick={() => hub.clearTraces()} disabled={total === 0}>
             <IconClear /> Clear
           </button>
         </>
       }
     >
-      <div className="bw-trace" role="table" aria-label="Captured frames" aria-rowcount={total}>
+      {showDevice && (
+        <p className="bw-trace-note" data-testid="merge-note">
+          Rows are in the order they arrived here. Each device's time is relative to its own first frame; device clocks are not synchronised.
+        </p>
+      )}
+      <div className={`bw-trace ${showDevice ? 'has-device' : ''}`} role="table" aria-label="Captured frames" aria-rowcount={total}>
         <div role="rowgroup">
           <div className="bw-trace-head" role="row">
             <span role="columnheader" className="bw-c-time">Time (s)</span>
+            {showDevice && <span role="columnheader" className="bw-c-dev">Device</span>}
             <span role="columnheader" className="bw-c-ch">Channel</span>
             <span role="columnheader" className="bw-c-id">ID (hex)</span>
             <span role="columnheader" className="bw-c-type">Type</span>

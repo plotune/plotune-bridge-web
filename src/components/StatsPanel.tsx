@@ -28,7 +28,7 @@ export function StatsPanel() {
         </button>
       }
     >
-      <div className="bw-table-wrap">
+      <div className="bw-table-wrap" role="region" aria-label="Statistics by channel" tabIndex={0}>
         <table className="bw-table" data-testid="stats-table">
           <thead>
             <tr>

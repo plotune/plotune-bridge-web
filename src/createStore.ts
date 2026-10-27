@@ -1,9 +1,10 @@
 import { detectBrowser } from './lib/browser';
 import { queryLocalNetworkPermission } from './lib/permission';
+import { DeviceHub } from './state/hub';
 import { defaultEnv, WorkspaceStore } from './state/store';
 import { WebSocketTransport } from './transport/websocket';
 
-/** The production wiring: WebSocket adapter, real browser detection, real permission query. */
+/** The production wiring: WebSocket adapter, real browser detection, real permission query. One store per device. */
 export function createStore(): WorkspaceStore {
   return new WorkspaceStore(
     defaultEnv({
@@ -12,4 +13,8 @@ export function createStore(): WorkspaceStore {
       queryPermission: queryLocalNetworkPermission,
     }),
   );
+}
+
+export function createHub(): DeviceHub {
+  return new DeviceHub(createStore);
 }

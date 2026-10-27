@@ -51,7 +51,7 @@ test('blocked local-network permission (simulated) with retry', async ({ page })
 
 test('capture dashboard on the real virtual device', async ({ page }) => {
   test.skip(!process.env.BRIDGE_VIRTUAL_URL, 'BRIDGE_VIRTUAL_URL is not set');
-  await page.setViewportSize({ width: 1360, height: 1500 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await connected(page, process.env.BRIDGE_VIRTUAL_URL!);
   const stop = page.getByRole('button', { name: 'Stop capture' });
   if (await stop.isVisible()) await stop.click();
@@ -72,9 +72,33 @@ test('capture dashboard on the real virtual device', async ({ page }) => {
   if (await stopAgain.isVisible()) await stopAgain.click();
 });
 
+test('two devices in one workspace', async ({ page }) => {
+  test.skip(!process.env.BRIDGE_VIRTUAL_URL || !process.env.BRIDGE_VIRTUAL2_URL, 'two virtual device URLs are not set');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await connected(page, process.env.BRIDGE_VIRTUAL_URL!);
+  await page.getByRole('button', { name: 'Add a device' }).click();
+  await page.getByLabel('Device address').fill(process.env.BRIDGE_VIRTUAL2_URL!);
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByTestId('device-chip')).toHaveCount(2);
+  for (const n of [1, 2]) {
+    await page.getByRole('button', { name: `Select Bridge ${n}` }).click();
+    const stop = page.getByRole('button', { name: 'Stop capture' });
+    if (await stop.isVisible()) await stop.click();
+    await expect(page.getByLabel('CAN1 bit rate')).toBeEnabled();
+    await page.getByLabel('CAN1 bit rate').selectOption('500000');
+    await page.getByLabel('CAN2 bit rate').selectOption('500000');
+    await page.getByRole('button', { name: 'Reset counters' }).click();
+  }
+  await page.getByRole('button', { name: 'Start capture' }).click();
+  await expect(page.locator('.bw-setup-tag')).toHaveCount(4);
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: out('two-devices') });
+  await page.getByRole('button', { name: 'Stop capture' }).click();
+});
+
 test('drops reported by a device with a tiny buffer', async ({ page }) => {
   test.skip(!process.env.BRIDGE_OVERFLOW_URL, 'BRIDGE_OVERFLOW_URL is not set');
-  await page.setViewportSize({ width: 1360, height: 1500 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await connected(page, process.env.BRIDGE_OVERFLOW_URL!);
   const stop = page.getByRole('button', { name: 'Stop capture' });
   if (await stop.isVisible()) await stop.click();

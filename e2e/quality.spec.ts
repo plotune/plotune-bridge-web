@@ -39,9 +39,9 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     await expectNoAxeViolations(page, 'capture page with the panels menu open');
     await page.getByRole('button', { name: 'Diagnostics' }).click();
     await expectNoAxeViolations(page, 'diagnostics page');
-    await page.getByRole('button', { name: 'Device' }).click();
+    await page.getByRole('button', { name: 'Device', exact: true }).click();
     await expectNoAxeViolations(page, 'device page');
-    await page.getByRole('button', { name: 'Capture' }).click();
+    await page.getByRole('button', { name: 'Capture', exact: true }).click();
     device.drop(4001, 'replaced');
     await expect(page.locator('[data-notice=replaced]')).toBeVisible();
     await expectNoAxeViolations(page, 'takeover notice over the workspace');
@@ -69,7 +69,7 @@ test('a full session raises no console errors, page errors or Content-Security-P
   device.generate(1, 100);
   await expect(page.locator('[role=row][data-channel]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Diagnostics' }).click();
-  await page.getByRole('button', { name: 'Device' }).click();
+  await page.getByRole('button', { name: 'Device', exact: true }).click();
   await page.getByRole('button', { name: 'Maximize Device' }).click();
   await page.keyboard.press('Escape');
   device.drop(1013, 'overflow');

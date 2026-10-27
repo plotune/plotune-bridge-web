@@ -4,8 +4,9 @@ import { ConnectView, UnsupportedBanner } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
-import { StoreProvider, useStore, useWorkspace } from './state/context';
-import type { WorkspaceStore } from './state/store';
+import { SetupPane } from './components/SetupPane';
+import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
+import type { DeviceHub } from './state/hub';
 import logo from './assets/plotune-logo.png';
 
 const NAV: { id: PageId; label: string; icon: typeof IconTrace }[] = [
@@ -14,10 +15,28 @@ const NAV: { id: PageId; label: string; icon: typeof IconTrace }[] = [
   { id: 'device', label: 'Device', icon: IconDevice },
 ];
 
-function Topbar() {
-  const store = useStore();
-  const state = useWorkspace();
-  const had = state.sessionNumber > 0;
+/** Start and stop for every connected device at once, as one measurement. */
+function MeasurementControls() {
+  const hub = useHub();
+  const { slots } = useHubState();
+  const states = slots.map((s) => s.store.getState());
+  const connected = states.filter((s) => s.phase === 'connected');
+  const capturing = connected.some((s) => s.capturing);
+  const busy = states.some((s) => s.busy);
+  return capturing ? (
+    <button type="button" className="bw-button bw-small" onClick={() => void hub.stopAll()} disabled={busy}>
+      <IconStop /> Stop capture
+    </button>
+  ) : (
+    <button type="button" className="bw-button bw-primary bw-small" onClick={() => void hub.startAll()} disabled={connected.length === 0 || busy}>
+      <IconStart /> Start capture
+    </button>
+  );
+}
+
+function Topbar({ showControls }: { showControls: boolean }) {
+  const { slots } = useHubState();
+  const connected = slots.filter((s) => s.store.getState().phase === 'connected').length;
   return (
     <header className="bw-topbar">
       <a className="bw-brand" href="https://plotune.net">
@@ -26,21 +45,15 @@ function Topbar() {
           Plotune <span>Bridge</span>
         </strong>
       </a>
-      <span className="bw-top-divider" />
-      {had && (
-        <div className="bw-device-chip" data-testid="device-chip" data-phase={state.phase}>
-          <span className={`bw-led bw-led-${state.phase}`} aria-hidden="true" />
-          <span className="bw-mono">{state.descriptor?.deviceId ?? state.target}</span>
-          <span className="bw-muted">{state.phase === 'connected' ? 'Connected' : state.phase === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
-        </div>
+      {showControls && (
+        <>
+          <span className="bw-top-divider" />
+          <MeasurementControls />
+          <span className="bw-muted bw-top-summary">
+            {connected} of {slots.length} {slots.length === 1 ? 'device' : 'devices'} connected
+          </span>
+        </>
       )}
-      <div className="bw-top-end">
-        {state.phase === 'connected' && (
-          <button type="button" className="bw-button bw-small" onClick={() => store.disconnect()}>
-            Disconnect
-          </button>
-        )}
-      </div>
     </header>
   );
 }
@@ -75,70 +88,91 @@ function ConnectionBanner() {
   return null;
 }
 
-function PageHead({ title, lead, menu, children }: { title: string; lead: string; menu?: React.ReactNode; children?: React.ReactNode }) {
-  return (
-    <div className="bw-page-head">
-      <div>
-        <h1>{title}</h1>
-        <p>{lead}</p>
-      </div>
-      <div className="bw-page-actions">
-        {menu}
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function CaptureControls() {
-  const store = useStore();
+function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId) => void; menu?: React.ReactNode }) {
   const state = useWorkspace();
-  const connected = state.phase === 'connected';
-  return state.capturing ? (
-    <button type="button" className="bw-button" onClick={() => void store.stopCapture()} disabled={!connected || state.busy}>
-      <IconStop /> Stop capture
-    </button>
-  ) : (
-    <button type="button" className="bw-button bw-primary" onClick={() => void store.startCapture()} disabled={!connected || state.busy}>
-      <IconStart /> Start capture
-    </button>
-  );
-}
-
-function Workspace() {
-  const [page, setPage] = useState<PageId>('capture');
-  const diag = useDiagnostics();
-  const diagPanels = diagnosticsPanels(diag);
+  const { slots } = useHubState();
+  const hub = useHub();
   return (
-    <div className="bw-shell">
-      <nav className="bw-sidebar" aria-label="Workspace">
-        <p className="bw-nav-label">Workspace</p>
+    <div className="bw-windowbar">
+      <nav className="bw-tabs" aria-label="Workspace">
         {NAV.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" className={page === id ? 'active' : ''} aria-current={page === id ? 'page' : undefined} onClick={() => setPage(id)}>
+          <button key={id} type="button" className={page === id ? 'active' : ''} aria-current={page === id ? 'page' : undefined} onClick={() => onPage(id)}>
             <Icon /> {label}
           </button>
         ))}
       </nav>
-      <main className="bw-main">
-        <ConnectionBanner />
-        {page === 'capture' && (
-          <Dashboard page="capture" panels={capturePanels} head={(menu) => <PageHead title="Capture" lead="Watch both channels, send frames and see what the device could not deliver." menu={menu}><CaptureControls /></PageHead>} />
-        )}
-        {page === 'diagnostics' && (
-          <Dashboard page="diagnostics" panels={diagPanels} head={(menu) => <PageHead title="Diagnostics" lead="Send diagnostic requests and read or write memory, from this page, over the same capture." menu={menu} />} />
-        )}
-        {page === 'device' && <Dashboard page="device" panels={devicePanels} head={() => <PageHead title="Device" lead="The connected device and how this page is connected to it." />} />}
-      </main>
+      {slots.length > 1 && <span className="bw-device-tag" data-testid="active-device">{hub.active.label}{state.descriptor ? ` · ${state.descriptor.deviceId}` : ''}</span>}
+      <div className="bw-windowbar-end">{menu}</div>
     </div>
   );
 }
 
-function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+  const hub = useHub();
+  const { activeId } = useHubState();
+  return (
+    <div className="bw-add-device">
+      <ConnectView browser={browser} pageOrigin={pageOrigin} />
+      <div className="bw-actions">
+        <button type="button" className="bw-button" onClick={() => hub.removeDevice(activeId)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; onPage: (page: PageId) => void; browser: BrowserInfo; pageOrigin: string }) {
+  const diag = useDiagnostics();
+  const diagPanels = diagnosticsPanels(diag);
   const state = useWorkspace();
-  const showWorkspace = state.sessionNumber > 0 && state.phase !== 'idle';
+  const { slots } = useHubState();
+  const neverConnected = state.sessionNumber === 0 && slots.length > 1;
+  const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
+  return (
+    <main className="bw-main" data-page={page}>
+      {neverConnected ? (
+        <AddDevicePane browser={browser} pageOrigin={pageOrigin} />
+      ) : (
+        <>
+          <ConnectionBanner />
+          {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}
+          {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} head={bar} />}
+          {page === 'device' && <Dashboard page="device" panels={devicePanels} head={bar} />}
+        </>
+      )}
+    </main>
+  );
+}
+
+function ActiveStore({ children }: { children: React.ReactNode }) {
+  const { slots, activeId } = useHubState();
+  const slot = slots.find((s) => s.id === activeId) ?? slots[0];
+  return <StoreProvider store={slot.store}>{children}</StoreProvider>;
+}
+
+function Workspace({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+  const { activeId } = useHubState();
+  const [page, setPage] = useState<PageId>('capture');
+  return (
+    <ActiveStore>
+      <div className="bw-shell">
+        <SetupPane />
+        <WorkspaceBody key={activeId} page={page} onPage={setPage} browser={browser} pageOrigin={pageOrigin} />
+      </div>
+    </ActiveStore>
+  );
+}
+
+function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+  const { slots } = useHubState();
+  const showWorkspace = slots.some((s) => {
+    const state = s.store.getState();
+    return state.sessionNumber > 0 && state.phase !== 'idle';
+  });
   return (
     <>
-      <Topbar />
+      <Topbar showControls={showWorkspace} />
       {showWorkspace ? (
         <>
           {!browser.supported && (
@@ -146,23 +180,25 @@ function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: stri
               <UnsupportedBanner browser={browser} />
             </div>
           )}
-          <Workspace />
+          <Workspace browser={browser} pageOrigin={pageOrigin} />
         </>
       ) : (
-        <main className="bw-center">
-          <ConnectView browser={browser} pageOrigin={pageOrigin} />
-        </main>
+        <ActiveStore>
+          <main className="bw-center">
+            <ConnectView browser={browser} pageOrigin={pageOrigin} />
+          </main>
+        </ActiveStore>
       )}
     </>
   );
 }
 
-export function App({ store, browser, pageOrigin = location.origin }: { store: WorkspaceStore; browser: BrowserInfo; pageOrigin?: string }) {
+export function App({ hub, browser, pageOrigin = location.origin }: { hub: DeviceHub; browser: BrowserInfo; pageOrigin?: string }) {
   return (
-    <StoreProvider store={store}>
+    <HubProvider hub={hub}>
       <div className="bw-app">
         <Shell browser={browser} pageOrigin={pageOrigin} />
       </div>
-    </StoreProvider>
+    </HubProvider>
   );
 }

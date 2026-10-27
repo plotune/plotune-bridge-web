@@ -323,7 +323,7 @@ test.describe('diagnostics against a synthetic ECU', () => {
     await expect(xcpLog).toContainText('ERR_OUT_OF_RANGE');
 
     // Everything the diagnostics sent and received is in the trace too, with its channel and direction.
-    await page.getByRole('button', { name: 'Capture' }).click();
+    await page.getByRole('button', { name: 'Capture', exact: true }).click();
     await expect(page.locator('[role=row][data-direction=tx]').first()).toContainText('CAN1');
     await expect(page.locator('[role=row][data-direction=rx]').filter({ hasText: '708' }).first()).toContainText('Std Data');
     await device.close();
