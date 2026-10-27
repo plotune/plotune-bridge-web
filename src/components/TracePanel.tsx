@@ -3,6 +3,7 @@ import { bytesToHex, formatId, formatRelativeNs } from '../lib/bytes';
 import { useStore, useWorkspace } from '../state/context';
 import type { TraceRow } from '../state/trace';
 import { IconClear } from './icons';
+import { Badge } from './Badge';
 import { Panel } from './Panel';
 
 const ROW_HEIGHT = 26;
@@ -84,12 +85,25 @@ export function TracePanel() {
   }
 
   const frames = total; // rows, including markers
+  const droppedTotal = Object.values(state.droppedReported).reduce((a, b) => a + b, 0);
   return (
     <Panel
       id="trace"
       title="Trace"
       className="bw-panel-trace"
-      status={<span data-testid="trace-count">{state.capturing ? 'Capturing · ' : 'Stopped · '}{frames.toLocaleString()} {frames === 1 ? 'row' : 'rows'}{trace.evicted > 0 ? ` · ${trace.evicted.toLocaleString()} older rows scrolled out of this view` : ''}</span>}
+      status={
+        <>
+          <span data-testid="trace-count">{state.capturing ? 'Capturing · ' : 'Stopped · '}{frames.toLocaleString()} {frames === 1 ? 'row' : 'rows'}{trace.evicted > 0 ? ` · ${trace.evicted.toLocaleString()} older rows scrolled out of this view` : ''}</span>
+          {(droppedTotal > 0 || state.lostBatches > 0) && (
+            <>
+              {' '}
+              <Badge tone="warn" title="The device or the connection lost frames. Markers in the trace show where this was reported.">
+                {droppedTotal > 0 ? `${droppedTotal.toLocaleString()} frames dropped` : `${state.lostBatches} batches lost`}
+              </Badge>
+            </>
+          )}
+        </>
+      }
       actions={
         <>
           <label className="bw-inline-check">
@@ -102,18 +116,22 @@ export function TracePanel() {
       }
     >
       <div className="bw-trace" role="table" aria-label="Captured frames" aria-rowcount={total}>
-        <div className="bw-trace-head" role="row">
-          <span role="columnheader" className="bw-c-time">Time (s)</span>
-          <span role="columnheader" className="bw-c-ch">Channel</span>
-          <span role="columnheader" className="bw-c-id">ID (hex)</span>
-          <span role="columnheader" className="bw-c-type">Type</span>
-          <span role="columnheader" className="bw-c-dir">Dir</span>
-          <span role="columnheader" className="bw-c-dlc">Len</span>
-          <span role="columnheader" className="bw-c-data">Data (hex)</span>
+        <div role="rowgroup">
+          <div className="bw-trace-head" role="row">
+            <span role="columnheader" className="bw-c-time">Time (s)</span>
+            <span role="columnheader" className="bw-c-ch">Channel</span>
+            <span role="columnheader" className="bw-c-id">ID (hex)</span>
+            <span role="columnheader" className="bw-c-type">Type</span>
+            <span role="columnheader" className="bw-c-dir">Dir</span>
+            <span role="columnheader" className="bw-c-dlc">Len</span>
+            <span role="columnheader" className="bw-c-data">Data (hex)</span>
+          </div>
         </div>
         <div
           ref={scroller}
           className="bw-trace-scroll"
+          role="rowgroup"
+          aria-label="Trace rows"
           data-testid="trace-scroll"
           onScroll={(e) => {
             const el = e.currentTarget;
@@ -130,8 +148,8 @@ export function TracePanel() {
           <div className="bw-trace-canvas" style={{ height: total * ROW_HEIGHT }}>
             {rows}
           </div>
-          {total === 0 && <p className="bw-empty">{state.capturing ? 'Waiting for frames…' : 'No frames yet. Set a bit rate on each channel, then choose Start capture.'}</p>}
         </div>
+        {total === 0 && <p className="bw-empty bw-trace-empty">{state.capturing ? 'Waiting for frames…' : 'No frames yet. Set a bit rate on each channel, then choose Start capture.'}</p>}
       </div>
     </Panel>
   );

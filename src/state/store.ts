@@ -104,6 +104,7 @@ export class WorkspaceStore {
   private slowTimer: ReturnType<typeof setTimeout> | null = null;
   private notifyQueued = false;
   private txCounter = 0;
+  private knownDeviceId: string | null = null;
 
   constructor(private readonly env: WorkspaceEnv) {}
 
@@ -182,8 +183,19 @@ export class WorkspaceStore {
       this.clearSlowTimer();
       const permission = await this.env.queryPermission(target.loopback);
       if (generation !== this.generation) return;
-      const reconnect = this.state.sessionNumber > 0;
-      this.trace.push({ kind: 'session', text: reconnect ? `Reconnected (new session ${descriptor.sessionId}). Frames the device captured while disconnected follow, with their original timestamps.` : `Connected to ${descriptor.deviceId}.` });
+      // A different device starts a clean trace: frames and counters of two devices must never be read as one.
+      const differentDevice = this.knownDeviceId !== null && this.knownDeviceId !== descriptor.deviceId;
+      if (differentDevice) this.trace.clear();
+      const reconnect = this.state.sessionNumber > 0 && !differentDevice;
+      this.knownDeviceId = descriptor.deviceId;
+      this.trace.push({
+        kind: 'session',
+        text: reconnect
+          ? `Reconnected (new session ${descriptor.sessionId}). Frames the device captured while disconnected follow, with their original timestamps.`
+          : differentDevice
+            ? `Connected to ${descriptor.deviceId}, a different device. The earlier trace was cleared.`
+            : `Connected to ${descriptor.deviceId}.`,
+      });
       this.set({
         phase: 'connected',
         descriptor,
@@ -191,6 +203,7 @@ export class WorkspaceStore {
         capturing: descriptor.channels.some((c) => c.streaming),
         captureChannels: descriptor.channels.map((c) => c.channel),
         sessionNumber: this.state.sessionNumber + 1,
+        ...(differentDevice ? { lostBatches: 0, droppedReported: {}, txLog: [] } : {}),
         permission,
         traceVersion: this.trace.version,
       });
@@ -275,9 +288,19 @@ export class WorkspaceStore {
     this.set({ channels: this.state.channels.map((c) => (c.channel === status.channel ? status : c)) });
   }
 
+  /** Clears the trace and the tallies that describe it (frames reported dropped, batches lost). Device counters are separate. */
   clearTrace(): void {
     this.trace.clear();
-    this.set({ traceVersion: this.trace.version });
+    this.set({ traceVersion: this.trace.version, droppedReported: {}, lostBatches: 0 });
+  }
+
+  /** Zeroes the device's counters (get_statistics with reset), so they describe what happens from now on. */
+  resetStatistics(): Promise<boolean> {
+    return this.act(async (s) => {
+      await s.statistics(undefined, true);
+      const stats = await s.statistics();
+      this.set({ statistics: stats.statistics });
+    });
   }
 
   setCaptureChannels(channels: number[]): void {
@@ -392,7 +415,7 @@ export class WorkspaceStore {
     }
     try {
       await session.transmit(frame);
-      entry(true, `Sent ${bytesToHex(frame.data, ' ') || 'remote request'}`);
+      entry(true, `Sent ${bytesToHex(frame.data, ' ').toUpperCase() || 'remote request'}`);
       return true;
     } catch (error) {
       const code = error instanceof ContractError ? error.code : 'INTERNAL_ERROR';

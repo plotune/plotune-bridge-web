@@ -22,7 +22,7 @@ export interface EcuOptions {
   silent?: boolean;
 }
 
-const DIDS: Record<number, string> = { 0xf190: 'PLOTUNE-SYNTH-001', 0xf191: 'BENCH', 0xf192: '0.1.0', 0xf193: 'VIRTUAL' };
+const DIDS: Record<number, string> = { 0xf190: 'PLOTUNE-SYNTH-001', 0xf191: 'MOCK', 0xf192: '0.1.0', 0xf193: 'VIRTUAL' };
 const ascii = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0));
 
 export class MockEcu {

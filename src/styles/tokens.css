@@ -13,7 +13,7 @@
   --color-paper: #f7f6f2;          /* I:11 --paper, W:2017 --sw-bg: page background */
   --color-chrome: #eeeee6;         /* W:2018 topbar, W:2021 sidebar, W:2032 table head */
   --color-chrome-border: #cbd2c6;  /* W:2018 topbar/sidebar rule */
-  --color-panel: #ffffff;          /* W:519 .sw-panel background */
+  --color-panel: #ffffff;          /* W:519 .sw-panel background (written #fff) */
   --color-border: #d2d5ce;         /* I:14 --line, W:2017 --sw-border */
   --color-row-rule: #e8eded;       /* W:531 panel head and table head rule */
   --color-row-rule-soft: #edf0f1;  /* W:583 table row rule */
@@ -42,15 +42,15 @@
   --nav-text: #5b6b72;             /* W:287 sidebar item */
   --nav-hover-bg: #eef3f2;         /* W:295 */
 
-  /* Status. Badge pairs are W:621-634; text-on-paper shades are the darkened ones from T:14-16 */
-  --status-good-fg: #007968;
-  --status-good-bg: #eaf5f0;
-  --status-bad-fg: #ae4a42;
-  --status-bad-bg: #fbece9;
-  --status-warn-fg: #946b28;
-  --status-warn-bg: #fcf3e2;
-  --status-neutral-fg: #718188;
-  --status-neutral-bg: #eff3f4;
+  /* Status. Badge pairs are Stream's own; text shades are the darkened ones from T:14-16 (see app.css) */
+  --status-good-fg: #007968;    /* W:621 */
+  --status-good-bg: #eaf5f0;    /* W:622 */
+  --status-bad-fg: #ae4a42;     /* W:625 */
+  --status-bad-bg: #fbece9;     /* W:626 */
+  --status-warn-fg: #946b28;    /* W:629 */
+  --status-warn-bg: #fcf3e2;    /* W:630 */
+  --status-neutral-fg: #718188; /* W:633 */
+  --status-neutral-bg: #eff3f4; /* W:634 */
   --text-good: #1f6e42;            /* T:14 */
   --text-bad: #a8261f;             /* T:15 */
   --text-warn: #7a5200;            /* T:16 */
@@ -80,7 +80,7 @@
   --radius-dialog: 8px;            /* W:1229 */
   --size-topbar: 64px;             /* W:114 */
   --size-sidebar: 218px;           /* W:219 */
-  --size-control: 40px;            /* W:430 button min-height */
+  --size-control: 40px;            /* W:432 button min-height */
   --size-nav-item: 36px;           /* W:282 */
   --gap-grid: 20px;                /* W:830 */
   --pad-main: 25px 30px 0;         /* W:336 */

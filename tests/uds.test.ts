@@ -36,7 +36,8 @@ describe('generic UDS over ISO-TP', () => {
     const { uds } = rig();
     expect(describePositive(positive(await settle(uds.request(buildReadDid([0xf192])))))).toBe('Data for F192: "0.1.0"');
     const many = positive(await settle(uds.request(buildReadDid([0xf190, 0xf191, 0xf192, 0xf193]))));
-    expect(many.raw).toHaveLength(43);
+    expect(many.raw).toHaveLength(42);
+    expect(describePositive(many)).toMatch(/^Data for F190: 50 4C 4F .* · text “PLOTUNE-SYNTH-001\.\.MOCK/);
   });
 
   it('explains negative answers with their names', async () => {

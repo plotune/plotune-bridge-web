@@ -114,7 +114,11 @@ export function describePositive(result: Extract<UdsResult, { kind: 'positive' }
   }
 }
 
+/** A readable view of data bytes: the text itself when it is all printable, otherwise hex plus a text view with dots for the rest. */
 export function asciiPreview(bytes: Uint8Array): string {
-  const printable = bytes.length > 0 && bytes.every((b) => b >= 0x20 && b < 0x7f);
-  return printable ? `"${String.fromCharCode(...bytes)}"` : Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ').toUpperCase();
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ').toUpperCase();
+  if (bytes.length === 0) return 'no data';
+  if (bytes.every((b) => b >= 0x20 && b < 0x7f)) return `"${String.fromCharCode(...bytes)}"`;
+  const text = Array.from(bytes, (b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.')).join('');
+  return `${hex} · text “${text}”`;
 }

@@ -1,4 +1,4 @@
-import { useWorkspace } from '../state/context';
+import { useStore, useWorkspace } from '../state/context';
 import { Badge } from './Badge';
 import { Panel } from './Panel';
 
@@ -13,11 +13,21 @@ const COLUMNS: { key: string; label: string; hint: string }[] = [
 ];
 
 export function StatsPanel() {
+  const store = useStore();
   const state = useWorkspace();
   const dropped = state.statistics.reduce((n, s) => n + s.rxDropped, 0);
   const status = dropped > 0 || state.lostBatches > 0 ? <Badge tone="warn">Frames missing</Badge> : <Badge tone="good">No frames missing</Badge>;
   return (
-    <Panel id="stats" title="Statistics" status={status}>
+    <Panel
+      id="stats"
+      title="Statistics"
+      status={status}
+      actions={
+        <button type="button" className="bw-button bw-small" onClick={() => void store.resetStatistics()} disabled={state.busy || state.phase !== 'connected'}>
+          Reset counters
+        </button>
+      }
+    >
       <div className="bw-table-wrap">
         <table className="bw-table" data-testid="stats-table">
           <thead>
@@ -46,6 +56,7 @@ export function StatsPanel() {
           </tbody>
         </table>
       </div>
+      <p className="bw-fine">Counts are totals kept by the device since it started or since you last reset them, including time when no page was connected.</p>
       <p className="bw-fine" data-testid="transit-line">
         Lost in transit (between device and this page): {state.lostBatches.toLocaleString()} {state.lostBatches === 1 ? 'batch' : 'batches'}. Frames reported dropped in the trace:{' '}
         {Object.values(state.droppedReported).reduce((a, b) => a + b, 0).toLocaleString()}.

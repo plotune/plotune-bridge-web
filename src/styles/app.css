@@ -95,7 +95,7 @@ button:disabled {
 }
 .bw-brand strong span {
   font-weight: 400;
-  color: var(--color-muted);
+  color: var(--color-teal);
   margin-left: 3px;
 }
 .bw-top-divider {
@@ -880,19 +880,19 @@ input[aria-invalid='true'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Channel identity is the text (CAN1, CAN2); the coloured edge is only a second cue. Ink text keeps contrast well above 4.5:1. */
 .bw-chip {
   display: inline-block;
   padding: 1px 7px;
+  border-left: 3px solid var(--color-teal);
   border-radius: var(--radius-badge);
+  background: var(--color-teal-tint);
+  color: var(--color-ink);
   font-size: 11px;
   font-weight: 650;
 }
-.bw-ch-1 .bw-chip {
-  color: var(--color-teal);
-  background: var(--color-teal-tint);
-}
 .bw-ch-2 .bw-chip {
-  color: var(--color-violet);
+  border-left-color: var(--color-violet);
   background: var(--color-violet-tint);
 }
 .bw-dir-tx .bw-c-dir {
@@ -918,11 +918,18 @@ input[aria-invalid='true'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.bw-trace-scroll > .bw-empty {
+.bw-trace {
+  position: relative;
+}
+.bw-trace-empty {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 34px;
+  bottom: 0;
   display: grid;
   place-items: center;
+  pointer-events: none;
 }
 
 /* ---- Send frame and diagnostics ------------------------------------------------------------ */

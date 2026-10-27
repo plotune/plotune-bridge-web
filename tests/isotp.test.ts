@@ -27,10 +27,10 @@ describe('ISO-TP single and multi frame', () => {
     expect(Array.from(io.transmitted[0].data)).toEqual([0x02, 0x10, 0x03, 0, 0, 0, 0, 0]); // padded with the configured byte
   });
 
-  it('reassembles a multi-frame answer and sends flow control (43-byte answer)', async () => {
+  it('reassembles a multi-frame answer and sends flow control (42-byte answer)', async () => {
     const { link, io } = rig();
     const reply = await settle(link.transact(bytes(0x22, 0xf1, 0x90, 0xf1, 0x91, 0xf1, 0x92, 0xf1, 0x93)));
-    expect(reply).toHaveLength(43);
+    expect(reply).toHaveLength(42);
     expect(String.fromCharCode(...reply.slice(3, 20))).toBe('PLOTUNE-SYNTH-001');
     const flow = io.transmitted.filter((f) => f.data[0] >> 4 === 3);
     expect(flow).toHaveLength(1);

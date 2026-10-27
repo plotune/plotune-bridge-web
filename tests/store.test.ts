@@ -249,6 +249,27 @@ describe('capture, trace and drops', () => {
   });
 });
 
+describe('counters and tallies', () => {
+  it('Reset counters zeroes the device counters; Clear trace clears the tallies that describe the trace', async () => {
+    const r = rig({ device: { queueCapacity: 8 } });
+    await ready(r);
+    await r.store.startCapture();
+    for (let i = 0; i < 40; i += 1) r.device.injectRx(1, { id: 1, data: Uint8Array.of(i) });
+    r.device.deliver();
+    await flush();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(r.store.getState().statistics.find((s) => s.channel === 1)).toMatchObject({ rxReceived: 40, rxDropped: 32 });
+    expect(r.store.getState().droppedReported).toEqual({ 1: 32 });
+
+    await r.store.resetStatistics();
+    expect(r.store.getState().statistics.find((s) => s.channel === 1)).toMatchObject({ rxReceived: 0, rxDropped: 0 });
+    expect(r.store.getState().droppedReported).toEqual({ 1: 32 }); // the trace still contains the drop marker
+
+    r.store.clearTrace();
+    expect(r.store.getState()).toMatchObject({ droppedReported: {}, lostBatches: 0 });
+  });
+});
+
 describe('links that end', () => {
   it('a replaced session shows the takeover notice and does NOT reconnect by itself', async () => {
     const r = rig();
@@ -299,6 +320,34 @@ describe('links that end', () => {
     await ready(r);
     r.store.disconnect();
     expect(r.store.getState()).toMatchObject({ phase: 'closed', notice: { kind: 'ended', severity: 'info' } });
+  });
+});
+
+describe('switching devices', () => {
+  it('a different device starts a clean trace and clean counters; the same device keeps its history', async () => {
+    const a = new MockDeviceCore({ deviceId: 'device-a' });
+    const b = new MockDeviceCore({ deviceId: 'device-b' });
+    const store = new WorkspaceStore({
+      transportFactory: (target) => new FakeTransport(target, target.includes('9001') ? a : b),
+      browser: CHROME, pageIsSecure: true, pageOrigin: 'x', queryPermission: async () => 'unknown', schedule: (f) => f(), statsIntervalMs: 1000, slowConnectMs: 1500,
+    });
+    await store.connect('192.168.1.50:9001');
+    await store.setBitrate(1, 500000);
+    await store.setBitrate(2, 500000);
+    await store.startCapture();
+    a.injectRx(1, { id: 1 });
+    a.deliver();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.trace.length).toBe(2); // session row + frame
+
+    await store.connect('192.168.1.50:9001'); // the same device again
+    expect(store.trace.length).toBeGreaterThanOrEqual(3);
+
+    await store.connect('192.168.1.51:9002');
+    expect(store.getState().descriptor?.deviceId).toBe('device-b');
+    expect(store.trace.length).toBe(1);
+    expect(store.trace.at(0)).toMatchObject({ kind: 'session', text: expect.stringContaining('a different device') });
+    expect(store.getState()).toMatchObject({ lostBatches: 0, droppedReported: {}, txLog: [] });
   });
 });
 

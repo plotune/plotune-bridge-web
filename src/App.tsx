@@ -20,7 +20,7 @@ function Topbar() {
   const had = state.sessionNumber > 0;
   return (
     <header className="bw-topbar">
-      <a className="bw-brand" href="https://plotune.net" aria-label="Plotune home">
+      <a className="bw-brand" href="https://plotune.net">
         <img className="bw-brand-logo" src={logo} alt="" />
         <strong>
           Plotune <span>Bridge</span>
