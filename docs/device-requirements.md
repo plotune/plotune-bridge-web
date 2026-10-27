@@ -49,6 +49,10 @@ A new connection **replaces** the current one when it is accepted, before any `h
 
 Raw codes only appear under "Technical details".
 
+### Several devices
+
+The page can hold up to eight devices at once, each on its own WebSocket and its own session. Every device must allow this page's origin (section 1) and each is replaced independently (above). Device clocks are **not** synchronised with each other, so the merged trace shows frames in the order they arrive on the page, with each device's time relative to its own first frame. A device that can report its wall-clock time does so in `hello`; the page shows whether it is synced on the Device window, but does not use it to merge devices.
+
 ## 4. Offer `wss://` if you can
 
 A secure address avoids the browser's restrictions on plain `ws://` from secure pages, and is the only direct option in browsers that block `ws://`. The page accepts `wss://` addresses and makes no assumption about them. Certificate provisioning (a certificate the browser trusts) is outside this page and not covered here.

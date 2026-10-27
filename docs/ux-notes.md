@@ -71,11 +71,8 @@ Source paths are relative to `plotune-web` at the commit above. Line numbers ref
 | `--radius-badge` | `3px` | `src/StreamWorkspace/workspace.css:610` |
 | `--radius-dialog` | `8px` | `src/StreamWorkspace/workspace.css:1229` |
 | `--size-topbar` | `64px` | `src/StreamWorkspace/workspace.css:114` |
-| `--size-sidebar` | `218px` | `src/StreamWorkspace/workspace.css:219` |
+| `--size-setup` | `260px` | **Not from Stream.** Stream's sidebar is 218px (`workspace.css:219`); this list is wider to fit device names. |
 | `--size-control` | `40px` | `src/StreamWorkspace/workspace.css:432` |
-| `--size-nav-item` | `36px` | `src/StreamWorkspace/workspace.css:282` |
-| `--gap-grid` | `20px` | `src/StreamWorkspace/workspace.css:830` |
-| `--pad-main` | `25px 30px 0` | `src/StreamWorkspace/workspace.css:336` |
 | `--pad-panel-head` | `13px 18px` | `src/StreamWorkspace/workspace.css:527` |
 | `--pad-table-head` | `11px 18px` | `src/StreamWorkspace/workspace.css:578` |
 | `--pad-table-cell` | `10px 18px` | `src/StreamWorkspace/workspace.css:582` |
@@ -97,8 +94,8 @@ Source paths are relative to `plotune-web` at the commit above. Line numbers ref
 ## 2. Layout and type conventions taken from Stream
 
 - Light "paper" page, white panels with a 1 px rule, no shadows on panels, 2 px corner radius on panels, buttons and navigation; 5 px on inputs; 3 px on badges.
-- 64 px top bar and 218 px sidebar in the "chrome" tone; active navigation is a solid teal fill with off-white text.
-- Page head: 30 px Inter, weight 500, tight tracking, a rule below. Panel head 53 px with a 13 px title at weight 650.
+- 64 px top bar in the "chrome" tone. The left column is a device list (260 px, see below) in the same tone; Stream's solid-teal active navigation is no longer used for the window tabs, which follow the tab pattern instead (section 4).
+- Panel head 53 px with a 13 px title at weight 650. (Stream's 30 px page head was dropped from workspace pages so the trace gets the room; see differences.)
 - Table heads in 10 px uppercase Roboto Mono on the chrome tone.
 - 13 px / 1.5 base text; small caps-style labels at 9 px with wide tracking.
 - Focus ring: 2 px teal, 3 px offset.
@@ -110,6 +107,7 @@ Source paths are relative to `plotune-web` at the commit above. Line numbers ref
 | Buttons, inputs and table text use 12 px, not Stream's 11 px | Hex data and bit rates are read all day; 12 px is easier to read at the same control height. |
 | Badge and status **text** uses the darker shades Stream defines for text (`--text-good`, `--text-bad`, `--text-warn`) and the muted ink for neutral, on Stream's own badge backgrounds | Stream's raw badge pairs measure 4.34:1 (warn) and 3.62:1 (neutral), below the 4.5:1 needed for small text. A test (`tests/tokens.test.ts`) checks every text pair and records this. |
 | Channel chips use ink text with a teal or violet edge | Teal text on the teal tint is exactly at the 4.5:1 limit. Channel identity is the text (CAN1, CAN2); the colour is only a second cue. |
+| Denser workspace: 10 px gaps and 12 px page padding instead of Stream's 20 px grid gap and 25/30 px page padding; no large page title | The Capture window has to show a trace and three working panels without scrolling on a laptop screen. |
 | No dark theme | A light-theme workspace is the requirement. |
 
 ## 3. Accessibility checks that back these choices
@@ -125,9 +123,12 @@ The maintainer's reference tool for measurement workflows is Vector CANoe. **Onl
 |---|---|---|
 | **Trace window as a time-ordered table** with one row per frame | The Trace panel: Time, Channel, ID, Type, Dir, Len, Data. | Plain labels ("Std Data", "Remote", "Rx", "Tx"); time is seconds with microseconds, relative to the first frame and computed on 64-bit integers; the buffer is bounded and counts what scrolled out of view; no symbolic names or signal decoding. |
 | **Channel column and per-channel conventions** | Every row is tagged CAN1 or CAN2 exactly as the device labels it; each channel has its own bit rate, termination switch and "include in capture" choice. | Channels are the product's two channels; termination is a software switch on the device (off by default). Colour is a secondary cue only. |
-| **Measurement-style start and stop** | One toggle in the page head: Start capture, Stop capture. Clear is separate. | Called "capture". Stopping delivers everything captured before the stop. A device can keep capturing while this page is disconnected, and the page says so on reconnect instead of pretending it stopped. |
-| **Status and error indicators** | A connection chip in the top bar, a bus-state badge per channel, a statistics table, a "frames missing" badge. | Losing frames is a first-class state: the device reports drops per channel, the trace header shows a running total, and the trace carries a marker row where the report arrived. There is no bus-load percentage because the device does not report one. |
-| **Several windows in one workspace, each maximizable** | Dashboard pages of panels; each panel can be maximized, shown full screen, and hidden from a Panels menu (remembered in the browser). | A fixed grid, not free-form docking. Three pages (Capture, Diagnostics, Device) instead of a configuration tree. |
+| **Measurement-style start and stop** | One toggle in the top bar: Start capture, Stop capture. Clear is separate. | Called "capture". Stopping delivers everything captured before the stop. A device can keep capturing while this page is disconnected, and the page says so on reconnect instead of pretending it stopped. |
+| **Status and error indicators** | A connection state on each device card, a bus-state badge per channel, a statistics table, a "frames missing" badge. | Losing frames is a first-class state: the device reports drops per channel, the trace header shows a running total, and the trace carries a marker row where the report arrived. There is no bus-load percentage because the device does not report one. |
+| **Several windows in one workspace, each maximizable** | Window tabs (Capture, Diagnostics, Device). On Capture the trace fills the top of the screen and Channels, Statistics and Send frame tile below it. Each panel can be maximized, shown full screen, and hidden from a Panels menu (remembered in the browser). | A fixed tiling, not free-form docking or detachable windows. |
+| **A tree listing the measurement sources** | The Devices list on the left: one card per device with its state, address-derived name, channels (bit rate, capturing) and a Disconnect/Remove action. Selecting a device points Channels, Statistics, Send frame, Diagnostics and Device at it. | A flat list of devices, not a configuration tree. Channels are shown, but configured in the Channels panel. Up to eight devices. |
+| **One trace for several sources** | With two or more devices the Trace gets a Device column and a source selector (All devices or one device). | Rows are merged in the order they **arrive on this page**, not by time. Device clocks are not synchronised, so each row's time is relative to **its own device's** first frame, and the trace says so. Nothing is interpolated or re-ordered. |
+| **One start/stop for the whole measurement** | The top-bar Start capture / Stop capture acts on every connected device. | Each device keeps its own bit rates and results. A device that cannot start reports its own reason in its card. |
 | **A dedicated transmit window** | The Send frame panel with channel, ID, format, type and data, and a log of recent sends. | One frame at a time: no periodic or triggered sending, no signal-based sending. Mistakes are explained before anything is sent. |
 | **A separate diagnostics tool** | The Diagnostics page: link settings, generic diagnostic requests, and memory read/write over the calibration protocol. | Generic only. The seed is shown and the key is typed by the user; there are no flashing procedures or key algorithms. |
 

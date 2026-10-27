@@ -26,7 +26,7 @@ The connection layer sits behind an adapter interface so a WebRTC or helper tran
 3. Choose **Allow** when the browser asks about local network access.
 4. Set a bit rate on each channel, then **Start capture**.
 
-Capture shows both channels in one trace with the device's timestamps. Nothing is relabelled or discarded silently: every row keeps the channel, the 64-bit device timestamp and the direction; frames the device could not deliver are counted per channel and marked in the trace; frames lost in transit are counted separately; rows that scroll out of the bounded view are counted too.
+The workspace works like a measurement window: a device list on the left, the trace filling the top of the screen, and Channels, Statistics and Send frame tiled underneath. **Several devices** (up to eight) can be connected at once; Start capture / Stop capture in the top bar acts on all of them, the selected device is the one the panels act on, and the Trace shows all devices merged in arrival order (each row names its device) or one device at a time. Capture shows each device's channels in one trace with the device's timestamps. Nothing is relabelled or discarded silently: every row keeps the channel, the 64-bit device timestamp and the direction; frames the device could not deliver are counted per channel and marked in the trace; frames lost in transit are counted separately; rows that scroll out of the bounded view are counted too.
 
 ## Develop
 
@@ -59,11 +59,16 @@ The browser's local-network permission prompt cannot be shown or answered by aut
 
 ```bash
 BRIDGE_VIRTUAL_URL=ws://127.0.0.1:9101        # virtual device: 2 channels, seeded generator, loopback
+BRIDGE_VIRTUAL2_URL=ws://127.0.0.1:9121       # a second virtual device (two real devices in one workspace)
 BRIDGE_OVERFLOW_URL=ws://127.0.0.1:9111       # virtual device: tiny buffer, fast generator
 BRIDGE_BENCH_URL=ws://127.0.0.1:9202          # generator's paired Bridge endpoint (synthetic ECU behind it)
 BRIDGE_BENCH_CONTROL_URL=ws://127.0.0.1:9201  # generator control endpoint
 BRIDGE_BENCH_ORIGIN_URL=ws://127.0.0.1:9302   # a second bench started with --ws-origin https://bridge.plotune.net
 ```
+
+### Looking at the interface while developing
+
+`node scripts/dev-shots.mjs <label> [baseUrl] [addr1,addr2,...]` drives a running preview or dev server (default `http://127.0.0.1:4173`) with two devices and saves screenshots of the Capture, Diagnostics and Device windows, and a phone-width Capture view, into `.dev-shots/<label>/` (ignored by git). Take one before and one after a change to compare them.
 
 ## The device contract copy
 
@@ -103,7 +108,7 @@ The page sets its own Content-Security-Policy through a `<meta>` tag because Git
 
 **Built:** device connection over WebSocket; permission explanation, denial handling and retry; unsupported-browser notice; replace-on-connect and close-code handling; two-channel capture with a basic live trace; channel and device status; drop, overflow and transit-loss display; send frame; client-side ISO-TP, generic UDS and XCP-on-CAN; maximizable and full-screen panels with a show/hide menu; light Plotune theme.
 
-**Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: Plotune account sign-in, multiple saved devices, remote access (relay or WebRTC), and any CAN FD view (Classic CAN only).
+**Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: Plotune account sign-in, remembering the device list between visits, remote access (relay or WebRTC), and any CAN FD view (Classic CAN only).
 
 ## Assumptions
 
