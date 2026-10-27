@@ -9,6 +9,7 @@ const env = {
   bench: process.env.BRIDGE_BENCH_URL,
   benchControl: process.env.BRIDGE_BENCH_CONTROL_URL,
   benchOrigin: process.env.BRIDGE_BENCH_ORIGIN_URL,
+  virtual2: process.env.BRIDGE_VIRTUAL2_URL,
 };
 
 async function stopIfCapturing(page: Page): Promise<void> {
@@ -61,6 +62,40 @@ test.describe('nexus virtual device over WebSocket (2 channels, seeded generator
     await expect(page.getByTestId('device-chip')).toContainText('Connected');
     await expect(second.locator('[data-notice=replaced]')).toBeVisible();
     await other.close();
+  });
+});
+
+test.describe('two real virtual devices in one workspace', () => {
+  test.skip(!env.virtual || !env.virtual2, 'BRIDGE_VIRTUAL_URL and BRIDGE_VIRTUAL2_URL are not both set');
+
+  test('both stream into one trace, every row names its device, and a frame sent to one device is echoed only by that device', async ({ page }) => {
+    await connected(page, env.virtual!);
+    await page.getByRole('button', { name: 'Add a device' }).click();
+    await page.getByLabel('Device address').fill(env.virtual2!);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(page.getByTestId('device-chip')).toHaveCount(2);
+    for (const n of [1, 2]) {
+      await page.getByRole('button', { name: `Select Bridge ${n}` }).click();
+      await stopIfCapturing(page);
+      await page.getByLabel('CAN1 bit rate').selectOption('500000');
+      await page.getByLabel('CAN2 bit rate').selectOption('500000');
+    }
+    await page.getByRole('button', { name: 'Start capture' }).click();
+    const rows = page.locator('[role=row][data-channel]');
+    await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(10);
+    const devices = await rows.evaluateAll((els) => els.map((e) => e.querySelector('.bw-c-dev')?.textContent ?? ''));
+    expect(new Set(devices)).toEqual(new Set(['Bridge 1', 'Bridge 2']));
+
+    // The send panel acts on the selected device (Bridge 2 is selected): only its loopback answers.
+    await page.getByLabel('ID (hex)').fill('5A5');
+    await page.getByLabel('Data (hex bytes)').fill('DE AD BE EF');
+    await page.locator('#panel-transmit').getByRole('combobox').first().selectOption('1');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const mine = page.locator('[role=row][data-channel="1"]').filter({ hasText: '5A5' });
+    await expect(mine.filter({ hasText: 'Tx' })).toHaveCount(1);
+    await expect(mine.filter({ hasText: 'Bridge 2' })).toHaveCount(2);
+    await expect(mine.filter({ hasText: 'Bridge 1' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Stop capture' }).click();
   });
 });
 
