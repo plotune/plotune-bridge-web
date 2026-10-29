@@ -86,6 +86,7 @@ export function ChannelsPanel() {
   return (
     <Panel id="channels" title="Channels" status={state.channels.length === 1 ? '1 channel' : `${state.channels.length} channels`}>
       <div className="bw-channels">
+        {state.channels.length === 0 && <p className="bw-empty">Connect a device to see its channels.</p>}
         {state.channels.map((c) => (
           <ChannelCard key={c.channel} channel={c} />
         ))}

@@ -16,7 +16,7 @@ export function StatsPanel() {
   const store = useStore();
   const state = useWorkspace();
   const dropped = state.statistics.reduce((n, s) => n + s.rxDropped, 0);
-  const status = dropped > 0 || state.lostBatches > 0 ? <Badge tone="warn">Frames missing</Badge> : <Badge tone="good">No frames missing</Badge>;
+  const status = !state.statistics.length ? <Badge tone="neutral">No data yet</Badge> : dropped > 0 || state.lostBatches > 0 ? <Badge tone="warn">Frames missing</Badge> : <Badge tone="good">No frames missing</Badge>;
   return (
     <Panel
       id="stats"

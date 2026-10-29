@@ -8,11 +8,11 @@ function phaseText(phase: string): string {
   return phase === 'connected' ? 'Connected' : phase === 'connecting' ? 'Connecting…' : phase === 'closed' ? 'Disconnected' : 'Not connected';
 }
 
-function DeviceNode({ slot, active, only }: { slot: Slot; active: boolean; only: boolean }) {
+function DeviceNode({ slot, active }: { slot: Slot; active: boolean }) {
   const hub = useHub();
   const state = slot.store.getState();
   const connected = state.phase === 'connected';
-  const started = state.sessionNumber > 0;
+  const started = slot.remembered || state.sessionNumber > 0;
   return (
     <li className={`bw-setup-device ${active ? 'is-active' : ''}`} aria-current={active ? 'true' : undefined} data-testid={started ? 'device-chip' : `setup-${slot.id}`} data-phase={state.phase}>
       <div className="bw-setup-row">
@@ -23,7 +23,7 @@ function DeviceNode({ slot, active, only }: { slot: Slot; active: boolean; only:
         <span className="bw-setup-state">
           {phaseText(state.phase)}
         </span>
-        {!only && (
+        {(
           <button type="button" className="bw-icon-button" onClick={() => hub.removeDevice(slot.id)} aria-label={`Remove ${slot.label}`} title="Remove this device">
             <IconClose />
           </button>
@@ -79,9 +79,10 @@ export function SetupPane() {
           <IconPlus />
         </button>
       </div>
+      {slots.length === 0 && <p className="bw-setup-empty">No devices added. Your workspace is ready to use offline.</p>}
       <ul className="bw-setup-list">
         {slots.map((slot) => (
-          <DeviceNode key={slot.id} slot={slot} active={slot.id === activeId} only={slots.length === 1} />
+          <DeviceNode key={slot.id} slot={slot} active={slot.id === activeId} />
         ))}
       </ul>
       <p className="bw-fine bw-setup-foot">{connectedCount} of {slots.length} {slots.length === 1 ? 'device' : 'devices'} connected</p>

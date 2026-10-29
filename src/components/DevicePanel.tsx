@@ -29,7 +29,7 @@ export function DevicePanel() {
         {connected ? (
           <button type="button" className="bw-button" onClick={() => store.disconnect()}>Disconnect</button>
         ) : (
-          state.target && <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)} disabled={state.phase === 'connecting'}>Reconnect</button>
+          !state.notice && state.target && <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)} disabled={state.phase === 'connecting'}>Reconnect</button>
         )}
       </div>
       {d && (

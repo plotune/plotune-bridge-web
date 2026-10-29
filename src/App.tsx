@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
-import { ConnectView, UnsupportedBanner } from './components/ConnectView';
+import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
@@ -60,6 +59,7 @@ function Topbar({ showControls }: { showControls: boolean }) {
 
 function ConnectionBanner() {
   const store = useStore();
+  const hub = useHub();
   const state = useWorkspace();
   if (state.phase === 'connecting') {
     return (
@@ -77,7 +77,7 @@ function ConnectionBanner() {
             <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
               Reconnect
             </button>
-            <button type="button" className="bw-button" onClick={() => store.reset()}>
+            <button type="button" className="bw-button" onClick={() => hub.editDevice(hub.active.id)}>
               Change address
             </button>
           </>
@@ -109,12 +109,11 @@ function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId
 
 function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
   const hub = useHub();
-  const { activeId } = useHubState();
   return (
     <div className="bw-add-device">
       <ConnectView browser={browser} pageOrigin={pageOrigin} />
       <div className="bw-actions">
-        <button type="button" className="bw-button" onClick={() => hub.removeDevice(activeId)}>
+        <button type="button" className="bw-button" onClick={() => hub.cancelEdit()}>
           Cancel
         </button>
       </div>
@@ -125,16 +124,16 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
 function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; onPage: (page: PageId) => void; browser: BrowserInfo; pageOrigin: string }) {
   const diag = useDiagnostics();
   const diagPanels = diagnosticsPanels(diag);
-  const state = useWorkspace();
-  const { slots } = useHubState();
-  const neverConnected = state.sessionNumber === 0 && slots.length > 1;
+  const { slots, editingId, activeId } = useHubState();
+  const editing = editingId !== null && editingId === activeId;
   const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
   return (
     <main className="bw-main" data-page={page}>
-      {neverConnected ? (
-        <AddDevicePane browser={browser} pageOrigin={pageOrigin} />
+      {editing ? (
+        <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} /></>
       ) : (
         <>
+          {slots.length === 0 && <div className="bw-offline-intro"><h1>Your workspace</h1><p>Explore the panels and settings offline. Add a device when you’re ready to capture.</p></div>}
           <ConnectionBanner />
           {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}
           {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} head={bar} />}
@@ -146,49 +145,30 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; on
 }
 
 function ActiveStore({ children }: { children: React.ReactNode }) {
-  const { slots, activeId } = useHubState();
-  const slot = slots.find((s) => s.id === activeId) ?? slots[0];
+  const hub = useHub();
+  useHubState();
+  const slot = hub.active;
   return <StoreProvider store={slot.store}>{children}</StoreProvider>;
 }
 
 function Workspace({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
-  const { activeId } = useHubState();
-  const [page, setPage] = useState<PageId>('capture');
+  const { activeId, page } = useHubState();
+  const hub = useHub();
   return (
     <ActiveStore>
       <div className="bw-shell">
         <SetupPane />
-        <WorkspaceBody key={activeId} page={page} onPage={setPage} browser={browser} pageOrigin={pageOrigin} />
+        <WorkspaceBody key={activeId} page={page} onPage={(next) => hub.setPage(next)} browser={browser} pageOrigin={pageOrigin} />
       </div>
     </ActiveStore>
   );
 }
 
 function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
-  const { slots } = useHubState();
-  const showWorkspace = slots.some((s) => {
-    const state = s.store.getState();
-    return state.sessionNumber > 0 && state.phase !== 'idle';
-  });
   return (
     <>
-      <Topbar showControls={showWorkspace} />
-      {showWorkspace ? (
-        <>
-          {!browser.supported && (
-            <div className="bw-unsupported-strip">
-              <UnsupportedBanner browser={browser} />
-            </div>
-          )}
-          <Workspace browser={browser} pageOrigin={pageOrigin} />
-        </>
-      ) : (
-        <ActiveStore>
-          <main className="bw-center">
-            <ConnectView browser={browser} pageOrigin={pageOrigin} />
-          </main>
-        </ActiveStore>
-      )}
+      <Topbar showControls />
+      <Workspace browser={browser} pageOrigin={pageOrigin} />
     </>
   );
 }

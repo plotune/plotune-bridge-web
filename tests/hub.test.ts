@@ -31,17 +31,17 @@ beforeEach(() => vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'se
 afterEach(() => vi.useRealTimers());
 
 describe('several devices', () => {
-  it('starts with one empty device and adds more up to the limit', () => {
+  it('starts with zero devices and adds devices only on request, up to the limit', () => {
     const { hub } = makeHub();
-    expect(hub.getState().slots.map((s) => s.label)).toEqual(['Bridge 1']);
-    for (let i = 1; i < MAX_DEVICES; i += 1) expect(hub.addDevice()).not.toBeNull();
+    expect(hub.getState().slots).toEqual([]);
+    for (let i = 0; i < MAX_DEVICES; i += 1) expect(hub.addDevice()).not.toBeNull();
     expect(hub.addDevice()).toBeNull();
     expect(hub.getState().slots).toHaveLength(MAX_DEVICES);
   });
 
   it('keeps each device connection, channels and counters separate', async () => {
     const { hub } = makeHub();
-    const a = hub.active;
+    const a = hub.addDevice()!;
     await a.store.connect('10.0.0.1:9101');
     const b = hub.addDevice()!;
     expect(hub.active.id).toBe(b.id);
@@ -54,7 +54,7 @@ describe('several devices', () => {
 
   it('merges traces in arrival order, tagging each row with its device and own time origin', async () => {
     const { hub, devices } = makeHub();
-    await hub.active.store.connect('10.0.0.1:9101');
+    await hub.addDevice()!.store.connect('10.0.0.1:9101');
     const second = hub.addDevice()!;
     await second.store.connect('10.0.0.2:9101');
     for (const s of hub.getState().slots) {
@@ -80,9 +80,9 @@ describe('several devices', () => {
     expect(hub.traceBuffer()).toBe(second.store.trace);
   });
 
-  it('removing a device disconnects it; the last device is only reset', async () => {
+  it('removing any device disconnects it, including the last, and the shell remains empty', async () => {
     const { hub } = makeHub();
-    const first = hub.active;
+    const first = hub.addDevice()!;
     await first.store.connect('10.0.0.1:9101');
     const second = hub.addDevice()!;
     await second.store.connect('10.0.0.2:9101');
@@ -91,12 +91,41 @@ describe('several devices', () => {
     expect(hub.active.id).toBe(first.id);
     expect(second.store.getState().phase).not.toBe('connected');
     hub.removeDevice(first.id);
-    expect(hub.getState().slots).toHaveLength(1);
+    expect(hub.getState().slots).toHaveLength(0);
     expect(first.store.getState().phase).toBe('idle');
   });
 
   it('a single device uses its own trace, so nothing changes for one-device use', async () => {
     const { hub } = makeHub();
-    expect(hub.traceBuffer()).toBe(hub.active.store.trace);
+    const first = hub.addDevice()!;
+    expect(hub.traceBuffer()).toBe(first.store.trace);
   });
+});
+
+it('notifies controlled preference inputs immediately, without waiting for trace batching', () => {
+  const queued: (() => void)[] = [];
+  const hub = new DeviceHub(() => new WorkspaceStore({
+    transportFactory: () => { throw new Error('must not connect'); },
+    browser: { family: 'chromium', name: 'Chrome', supported: true },
+    pageIsSecure: false, pageOrigin: 'http://localhost', queryPermission: async () => 'unknown',
+    schedule: (fn) => queued.push(fn), statsIntervalMs: 1000, slowConnectMs: 1500,
+  }), (fn) => queued.push(fn));
+  const changed = vi.fn(); hub.subscribe(changed);
+  hub.setPanelVisible('capture', 'stats', false);
+  expect(changed).toHaveBeenCalledTimes(1);
+});
+
+it('canceling a never-connected draft removes it; canceling an edit keeps an existing device', async () => {
+  const { hub } = makeHub();
+  const existing = hub.addDevice()!;
+  await existing.store.connect('localhost:9101');
+  const draft = hub.addDevice()!;
+  // Invalid input remains a failed draft, not a remembered installation.
+  await draft.store.connect('ftp://invalid');
+  hub.cancelEdit();
+  expect(hub.getState().slots.map((s) => s.id)).toEqual([existing.id]);
+  hub.editDevice(existing.id);
+  hub.cancelEdit();
+  expect(hub.getState().slots.map((s) => s.id)).toEqual([existing.id]);
+  expect(existing.store.getState().phase).toBe('closed');
 });

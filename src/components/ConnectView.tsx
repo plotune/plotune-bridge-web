@@ -1,12 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { unsupportedNotice, type BrowserInfo } from '../lib/browser';
-import { readStored, writeStored } from '../lib/storage';
-import { useStore, useWorkspace } from '../state/context';
+import { useHub, useHubState, useStore, useWorkspace } from '../state/context';
 import { IconCheck, IconCopy, IconInfo, IconLink } from './icons';
 import { NoticeCard } from './Notice';
-
-const EXPLAINED_KEY = 'bw.permissionExplained';
-const TARGET_KEY = 'bw.target';
 
 export function UnsupportedBanner({ browser }: { browser: BrowserInfo }) {
   const notice = unsupportedNotice(browser);
@@ -81,11 +77,11 @@ function CopyOrigin({ origin }: { origin: string }) {
 export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
   const store = useStore();
   const state = useWorkspace();
-  const [explained, setExplained] = useState(() => readStored(EXPLAINED_KEY) === '1');
-  const [address, setAddress] = useState(() => readStored(TARGET_KEY) ?? '');
+  const hub = useHub();
+  const { permissionExplained: explained } = useHubState();
+  const [address, setAddress] = useState(() => state.target);
 
   const connect = (target: string) => {
-    writeStored(TARGET_KEY, target);
     void store.connect(target);
   };
   const submit = (event: FormEvent) => {
@@ -127,8 +123,7 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
     return (
       <PermissionExplainer
         onContinue={() => {
-          writeStored(EXPLAINED_KEY, '1');
-          setExplained(true);
+          hub.explainPermission();
         }}
       />
     );

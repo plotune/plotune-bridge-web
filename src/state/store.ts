@@ -10,6 +10,7 @@ import { DeviceSession } from '../device/session';
 import { explainClose, explainOpenFailure, type Notice, type PermissionState } from '../transport/notices';
 import { TransportOpenError, type CloseInfo, type TransportFactory } from '../transport/types';
 import { TraceBuffer } from './trace';
+import type { DevicePreferences } from './persistence';
 
 export type Phase = 'idle' | 'connecting' | 'connected' | 'closed';
 
@@ -32,6 +33,7 @@ export interface WorkspaceState {
   statistics: ChannelStatistics[];
   capturing: boolean;
   captureChannels: number[];
+  transmitChannel: number;
   busy: boolean;
   sessionNumber: number;
   /** Batches the transport lost, summed over this page's sessions. */
@@ -83,7 +85,8 @@ const INITIAL: WorkspaceState = {
   channels: [],
   statistics: [],
   capturing: false,
-  captureChannels: [],
+  captureChannels: [1, 2],
+  transmitChannel: 1,
   busy: false,
   sessionNumber: 0,
   lostBatches: 0,
@@ -106,7 +109,19 @@ export class WorkspaceStore {
   private txCounter = 0;
   private knownDeviceId: string | null = null;
 
-  constructor(private readonly env: WorkspaceEnv) {}
+  constructor(private readonly env: WorkspaceEnv) {
+    this.state = { ...INITIAL };
+  }
+
+  restorePreferences(preferences: DevicePreferences): void {
+    // Called only while constructing a disconnected hub, never to configure hardware.
+    this.set({ target: preferences.target, captureChannels: [...preferences.captureChannels], transmitChannel: preferences.transmitChannel,
+      phase: 'closed', notice: { kind: 'ended', severity: 'info', title: 'Ready to reconnect', summary: 'Reconnect to read the device’s current channel settings.', steps: [], technical: '' } });
+  }
+
+  setTransmitChannel(channel: number): void {
+    if (channel === 1 || channel === 2) this.set({ transmitChannel: channel }, true);
+  }
 
   // -- subscription -----------------------------------------------------------
 
@@ -117,9 +132,10 @@ export class WorkspaceStore {
     return () => this.listeners.delete(listener);
   };
 
-  private set(patch: Partial<WorkspaceState>): void {
+  private set(patch: Partial<WorkspaceState>, immediate = false): void {
     this.state = { ...this.state, ...patch };
-    this.queueNotify();
+    if (immediate) this.listeners.forEach((listener) => listener());
+    else this.queueNotify();
   }
 
   private queueNotify(): void {
@@ -201,7 +217,8 @@ export class WorkspaceStore {
         descriptor,
         channels: descriptor.channels,
         capturing: descriptor.channels.some((c) => c.streaming),
-        captureChannels: descriptor.channels.map((c) => c.channel),
+        captureChannels: this.state.captureChannels.filter((id) => descriptor.channels.some((c) => c.channel === id)),
+        transmitChannel: descriptor.channels.some((c) => c.channel === this.state.transmitChannel) ? this.state.transmitChannel : descriptor.channels[0].channel,
         sessionNumber: this.state.sessionNumber + 1,
         ...(differentDevice ? { lostBatches: 0, droppedReported: {}, txLog: [] } : {}),
         permission,
@@ -285,7 +302,8 @@ export class WorkspaceStore {
   }
 
   private onChannelStatus(status: ChannelStatus): void {
-    this.set({ channels: this.state.channels.map((c) => (c.channel === status.channel ? status : c)) });
+    const channels = this.state.channels.map((c) => (c.channel === status.channel ? status : c));
+    this.set({ channels, capturing: channels.some((c) => c.streaming) });
   }
 
   /** Clears the trace and the tallies that describe it (frames reported dropped, batches lost). Device counters are separate. */
@@ -304,7 +322,7 @@ export class WorkspaceStore {
   }
 
   setCaptureChannels(channels: number[]): void {
-    this.set({ captureChannels: channels });
+    this.set({ captureChannels: channels }, true);
   }
 
   // -- polling --------------------------------------------------------------------
@@ -318,7 +336,7 @@ export class WorkspaceStore {
       try {
         const [channels, stats] = await Promise.all([session.channelStatus(), session.statistics()]);
         if (generation !== this.generation) return;
-        this.set({ channels, statistics: stats.statistics });
+        this.set({ channels, capturing: channels.some((c) => c.streaming), statistics: stats.statistics });
       } catch {
         // A failed poll is not an event: a lost link arrives through the closed handler.
       }
@@ -341,7 +359,7 @@ export class WorkspaceStore {
     const session = this.session;
     if (!session) return;
     const [channels, stats] = await Promise.all([session.channelStatus(), session.statistics()]);
-    this.set({ channels, statistics: stats.statistics });
+    this.set({ channels, capturing: channels.some((c) => c.streaming), statistics: stats.statistics });
   }
 
   // -- actions ----------------------------------------------------------------------
@@ -376,7 +394,8 @@ export class WorkspaceStore {
   }
 
   private replaceChannel(status: ChannelStatus): void {
-    this.set({ channels: this.state.channels.map((c) => (c.channel === status.channel ? status : c)) });
+    const channels = this.state.channels.map((c) => (c.channel === status.channel ? status : c));
+    this.set({ channels, capturing: channels.some((c) => c.streaming) });
   }
 
   startCapture(): Promise<boolean> {

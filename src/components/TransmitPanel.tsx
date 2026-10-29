@@ -8,17 +8,18 @@ import { Panel } from './Panel';
 export function TransmitPanel() {
   const store = useStore();
   const state = useWorkspace();
-  const [form, setForm] = useState<TxForm>({ channel: 1, id: '123', extended: false, rtr: false, dlc: '0', data: '11 22 33 44' });
+  const [form, setForm] = useState<TxForm>({ channel: state.transmitChannel, id: '123', extended: false, rtr: false, dlc: '0', data: '11 22 33 44' });
   const [touched, setTouched] = useState(false);
-  const { frame, errors } = validateTx(form);
+  const selectedForm = { ...form, channel: state.transmitChannel };
+  const { frame, errors } = validateTx(selectedForm);
   const set = (patch: Partial<TxForm>) => setForm((f) => ({ ...f, ...patch }));
-  const channel = state.channels.find((c) => c.channel === form.channel);
-  const unconfigured = channel?.bitrate === null;
+  const channel = state.channels.find((c) => c.channel === state.transmitChannel);
+  const unconfigured = !channel || channel.bitrate === null || state.phase !== 'connected';
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setTouched(true);
-    if (frame) void store.transmit(frame);
+    if (frame && !unconfigured) void store.transmit(frame);
   };
 
   return (
@@ -27,7 +28,7 @@ export function TransmitPanel() {
         <div className="bw-tx-grid">
           <label className="bw-field">
             <span>Channel</span>
-            <select value={form.channel} onChange={(e) => set({ channel: Number(e.target.value) })}>
+            <select aria-label="Send channel" value={state.transmitChannel} disabled={!state.channels.length} onChange={(e) => store.setTransmitChannel(Number(e.target.value))}>
               {state.channels.map((c) => (
                 <option key={c.channel} value={c.channel}>{c.name}</option>
               ))}
@@ -66,7 +67,7 @@ export function TransmitPanel() {
             {touched && errors.data ? <small id="tx-data-error" className="bw-error-text">{errors.data}</small> : <small>{frame ? `${frame.dlc} ${frame.dlc === 1 ? 'byte' : 'bytes'}` : ''}</small>}
           </label>
         )}
-        {unconfigured && <p className="bw-hint">Set a bit rate on {channel?.name} before sending.</p>}
+        {unconfigured && <p className="bw-hint">{state.phase === 'connected' && channel ? `Set a bit rate on ${channel.name} before sending.` : 'Connect a device to send a frame.'}</p>}
         <div className="bw-actions">
           <button type="submit" className="bw-button bw-primary" disabled={unconfigured}>
             <IconSend /> Send

@@ -29,3 +29,20 @@ it('leaves CAN2 visibly idle and lets it be configured while CAN1 captures', asy
   expect(within(can2).queryByText('Capturing')).toBeNull();
   expect(screen.queryByRole('alert')).toBeNull();
 });
+
+it('applies capture checkbox choices in the input event even when frame notifications are batched', async () => {
+  const device = new MockDeviceCore();
+  const queued: (() => void)[] = [];
+  store = new WorkspaceStore(defaultEnv({
+    transportFactory: (target) => new FakeTransport(target, device),
+    browser: { family: 'chromium', name: 'Chrome', supported: true },
+    queryPermission: async () => 'unknown', schedule: (fn) => queued.push(fn),
+  }));
+  await store.connect('localhost:9101');
+  await store.setBitrate(1, 500000);
+  render(<StoreProvider store={store}><ChannelsPanel /></StoreProvider>);
+  const checkbox = within(screen.getByTestId('channel-1')).getByRole('checkbox');
+  expect(checkbox).toBeChecked();
+  act(() => checkbox.click());
+  expect(checkbox).not.toBeChecked();
+});
