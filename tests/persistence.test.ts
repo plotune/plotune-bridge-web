@@ -113,3 +113,31 @@ describe('workspace persistence', () => {
     expect(new WorkspacePersistence(() => r.storage).load().devices).toEqual([]);
   });
 });
+
+
+it('scrubs unknown fields and secret-like legacy state from a supported saved record', () => {
+  const storage = memory();
+  storage.setItem(WORKSPACE_KEY, JSON.stringify({
+    ...emptyWorkspace(),
+    devices: [{ id: 'd3', label: 'synthetic-secret-label', target: 'ws://localhost:9101', bitrate: 500000, token: 'synthetic-secret-device' }],
+    diagnostics: { channel: 2, udsRequestId: '702', securityKey: 'synthetic-secret-key', timeoutMs: -1 },
+    access_token: 'synthetic-secret-account', hidden: { capture: ['stats', 'not-a-panel'] },
+    page: 'not-a-view', activeId: 'missing', traceView: 'missing',
+  }));
+  const loaded = new WorkspacePersistence(() => storage).load();
+  expect(loaded).toMatchObject({ page: 'capture', activeId: 'd3', traceView: 'all', hidden: { capture: ['stats'] }, diagnostics: { channel: 2, udsRequestId: '702', timeoutMs: 1000 } });
+  expect(loaded.devices[0]).toMatchObject({ label: 'Bridge 3', captureChannels: [1, 2], transmitChannel: 1 });
+  expect(storage.getItem(WORKSPACE_KEY)).not.toMatch(/synthetic-secret|bitrate|not-a-panel|not-a-view/);
+});
+
+it.each([
+  [{ id: 'd1', target: 'ws://localhost:9101' }, { id: 'd1', target: 'ws://localhost:9121' }],
+  [{ id: 'd1', target: 'ws://localhost:9101?token=synthetic-secret' }],
+  [{ id: 'wrong', target: 'ws://localhost:9101' }],
+].map((devices) => ({ devices })))('rejects malformed/unsafe stored device lists without reconnecting', ({ devices }) => {
+  const storage = memory();
+  storage.setItem(WORKSPACE_KEY, JSON.stringify({ ...emptyWorkspace(), devices }));
+  const r = rig(storage);
+  expect(r.hub.getState().slots).toHaveLength(0);
+  expect(r.transport).not.toHaveBeenCalled();
+});

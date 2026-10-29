@@ -10,6 +10,7 @@ const out = (name: string) => `docs/screenshots/${name}.png`;
 test('permission explanation (first visit)', async ({ page }) => {
   await serveBuildAt(page, HOSTED);
   await page.goto(`${HOSTED}/`);
+  await page.getByRole('button', { name: 'Add a device' }).click();
   await expect(page.getByTestId('permission-explainer')).toBeVisible();
   await page.screenshot({ path: out('permission-explanation') });
 });
@@ -17,6 +18,7 @@ test('permission explanation (first visit)', async ({ page }) => {
 test('address step with the origin the device must allow', async ({ page }) => {
   await serveBuildAt(page, HOSTED);
   await page.goto(`${HOSTED}/`);
+  await page.getByRole('button', { name: 'Add a device' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Device address').fill('192.168.1.50:9101');
   await expect(page.getByText('The device must allow this page.')).toBeVisible();
@@ -28,6 +30,7 @@ test('unsupported browser notice (Firefox user agent)', async ({ browser }) => {
   const page = await context.newPage();
   await serveBuildAt(page, HOSTED);
   await page.goto(`${HOSTED}/`);
+  await page.getByRole('button', { name: 'Add a device' }).click();
   await expect(page.getByTestId('unsupported-browser')).toBeVisible();
   await page.getByLabel('Device address').fill('192.168.1.50:9101');
   await page.getByRole('button', { name: 'Connect' }).click();
@@ -41,6 +44,7 @@ test('blocked local-network permission (simulated) with retry', async ({ page })
   await simulateLocalNetworkPermission(page, 'denied');
   await serveBuildAt(page, HOSTED);
   await page.goto(`${HOSTED}/`);
+  await page.getByRole('button', { name: 'Add a device' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Device address').fill(device.url.replace('ws://', ''));
   await page.getByRole('button', { name: 'Connect' }).click();
