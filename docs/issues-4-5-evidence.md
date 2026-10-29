@@ -173,3 +173,52 @@ new screenshots document this change.
   service worker or PWA was introduced; “offline shell” means a loaded workspace
   with no connected device or Cloud requirement.
 - GitHub Pages deployment: no merge, deployment or workflow change performed.
+
+## PR #6 review follow-up — 2026-10-29
+
+Reviewed the complete PR conversation, review submissions and both inline threads
+at `9c8a2ee`. Two P2 findings were valid:
+
+1. Failed or canceled address edits overwrote a remembered target (and unsafe-path
+   attempts could remove its saved entry). The hub now keeps the last successful
+   target separately; edits only commit a target after a successful connection.
+   Cancel, including while connecting, restores the last successful target.
+2. Selecting an earlier draft after adding another entry stranded it on the
+   dashboard. Selecting a draft now reopens its connection form; removal also
+   opens the next selected draft when needed. Connecting shows one Cancel action.
+
+Regression tests first produced **4 failed / 18 passed**. After the fixes:
+
+```text
+$ npm test
+ Test Files  14 passed (14)
+      Tests  239 passed (239)
+   Duration  9.91s
+$ npm run test:e2e
+Running 29 tests using 1 worker
+  29 passed (41.1s)
+$ npm run test:virtual
+Running 7 tests using 1 worker
+  7 passed (19.9s)
+$ npm run lint
+> eslint .
+# exit 0, no warnings/errors
+$ npm run typecheck
+> tsc --noEmit
+# exit 0, no diagnostics
+$ npm run build
+> tsc --noEmit && vite build
+# exit 0; built in 138ms
+$ npm run contract:verify
+contract files match SOURCE.json (2 files, from plotune-nexus@366138c17424)
+```
+
+The new browser cancellation scenario uses the existing simulated pending
+WebSocket pattern; it does not establish native browser permission behavior.
+An initial WebSocket-route-based version of that test failed to hold the
+connection in this harness, so it was replaced with the explicit simulation;
+no cancellation or persistence assertion was removed. Tests cover failed root
+and custom-path edits, reload during a failed edit, cancellation during connect,
+successful replacement, multiple drafts and removal of the selected draft.
+Screens already captured for this PR are unchanged by these lifecycle fixes;
+port-only/synthetic-frame screenshot churn from reruns is not republished.

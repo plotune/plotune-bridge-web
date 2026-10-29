@@ -107,10 +107,7 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
           <button
             type="button"
             className="bw-button"
-            onClick={() => {
-              store.disconnect();
-              store.reset();
-            }}
+            onClick={() => hub.cancelEdit()}
           >
             Cancel
           </button>

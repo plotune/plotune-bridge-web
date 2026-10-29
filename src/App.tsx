@@ -109,14 +109,15 @@ function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId
 
 function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
   const hub = useHub();
+  const { phase } = useWorkspace();
   return (
     <div className="bw-add-device">
       <ConnectView browser={browser} pageOrigin={pageOrigin} />
-      <div className="bw-actions">
+      {phase !== 'connecting' && <div className="bw-actions">
         <button type="button" className="bw-button" onClick={() => hub.cancelEdit()}>
           Cancel
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

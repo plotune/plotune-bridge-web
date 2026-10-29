@@ -30,3 +30,18 @@ it('opens the main workspace and settings without a device or permission request
   expect(screen.queryByTestId('permission-explainer')).toBeNull();
   expect(queryPermission).not.toHaveBeenCalled();
 });
+
+it('reopens an unfinished device connection form after adding and selecting another draft', () => {
+  const hub = new DeviceHub(() => new WorkspaceStore(defaultEnv({
+    transportFactory: vi.fn(), queryPermission: async () => 'unknown', browser,
+  })), (fn) => fn());
+  render(<App hub={hub} browser={browser} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select Bridge 1' }));
+  expect(screen.getByLabelText('Device address')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
+  expect(hub.getState().slots).toHaveLength(1);
+  expect(screen.getByLabelText('Device address')).toBeVisible();
+});

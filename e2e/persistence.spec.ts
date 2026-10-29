@@ -93,3 +93,53 @@ test('unavailable browser storage does not prevent navigation or adding a device
   await page.getByRole('button', { name: 'Add a device' }).click();
   await expect(page.getByTestId('permission-explainer')).toBeVisible();
 });
+
+test('failed and canceled address edits preserve the last working device across reload', async ({ page }) => {
+  const device = await new MockDeviceServer().ready();
+  try {
+    await connected(page, device.url);
+    await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await page.locator('main').getByRole('button', { name: 'Change address' }).click();
+    await page.getByLabel('Device address').fill('ws://127.0.0.1:9/private-path');
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(page.locator('[data-notice=unreachable]')).toBeVisible();
+    // A reload during a failed edit must also retain the working endpoint.
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bw.workspace')!).devices[0].target)).toBe(device.url);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByTestId('device-chip')).toContainText(device.url);
+    await page.reload();
+    await expect(page.getByTestId('device-chip')).toContainText(device.url);
+    await page.locator('main').getByRole('button', { name: 'Change address' }).click();
+    await page.getByLabel('Device address').fill(device.url);
+    await page.evaluate(() => {
+      // SIMULATION: a pending browser connection, as in the existing permission test.
+      window.WebSocket = class {
+        static OPEN = 1;
+        readyState = 0;
+        close() {}
+        send() {}
+      } as unknown as typeof WebSocket;
+    });
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(page.getByTestId('connecting')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByTestId('device-chip')).toContainText(device.url);
+    await expect(page.getByLabel('Device address')).toHaveCount(0);
+  } finally { await device.close(); }
+});
+
+test('each unfinished device stays connectable when another draft is added or removed', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Add a device' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Add a device' }).click();
+  await page.getByRole('button', { name: 'Select Bridge 1' }).click();
+  await expect(page.getByLabel('Device address')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Select Bridge 1' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Select Bridge 2' })).toBeVisible();
+  await expect(page.getByLabel('Device address')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByText('Your workspace', { exact: true })).toBeVisible();
+});

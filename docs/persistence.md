@@ -21,7 +21,9 @@ A single localStorage entry, `bw.workspace`, contains a version **1** object:
 
 Only successfully connected devices or previously remembered devices are saved.
 An unfinished/failed new entry can be canceled without adding it to the remembered
-list. Canceling an address edit retains the previously added device. Device addresses
+list. During an address edit, the last successfully connected endpoint remains
+committed in storage until its replacement connects successfully. Cancel (including
+while connecting) restores that endpoint and retains the previously added device. Device addresses
 are browser-local metadata; Remove forgets an entry. No account sync or backend exists.
 
 Capture includes only selected channels with a non-null current bit rate. An
@@ -82,5 +84,8 @@ user inputs notify immediately; high-volume frame summaries retain batching.
   path text is safe to store.
 - Offline shell is not an offline-install/PWA guarantee. A fresh uncached navigation
   still needs the static site; adding caching or offline tools is separate work.
+
+Multiple unfinished entries remain reachable: selecting a draft reopens its
+connection form, and removing the active entry opens the next draft if necessary.
 
 No change to contract v0.1.0, transport protocol, WebRTC, device firmware or backend.

@@ -38,6 +38,8 @@ export class DeviceHub {
   private notifyQueued = false;
   private readonly subscriptions = new Map<string, () => void>();
   private readonly empty: Slot;
+  /** The last accepted endpoint, separate from an in-flight/failed address edit. */
+  private readonly connectedTargets = new Map<string, string>();
 
   constructor(
     private readonly makeStore: () => WorkspaceStore,
@@ -78,7 +80,7 @@ export class DeviceHub {
   private persist(): void {
     const devices = this.state.slots.flatMap((slot) => {
       const s = slot.store.getState();
-      const target = rememberableTarget(s.target);
+      const target = rememberableTarget(this.connectedTargets.get(slot.id));
       return target && slot.remembered ? [{ id: slot.id, label: slot.label, target, captureChannels: s.captureChannels, transmitChannel: s.transmitChannel }] : [];
     });
     this.persistence?.save({ version: 1, devices, activeId: this.state.activeId, traceView: this.state.traceView,
@@ -90,13 +92,17 @@ export class DeviceHub {
     const store = this.makeStore();
     if (saved) store.restorePreferences(saved);
     const slot: Slot = { id: saved?.id ?? `d${this.counter}`, label: saved?.label ?? `Bridge ${this.counter}`, store, remembered: !!saved };
+    if (saved) this.connectedTargets.set(slot.id, saved.target);
     store.trace.onPush = (row) => {
       const copy: Partial<TraceRow> = { ...row, device: slot.label, originNs: store.trace.originNs ?? undefined };
       delete copy.key;
       this.merged.push(copy as Parameters<TraceBuffer['push']>[0]);
     };
     this.subscriptions.set(slot.id, store.subscribe(() => {
-      if (store.getState().phase === 'connected') slot.remembered = true;
+      if (store.getState().phase === 'connected') {
+        slot.remembered = true;
+        this.connectedTargets.set(slot.id, store.getState().target);
+      }
       this.set({ ...(this.state.editingId === slot.id && store.getState().phase === 'connected' ? { editingId: null } : {}) }, true);
     }));
     return slot;
@@ -125,7 +131,7 @@ export class DeviceHub {
     if (!slot.remembered) this.removeDevice(slot.id);
     else {
       slot.store.disconnect();
-      slot.store.restorePreferences({ target: s.target, captureChannels: s.captureChannels, transmitChannel: s.transmitChannel });
+      slot.store.restorePreferences({ target: this.connectedTargets.get(slot.id)!, captureChannels: s.captureChannels, transmitChannel: s.transmitChannel });
       this.set({ editingId: null });
     }
   }
@@ -154,18 +160,22 @@ export class DeviceHub {
     slot.store.reset();
     this.subscriptions.get(id)?.();
     this.subscriptions.delete(id);
+    this.connectedTargets.delete(id);
     slot.store.trace.onPush = null;
     const slots = this.state.slots.filter((s) => s.id !== id);
+    const activeId = this.state.activeId === id ? (slots[0]?.id ?? '') : this.state.activeId;
+    const next = slots.find((s) => s.id === activeId);
     this.set({
       slots,
-      editingId: this.state.editingId === id ? null : this.state.editingId,
-      activeId: this.state.activeId === id ? (slots[0]?.id ?? '') : this.state.activeId,
+      editingId: next && (!next.remembered || next.store.getState().phase === 'idle') ? next.id : this.state.editingId === id ? null : this.state.editingId,
+      activeId,
       traceView: this.state.traceView === id ? 'all' : this.state.traceView,
     });
   }
 
   select(id: string): void {
-    if (this.slot(id)) this.set({ activeId: id });
+    const slot = this.slot(id);
+    if (slot) this.set({ activeId: id, ...(!slot.remembered || slot.store.getState().phase === 'idle' ? { editingId: id } : {}) });
   }
 
   setTraceView(view: 'all' | string): void {

@@ -141,3 +141,44 @@ it.each([
   expect(r.hub.getState().slots).toHaveLength(0);
   expect(r.transport).not.toHaveBeenCalled();
 });
+
+it.each(['ws://localhost:9999', 'ws://localhost:9999/private-path'])('keeps the working remembered endpoint when an edit to %s fails or is canceled', async (attempted) => {
+  const r = rig();
+  const slot = r.hub.addDevice()!;
+  await slot.store.connect('localhost:9101');
+  slot.store.setCaptureChannels([1]);
+  slot.store.setTransmitChannel(2);
+  r.hub.editDevice(slot.id);
+  r.transport.mockImplementation((url) => {
+    const transport = new FakeTransport(url, r.device);
+    transport.failOpen = { phase: 'connecting', code: 1006, reason: '', wasClean: false, initiatedBy: 'remote' };
+    return transport;
+  });
+  await slot.store.connect(attempted);
+  expect(slot.store.getState().phase).toBe('closed');
+  expect(new WorkspacePersistence(() => r.storage).load().devices).toMatchObject([{ target: 'ws://localhost:9101', captureChannels: [1], transmitChannel: 2 }]);
+  r.hub.cancelEdit();
+  expect(slot.store.getState()).toMatchObject({ target: 'ws://localhost:9101', phase: 'closed', captureChannels: [1], transmitChannel: 2 });
+});
+
+it('canceling during connection restores the committed endpoint and only success commits a replacement', async () => {
+  const r = rig();
+  const slot = r.hub.addDevice()!;
+  await slot.store.connect('localhost:9101');
+  r.hub.editDevice(slot.id);
+  const factory = r.transport.getMockImplementation()!;
+  r.transport.mockImplementation((url) => {
+    const transport = new FakeTransport(url, r.device);
+    transport.open = () => new Promise<void>(() => undefined);
+    return transport;
+  });
+  void slot.store.connect('localhost:9999');
+  expect(slot.store.getState().phase).toBe('connecting');
+  expect(new WorkspacePersistence(() => r.storage).load().devices[0].target).toBe('ws://localhost:9101');
+  r.hub.cancelEdit();
+  expect(slot.store.getState()).toMatchObject({ phase: 'closed', target: 'ws://localhost:9101' });
+  r.transport.mockImplementation(factory);
+  r.hub.editDevice(slot.id);
+  await slot.store.connect('localhost:9121');
+  expect(new WorkspacePersistence(() => r.storage).load().devices[0].target).toBe('ws://localhost:9121');
+});
