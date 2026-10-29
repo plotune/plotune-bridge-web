@@ -156,12 +156,27 @@ describe('unsupported browsers (spike: Firefox and Safari block ws:// from https
 });
 
 describe('capture, trace and drops', () => {
-  it('refuses to start before every selected channel has a bit rate, and tells the user which', async () => {
+  it.each([1, 2])('captures and sends on CAN%i without configuring the other channel', async (channel) => {
     const r = rig();
     await r.store.connect('192.168.1.50:9101');
-    await r.store.setBitrate(1, 500000);
+    await r.store.setBitrate(channel, 500000);
+    expect(await r.store.startCapture()).toBe(true);
+    expect(r.store.getState().actionError).toBeNull();
+    expect(r.device.requests.find((m) => m.op === 'start_rx')?.params).toMatchObject({ channels: [channel] });
+    expect(r.store.getState().channels.find((c) => c.channel !== channel)).toMatchObject({ bitrate: null, streaming: false });
+    expect(await r.store.transmit({ channel, id: 0x123, extended: false, rtr: false, dlc: 1, data: Uint8Array.of(1) })).toBe(true);
+    expect(await r.store.transmit({ channel: channel === 1 ? 2 : 1, id: 0x123, extended: false, rtr: false, dlc: 0, data: new Uint8Array() })).toBe(false);
+  });
+
+  it('does not request capture with no configured or no selected channels', async () => {
+    const r = rig();
+    await r.store.connect('192.168.1.50:9101');
     expect(await r.store.startCapture()).toBe(false);
-    expect(r.store.getState().actionError).toBe('Set a bit rate on CAN2 first.');
+    expect(r.store.getState().actionError).toMatch(/bit rate/i);
+    await r.store.setBitrate(1, 500000);
+    r.store.setCaptureChannels([]);
+    expect(await r.store.startCapture()).toBe(false);
+    expect(r.store.getState().actionError).toMatch(/Choose at least one/);
     expect(r.device.requests.some((m) => m.op === 'start_rx')).toBe(false);
   });
 

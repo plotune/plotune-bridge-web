@@ -19,7 +19,7 @@ function ChannelCard({ channel }: { channel: ChannelStatus }) {
   const state = useWorkspace();
   const supported = state.descriptor?.supportedBitrates ?? [];
   const bus = BUS[channel.busState];
-  const locked = state.capturing || state.busy;
+  const locked = channel.streaming || state.busy || state.phase !== 'connected';
   const selected = state.captureChannels.includes(channel.channel);
   return (
     <div className="bw-channel" data-testid={`channel-${channel.channel}`}>
@@ -47,8 +47,8 @@ function ChannelCard({ channel }: { channel: ChannelStatus }) {
               <option key={bps} value={bps}>{formatBitrate(bps)}</option>
             ))}
           </select>
-          {state.capturing && <small>Stop capture to change.</small>}
-          {!state.capturing && channel.bitrate === null && <small>Set this before capturing.</small>}
+          {channel.streaming && <small>Stop capture to change.</small>}
+          {channel.bitrate === null && <small>Idle · set a bit rate to include this channel.</small>}
         </label>
         <div className="bw-field">
           <span id={`term-${channel.channel}`}>Termination (120 Ω)</span>
@@ -70,8 +70,8 @@ function ChannelCard({ channel }: { channel: ChannelStatus }) {
           <span>Include in capture</span>
           <input
             type="checkbox"
-            checked={selected}
-            disabled={locked}
+            checked={selected && channel.bitrate !== null}
+            disabled={locked || channel.bitrate === null}
             onChange={(e) => store.setCaptureChannels(e.target.checked ? [...state.captureChannels, channel.channel].sort() : state.captureChannels.filter((c) => c !== channel.channel))}
           />
         </label>

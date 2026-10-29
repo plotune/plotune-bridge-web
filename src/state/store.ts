@@ -380,17 +380,18 @@ export class WorkspaceStore {
   }
 
   startCapture(): Promise<boolean> {
-    const needBitrate = this.state.channels.filter((c) => this.state.captureChannels.includes(c.channel) && c.bitrate === null);
-    if (needBitrate.length) {
-      this.set({ actionError: `Set a bit rate on ${needBitrate.map((c) => c.name).join(' and ')} first.` });
-      return Promise.resolve(false);
-    }
-    if (!this.state.captureChannels.length) {
+    const selected = this.state.channels.filter((c) => this.state.captureChannels.includes(c.channel));
+    const eligible = selected.filter((c) => c.bitrate !== null).map((c) => c.channel);
+    if (!selected.length) {
       this.set({ actionError: 'Choose at least one channel to capture.' });
       return Promise.resolve(false);
     }
+    if (!eligible.length) {
+      this.set({ actionError: 'Set a bit rate on at least one selected channel before capturing.' });
+      return Promise.resolve(false);
+    }
     return this.act(async (s) => {
-      const updated = await s.startRx(this.state.captureChannels, true);
+      const updated = await s.startRx(eligible, true);
       this.set({ capturing: true, channels: this.state.channels.map((c) => updated.find((u) => u.channel === c.channel) ?? c) });
     });
   }
