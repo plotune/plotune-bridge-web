@@ -7,6 +7,15 @@ import { expect, type Page } from '@playwright/test';
 /** Answers the first-visit explainer and connects. `address` may be a full ws:// or wss:// URL. */
 export async function connect(page: Page, address: string): Promise<void> {
   await page.goto('/');
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  const remembered = page.getByTestId('device-chip').filter({ hasText: address.startsWith('ws') ? address : `ws://${address}` });
+  if (await remembered.count()) {
+    await remembered.getByRole('button', { name: /^Select / }).click();
+    await page.locator('main').getByRole('button', { name: 'Reconnect', exact: true }).click();
+    return;
+  }
+  await page.getByRole('button', { name: 'Add a device' }).click();
+  await expect(page.locator('[data-testid=permission-explainer], #device-address')).toBeVisible();
   const explainer = page.getByTestId('permission-explainer');
   if (await explainer.isVisible()) await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Device address').fill(address);

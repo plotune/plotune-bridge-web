@@ -13,6 +13,8 @@ async function expectNoAxeViolations(page: Page, label: string): Promise<void> {
 test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
   test('the permission explanation and the address screen', async ({ page }) => {
     await page.goto('/');
+    await expectNoAxeViolations(page, 'offline workspace');
+    await page.getByRole('button', { name: 'Add a device' }).click();
     await expect(page.getByTestId('permission-explainer')).toBeVisible();
     await expectNoAxeViolations(page, 'permission explainer');
     await page.getByRole('button', { name: 'Continue' }).click();

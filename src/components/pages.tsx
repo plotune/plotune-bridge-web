@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { DEFAULT_DIAG, toIsoTpConfig, toXcpConfig, type DiagSettings } from '../diagnostics/settings';
+import { toIsoTpConfig, toXcpConfig, type DiagSettings } from '../diagnostics/settings';
 import { IsoTpLink } from '../diagnostics/isotp';
 import { UdsClient } from '../diagnostics/uds';
 import { XcpClient } from '../diagnostics/xcp';
-import { readStored, writeStored } from '../lib/storage';
-import { useStore, useWorkspace } from '../state/context';
+import { useHub, useHubState, useStore, useWorkspace } from '../state/context';
 import { ChannelsPanel } from './ChannelsPanel';
 import { DevicePanel } from './DevicePanel';
 import type { LogEntry } from './diagnostics';
@@ -14,7 +13,8 @@ import { TracePanel } from './TracePanel';
 import { TransmitPanel } from './TransmitPanel';
 import { IconPanels } from './icons';
 
-export type PageId = 'capture' | 'diagnostics' | 'device';
+import type { PageId } from '../state/persistence';
+export type { PageId } from '../state/persistence';
 
 export interface PanelDef {
   id: string;
@@ -24,23 +24,9 @@ export interface PanelDef {
 }
 
 function useHidden(page: PageId): [Set<string>, (id: string, visible: boolean) => void] {
-  const key = `bw.hidden.${page}`;
-  const [hidden, setHidden] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(readStored(key) ?? '[]') as string[]);
-    } catch {
-      return new Set();
-    }
-  });
-  const toggle = (id: string, visible: boolean) =>
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (visible) next.delete(id);
-      else next.add(id);
-      writeStored(key, JSON.stringify([...next]));
-      return next;
-    });
-  return [hidden, toggle];
+  const hub = useHub();
+  const { hidden } = useHubState();
+  return [new Set(hidden[page]), (id, visible) => hub.setPanelVisible(page, id, visible)];
 }
 
 export function PanelsMenu({ panels, hidden, onToggle }: { panels: PanelDef[]; hidden: Set<string>; onToggle(id: string, visible: boolean): void }) {
@@ -84,18 +70,11 @@ export const capturePanels: PanelDef[] = [
 
 export const devicePanels: PanelDef[] = [{ id: 'device', label: 'Device', render: () => <DevicePanel /> }];
 
-const DIAG_KEY = 'bw.diagnostics';
-
 export function useDiagnostics() {
   const store = useStore();
   const state = useWorkspace();
-  const [settings, setSettings] = useState<DiagSettings>(() => {
-    try {
-      return { ...DEFAULT_DIAG, ...(JSON.parse(readStored(DIAG_KEY) ?? '{}') as Partial<DiagSettings>) };
-    } catch {
-      return DEFAULT_DIAG;
-    }
-  });
+  const hub = useHub();
+  const { diagnostics: settings } = useHubState();
   const [udsLog, setUdsLog] = useState<LogEntry[]>([]);
   const [xcpLog, setXcpLog] = useState<LogEntry[]>([]);
   const channel = state.channels.some((c) => c.channel === settings.channel) ? settings.channel : (state.channels[0]?.channel ?? 1);
@@ -104,21 +83,16 @@ export function useDiagnostics() {
   const io = useMemo(() => store.diagnosticsIo(), [store]);
   const iso = useMemo(() => toIsoTpConfig(effective), [effective]);
   const xcpCfg = useMemo(() => toXcpConfig(effective), [effective]);
-  const link = useMemo(() => (iso.error === undefined ? new IsoTpLink(io, iso.value) : null), [io, iso]);
+  const link = useMemo(() => (state.phase === 'connected' && state.sessionNumber > 0 && iso.error === undefined ? new IsoTpLink(io, iso.value) : null), [io, iso, state.phase, state.sessionNumber]);
   const uds = useMemo(() => (link ? new UdsClient(link, { p2Ms: effective.timeoutMs, p2StarMs: 5000, maxPending: 20 }) : null), [link, effective.timeoutMs]);
-  const xcp = useMemo(() => (xcpCfg.error === undefined ? new XcpClient(io, xcpCfg.value) : null), [io, xcpCfg]);
+  const xcp = useMemo(() => (state.phase === 'connected' && state.sessionNumber > 0 && xcpCfg.error === undefined ? new XcpClient(io, xcpCfg.value) : null), [io, xcpCfg, state.phase, state.sessionNumber]);
 
   useEffect(() => {
     link?.start();
     return () => link?.stop();
   }, [link]);
 
-  const change = (patch: Partial<DiagSettings>) =>
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      writeStored(DIAG_KEY, JSON.stringify(next));
-      return next;
-    });
+  const change = (patch: Partial<DiagSettings>) => hub.setDiagSettings(patch);
 
   const errors = [iso.error, xcpCfg.error].filter((e): e is string => e !== undefined);
   return { settings: effective, change, errors, uds, xcp, udsLog, xcpLog, addUdsLog: (e: LogEntry) => setUdsLog((l) => [e, ...l].slice(0, 50)), addXcpLog: (e: LogEntry) => setXcpLog((l) => [e, ...l].slice(0, 50)) };

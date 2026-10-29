@@ -5,6 +5,7 @@ import { GeneratorControl } from './generatorControl';
 
 const env = {
   virtual: process.env.BRIDGE_VIRTUAL_URL,
+  single: process.env.BRIDGE_SINGLE_CHANNEL_URL,
   overflow: process.env.BRIDGE_OVERFLOW_URL,
   bench: process.env.BRIDGE_BENCH_URL,
   benchControl: process.env.BRIDGE_BENCH_CONTROL_URL,
@@ -205,5 +206,44 @@ test.describe('a hosted page must be allowed by the device (real servers)', () =
     expect(await handshake(env.benchOrigin!, 'https://bridge.plotune.net')).toBe('open'); // started with --ws-origin https://bridge.plotune.net
     expect(await handshake(env.benchOrigin!, 'https://evil.example')).toBe('HTTP 403');
     expect(await handshake(env.bench!, 'http://127.0.0.1:4173')).toBe('open'); // localhost pages are allowed by default
+  });
+});
+
+
+test.describe('independent channel and reload against a fresh virtual Bridge', () => {
+  test.skip(!env.single, 'BRIDGE_SINGLE_CHANNEL_URL is not set (fresh unconfigured two-channel virtual device)');
+
+  test('CAN1 captures/sends with CAN2 unset; reload reads the still-armed device without reconfiguration', async ({ page }) => {
+    await connected(page, env.single!);
+    await expect(page.getByLabel('CAN2 bit rate')).toHaveValue('');
+    await page.getByLabel('CAN1 bit rate').selectOption('500000');
+    await page.getByRole('button', { name: 'Start capture', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop capture' })).toBeVisible();
+    await expect(page.getByTestId('channel-2')).toContainText('Idle');
+    await expect(page.getByTestId('action-error')).toHaveCount(0);
+    await expect.poll(() => page.locator('[role=row][data-channel="1"]').count()).toBeGreaterThan(5);
+    await expect(page.locator('[role=row][data-channel="2"]')).toHaveCount(0);
+    await page.getByLabel('ID (hex)').fill('5A6');
+    await page.getByLabel('Data (hex bytes)').fill('DE AD');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByTestId('tx-log')).toContainText('Sent DE AD');
+    await page.getByLabel('Send channel').selectOption('2');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    await page.getByLabel('Send channel').selectOption('1');
+    await page.screenshot({ path: 'docs/screenshots/independent-can1.png' });
+    await page.getByRole('button', { name: 'Maximize Channels' }).click();
+    await page.screenshot({ path: 'docs/screenshots/independent-channels.png' });
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Device', exact: true }).click();
+    await page.reload();
+    await expect(page.locator('main')).toHaveAttribute('data-page', 'device');
+    await expect(page.getByTestId('device-chip')).toContainText('Disconnected');
+    await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
+    await expect(page.getByTestId('device-chip')).toContainText('Connected');
+    await page.getByRole('button', { name: 'Capture', exact: true }).click();
+    await expect(page.getByLabel('CAN1 bit rate')).toHaveValue('500000');
+    await expect(page.getByLabel('CAN2 bit rate')).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Stop capture' })).toBeVisible();
+    await page.getByRole('button', { name: 'Stop capture' }).click();
   });
 });

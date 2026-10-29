@@ -14,6 +14,8 @@ mkdirSync(out, { recursive: true });
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(base);
+await page.getByRole('button', { name: 'Add a device' }).click();
+await page.locator('[data-testid=permission-explainer], #device-address').waitFor();
 if (await page.getByTestId('permission-explainer').isVisible()) await page.getByRole('button', { name: 'Continue' }).click();
 await page.getByLabel('Device address').fill(addresses[0]);
 await page.getByRole('button', { name: 'Connect', exact: true }).click();

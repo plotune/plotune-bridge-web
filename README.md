@@ -4,11 +4,11 @@ The static Plotune Bridge workspace, served from GitHub Pages at **https://bridg
 
 This repository is public. It is a static build: **no server-side code, no secrets, nothing private**.
 
-| Permission explanation, before connecting | Unsupported-browser notice |
+| Workspace with no devices | One configured channel |
 |---|---|
-| ![The permission explanation screen](docs/screenshots/permission-explanation.png) | ![The unsupported-browser notice](docs/screenshots/unsupported-browser.png) |
+| ![Empty workspace available without device access](docs/screenshots/offline-workspace.png) | ![CAN1 capturing while CAN2 stays unconfigured and idle](docs/screenshots/independent-channels.png) |
 
-The unsupported-browser screenshot is Chromium rendering with a Firefox user-agent string; see [Not tested](#not-tested).
+The channel screenshot uses the reference virtual device, not physical hardware.
 
 ## Browsers
 
@@ -21,10 +21,10 @@ The connection layer sits behind an adapter interface so a WebRTC or helper tran
 
 ## Use it
 
-1. Open the page in Chrome, Edge or Brave and read the short explanation of the permission prompt.
+1. Open the workspace. Capture, Diagnostics settings and Device views work with no devices added. When ready, choose **Add a device** and read the permission explanation.
 2. Enter the device address (`192.168.1.50:9101`, or a `wss://` address). **The device must list this page's origin as allowed**; see [docs/device-requirements.md](docs/device-requirements.md). The page shows the origin to add, with a copy button.
 3. Choose **Allow** when the browser asks about local network access.
-4. Set a bit rate on each channel, then **Start capture**.
+4. Set a bit rate on the channel(s) you want to use, then **Start capture**. Unconfigured channels stay idle and are excluded. Sending requires a bit rate only on the selected channel.
 
 The workspace works like a measurement window: a device list on the left, the trace filling the top of the screen, and Channels, Statistics and Send frame tiled underneath. **Several devices** (up to eight) can be connected at once; Start capture / Stop capture in the top bar acts on all of them, the selected device is the one the panels act on, and the Trace shows all devices merged in arrival order (each row names its device) or one device at a time. Capture shows each device's channels in one trace with the device's timestamps. Nothing is relabelled or discarded silently: every row keeps the channel, the 64-bit device timestamp and the direction; frames the device could not deliver are counted per channel and marked in the trace; frames lost in transit are counted separately; rows that scroll out of the bounded view are counted too.
 
@@ -59,12 +59,27 @@ The browser's local-network permission prompt cannot be shown or answered by aut
 
 ```bash
 BRIDGE_VIRTUAL_URL=ws://127.0.0.1:9101        # virtual device: 2 channels, seeded generator, loopback
+BRIDGE_SINGLE_CHANNEL_URL=ws://127.0.0.1:9141 # fresh 2-channel virtual device (CAN2 must remain unconfigured)
 BRIDGE_VIRTUAL2_URL=ws://127.0.0.1:9121       # a second virtual device (two real devices in one workspace)
 BRIDGE_OVERFLOW_URL=ws://127.0.0.1:9111       # virtual device: tiny buffer, fast generator
 BRIDGE_BENCH_URL=ws://127.0.0.1:9202          # generator's paired Bridge endpoint (synthetic ECU behind it)
 BRIDGE_BENCH_CONTROL_URL=ws://127.0.0.1:9201  # generator control endpoint
 BRIDGE_BENCH_ORIGIN_URL=ws://127.0.0.1:9302   # a second bench started with --ws-origin https://bridge.plotune.net
 ```
+
+### Remembered workspace and offline use
+
+[Persistence details](docs/persistence.md) describe the versioned localStorage schema,
+legacy preference migration, validation and storage-failure fallback. After a reload,
+the last view and remembered device list return **disconnected**. Choose Reconnect;
+hello/status reads the device's current bit rate, termination and armed state. The
+browser never reapplies a saved hardware configuration or automatically takes over
+a device. Capture inclusion and send-channel choices are browser preferences only.
+
+“Offline” here means a loaded workspace without a device or Cloud connection; no
+service worker/offline installation is added. The shell leaves panels available for
+future standalone tools; DBC/A2L viewers and an offline calibration setter are not
+implemented. Native browser local-network prompts and hardware remain unverified.
 
 ### Looking at the interface while developing
 
@@ -89,7 +104,7 @@ npm run contract:verify                                  # offline: the local fi
 src/protocol/     64-bit-safe JSON codec, strict decoders, contract types and errors
 src/transport/    DeviceTransport interface, WebSocket adapter, plain-language close/failure notices
 src/device/       one protocol session over a transport (hello, requests, events, sequence gaps)
-src/state/        workspace store (connection, capture, trace, drops, statistics), bounded trace buffer
+src/state/        device stores, multi-device hub, versioned browser preferences, bounded trace buffer
 src/diagnostics/  client-side ISO-TP, generic UDS, XCP on CAN, shared settings
 src/components/   panels, pages, connection screens, original icons
 src/lib/          browser detection and connect policy, address parsing, permission query, helpers
@@ -108,7 +123,7 @@ The page sets its own Content-Security-Policy through a `<meta>` tag because Git
 
 **Built:** device connection over WebSocket; permission explanation, denial handling and retry; unsupported-browser notice; replace-on-connect and close-code handling; two-channel capture with a basic live trace; channel and device status; drop, overflow and transit-loss display; send frame; client-side ISO-TP, generic UDS and XCP-on-CAN; maximizable and full-screen panels with a show/hide menu; light Plotune theme.
 
-**Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: Plotune account sign-in, remembering the device list between visits, remote access (relay or WebRTC), and any CAN FD view (Classic CAN only).
+**Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: Plotune account sign-in, remote access (relay or WebRTC), and any CAN FD view (Classic CAN only).
 
 ## Assumptions
 

@@ -25,7 +25,7 @@ export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettin
       <div className="bw-diag-settings">
         <label className="bw-field">
           <span>Channel</span>
-          <select value={settings.channel} onChange={(e) => onChange({ channel: Number(e.target.value) })}>
+          <select disabled={!state.channels.length} value={settings.channel} onChange={(e) => onChange({ channel: Number(e.target.value) })}>
             {state.channels.map((c) => (
               <option key={c.channel} value={c.channel}>{c.name}</option>
             ))}

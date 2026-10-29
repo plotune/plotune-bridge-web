@@ -24,7 +24,7 @@ test.describe('capture workflow', () => {
     await expect(page.getByRole('switch', { name: 'Termination (120 Ω)' }).first()).toHaveAttribute('aria-checked', 'false');
 
     await page.getByRole('button', { name: 'Start capture' }).click();
-    await expect(page.getByTestId('action-error')).toHaveText('Set a bit rate on CAN1 and CAN2 first.');
+    await expect(page.getByTestId('action-error')).toHaveText('Set a bit rate on at least one selected channel before capturing.');
 
     await configureBothChannels(page);
     await startCapture(page);
@@ -215,6 +215,7 @@ test.describe('browsers that cannot open a direct connection', () => {
     });
     await serveBuildAt(page, 'https://bridge.plotune.net'); // a secure origin, like the hosted page
     await page.goto('https://bridge.plotune.net/');
+    await page.getByRole('button', { name: 'Add a device' }).click();
     const banner = page.getByTestId('unsupported-browser');
     await expect(banner).toContainText('not supported for direct device connection yet');
     await expect(banner).toContainText('Chrome, Edge or Brave');

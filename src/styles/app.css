@@ -1254,3 +1254,9 @@ input[aria-invalid='true'] {
   color: var(--color-ink);
   font-size: 11px;
 }
+
+/* The workspace is available before a device is added. */
+.bw-offline-intro { padding: 16px 18px 4px; }
+.bw-offline-intro h1 { margin: 0 0 4px; font-size: 18px; }
+.bw-offline-intro p { margin: 0 0 12px; color: var(--color-muted); }
+.bw-setup-empty { margin: 12px; color: var(--color-muted); }

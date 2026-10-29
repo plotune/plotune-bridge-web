@@ -177,7 +177,7 @@ export function TracePanel() {
             {rows}
           </div>
         </div>
-        {total === 0 && <p className="bw-empty bw-trace-empty">{state.capturing ? 'Waiting for frames…' : 'No frames yet. Set a bit rate on each channel, then choose Start capture.'}</p>}
+        {total === 0 && <p className="bw-empty bw-trace-empty">{state.capturing ? 'Waiting for frames…' : slots.length === 0 ? 'No frames yet. Add a device when you’re ready to capture.' : 'No frames yet. Set a bit rate on a channel you want to use, then choose Start capture.'}</p>}
       </div>
     </Panel>
   );

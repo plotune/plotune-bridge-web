@@ -1,6 +1,7 @@
 import { detectBrowser } from './lib/browser';
 import { queryLocalNetworkPermission } from './lib/permission';
 import { DeviceHub } from './state/hub';
+import { WorkspacePersistence } from './state/persistence';
 import { defaultEnv, WorkspaceStore } from './state/store';
 import { WebSocketTransport } from './transport/websocket';
 
@@ -16,5 +17,5 @@ export function createStore(): WorkspaceStore {
 }
 
 export function createHub(): DeviceHub {
-  return new DeviceHub(createStore);
+  return new DeviceHub(createStore, undefined, new WorkspacePersistence());
 }
