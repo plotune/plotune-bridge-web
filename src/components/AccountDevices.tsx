@@ -1,6 +1,6 @@
 // The default add-device pane: sign in with a Plotune account (on plotune.net), choose a project, see its devices, connect
 // to one through the cloud, or pair a new device with a one-time code. The LAN address form stays behind "Advanced".
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CloudError } from '../cloud/client';
 import { useCloud } from '../cloud/context';
 import { useHub, useHubState, useStore } from '../state/context';
@@ -85,6 +85,15 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
   }, []);
   // Which copy button was used last, for its "Copied" feedback. The project ID is not a secret; account tokens are never shown.
   const [copied, setCopied] = useState<'code' | 'project' | null>(null);
+  // The "Add a device" button comes back when a code ends (Done or Cancel), where the focused button just disappeared.
+  const addRef = useRef<HTMLButtonElement>(null);
+  const restoreAddFocus = useRef(false);
+  useEffect(() => {
+    if (pairing === null && restoreAddFocus.current) {
+      restoreAddFocus.current = false;
+      addRef.current?.focus();
+    }
+  }, [pairing]);
 
   // A code belongs to the project it was made for; switching projects drops it from view.
   const current = pairing !== null && pairing.projectId === selectedProjectId ? pairing : null;
@@ -196,7 +205,7 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
         <section className="bw-devices" aria-labelledby="devices-heading">
           <div className="bw-devices-head">
             <h2 id="devices-heading">Devices{projectName ? ` in ${projectName}` : ''}</h2>
-            <button type="button" className="bw-button bw-small" onClick={() => void startPairing()} disabled={pairBusy || waiting || !devicesLoaded}>
+            <button ref={addRef} type="button" className="bw-button bw-small" onClick={() => void startPairing()} disabled={pairBusy || waiting || !devicesLoaded}>
               Add a device
             </button>
           </div>
@@ -213,7 +222,7 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
                 <IconCheck aria-hidden="true" /> Device added
               </p>
               <div className="bw-actions">
-                <button type="button" className="bw-button bw-primary bw-small" onClick={() => setPairing(null)}>
+                <button type="button" className="bw-button bw-primary bw-small" onClick={() => { restoreAddFocus.current = true; setPairing(null); }}>
                   Done
                 </button>
               </div>
@@ -243,7 +252,7 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
                 Waiting for your device…
               </p>
               <div className="bw-actions">
-                <button type="button" className="bw-button bw-small" onClick={() => setPairing(null)}>
+                <button type="button" className="bw-button bw-small" onClick={() => { restoreAddFocus.current = true; setPairing(null); }}>
                   Cancel
                 </button>
               </div>
@@ -321,10 +330,26 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
 export function AccountDevices({ onAdvanced }: { onAdvanced: () => void }) {
   const cloud = useCloud();
   const signedIn = cloud.status === 'signed-in';
+  // Opened from the empty workspace's button, which is gone once the pane shows: focus goes to the pane title.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active === null || active === document.body) titleRef.current?.focus();
+  }, []);
+  // After Sign out in this pane the focused button is gone: focus goes to Continue with Plotune, the next step.
+  const continueRef = useRef<HTMLButtonElement>(null);
+  const wasSignedIn = useRef(signedIn);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (wasSignedIn.current && !signedIn && (active === null || active === document.body)) continueRef.current?.focus();
+    wasSignedIn.current = signedIn;
+  }, [signedIn]);
   return (
     <section className="bw-card bw-account" aria-labelledby="account-title">
       <p className="bw-eyebrow">Plotune account</p>
-      <h1 id="account-title">{signedIn ? 'Connect a Bridge device' : 'Sign in to connect your Bridge'}</h1>
+      <h1 id="account-title" ref={titleRef} tabIndex={-1}>
+        {signedIn ? 'Connect a Bridge device' : 'Sign in to connect your Bridge'}
+      </h1>
       {signedIn ? (
         <SignedInPanel onAdvanced={onAdvanced} />
       ) : (
@@ -333,7 +358,7 @@ export function AccountDevices({ onAdvanced }: { onAdvanced: () => void }) {
             Sign in with your Plotune account. Plotune opens its own sign-in page, then brings you back here already signed in.
           </p>
           <div className="bw-actions">
-            <button type="button" className="bw-button bw-primary" onClick={() => void cloud.startSignIn()} disabled={cloud.status === 'signing-in'}>
+            <button ref={continueRef} type="button" className="bw-button bw-primary" onClick={() => void cloud.startSignIn()} disabled={cloud.status === 'signing-in'}>
               Continue with Plotune
             </button>
           </div>

@@ -390,7 +390,8 @@ function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: stri
   };
   return (
     <>
-      <Topbar showControls />
+      {/* The sign-in screen replaces the workspace, so the measurement controls would act on nothing and crowd a phone top bar. */}
+      <Topbar showControls={cloud.status !== 'signing-in'} />
       <RememberedReconnect />
       {cloud.status === 'signing-in' ? (
         <SignInPending onContinueWithout={cloud.continueWithoutSignIn} />

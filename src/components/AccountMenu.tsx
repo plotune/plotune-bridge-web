@@ -23,6 +23,15 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const signInRef = useRef<HTMLButtonElement>(null);
+  const previousStatus = useRef(status);
+  // Sign out removes the menu and its button: focus goes to the Sign in button that replaces it, not to the page top.
+  useEffect(() => {
+    const was = previousStatus.current;
+    previousStatus.current = status;
+    const active = document.activeElement;
+    if (was === 'signed-in' && status === 'signed-out' && (active === null || active === document.body)) signInRef.current?.focus();
+  }, [status]);
   // The menu only exists while signed in; a stale "open" flag must not reopen it on the next sign-in.
   const menuOpen = open && status === 'signed-in';
 
@@ -48,9 +57,12 @@ export function AccountMenu() {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!menuOpen) return;
-    if (event.key === 'Escape' || event.key === 'Tab') {
+    if (event.key === 'Escape') {
       event.preventDefault();
       close(true);
+    } else if (event.key === 'Tab') {
+      // Tab leaves the menu like any other control: the menu closes and the browser moves focus on, never back to the button.
+      setOpen(false);
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       focusItem(menuRef.current, event.key === 'ArrowDown' ? 1 : -1);
@@ -59,7 +71,7 @@ export function AccountMenu() {
 
   if (status === 'signed-out') {
     return (
-      <button type="button" className="bw-button bw-small bw-topbar-account-button" onClick={() => void startSignIn()}>
+      <button ref={signInRef} type="button" className="bw-button bw-small bw-topbar-account-button" onClick={() => void startSignIn()}>
         Sign in
       </button>
     );

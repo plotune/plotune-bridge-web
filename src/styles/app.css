@@ -1466,3 +1466,43 @@ input[aria-invalid='true'] {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* ---- Touch sizes on phones (WCAG 2.5.5: 44 x 44 CSS px) -------------------------------------
+ * The desktop sizes stay as they are. Below 640px every control a finger can hit is at least 44px
+ * high, and icon-only buttons at least 44px wide. Checkbox labels are the target, not the 16px box. */
+@media (max-width: 640px) {
+  .bw-button,
+  .bw-button.bw-small,
+  .bw-icon-button,
+  .bw-link-button,
+  .bw-brand,
+  .bw-tabs button,
+  .bw-setup-select,
+  .bw-account-menu-item,
+  .bw-main summary,
+  .bw-main select,
+  .bw-main input:not([type='checkbox']):not([type='radio']),
+  .bw-menu-item,
+  label:has(> input[type='checkbox']) {
+    min-height: 44px;
+  }
+  .bw-icon-button {
+    min-width: 44px;
+  }
+  .bw-account-menu-item {
+    display: flex;
+    align-items: center;
+  }
+  .bw-fine a,
+  .bw-hint a,
+  .bw-muted a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* The title of the add-device pane takes focus when the pane opens from a button that is no longer on the page. */
+h1[tabindex='-1']:focus {
+  outline: none;
+}
