@@ -13,6 +13,7 @@ import { TracePanel } from './TracePanel';
 import { TransmitPanel } from './TransmitPanel';
 import { IconPanels } from './icons';
 
+import { acceptsAny, type DataKind } from '../core/model';
 import type { PageId } from '../state/persistence';
 export type { PageId } from '../state/persistence';
 
@@ -21,6 +22,13 @@ export interface PanelDef {
   label: string;
   render(): ReactNode;
   wide?: boolean;
+  /** The data kinds this panel can show. Panels that need a specific device protocol say so here. */
+  accepts: readonly DataKind[] | 'any';
+}
+
+/** The panels worth showing for a source that provides `provides`. With no source, every panel stays available. */
+export function panelsFor(panels: PanelDef[], provides: readonly DataKind[] | null): PanelDef[] {
+  return provides === null ? panels : panels.filter((p) => acceptsAny(p.accepts, provides));
 }
 
 function useHidden(page: PageId): [Set<string>, (id: string, visible: boolean) => void] {
@@ -46,8 +54,9 @@ export function PanelsMenu({ panels, hidden, onToggle }: { panels: PanelDef[]; h
   );
 }
 
-export function Dashboard({ page, panels, head }: { page: PageId; panels: PanelDef[]; head: (menu: ReactNode) => ReactNode }) {
+export function Dashboard({ page, panels: all, head, provides = null }: { page: PageId; panels: PanelDef[]; head: (menu: ReactNode) => ReactNode; provides?: readonly DataKind[] | null }) {
   const [hidden, toggle] = useHidden(page);
+  const panels = panelsFor(all, provides);
   return (
     <>
       {head(<PanelsMenu panels={panels} hidden={hidden} onToggle={toggle} />)}
@@ -62,13 +71,13 @@ export function Dashboard({ page, panels, head }: { page: PageId; panels: PanelD
 }
 
 export const capturePanels: PanelDef[] = [
-  { id: 'trace', label: 'Trace', wide: true, render: () => <TracePanel /> },
-  { id: 'channels', label: 'Channels', wide: true, render: () => <ChannelsPanel /> },
-  { id: 'stats', label: 'Statistics', wide: true, render: () => <StatsPanel /> },
-  { id: 'transmit', label: 'Send frame', wide: true, render: () => <TransmitPanel /> },
+  { id: 'trace', accepts: ['frames'], label: 'Trace', wide: true, render: () => <TracePanel /> },
+  { id: 'channels', accepts: ['frames'], label: 'Channels', wide: true, render: () => <ChannelsPanel /> },
+  { id: 'stats', accepts: ['frames'], label: 'Statistics', wide: true, render: () => <StatsPanel /> },
+  { id: 'transmit', accepts: ['frames'], label: 'Send frame', wide: true, render: () => <TransmitPanel /> },
 ];
 
-export const devicePanels: PanelDef[] = [{ id: 'device', label: 'Device', render: () => <DevicePanel /> }];
+export const devicePanels: PanelDef[] = [{ id: 'device', accepts: 'any', label: 'Device', render: () => <DevicePanel /> }];
 
 export function useDiagnostics() {
   const store = useStore();
@@ -100,8 +109,8 @@ export function useDiagnostics() {
 
 export function diagnosticsPanels(d: ReturnType<typeof useDiagnostics>): PanelDef[] {
   return [
-    { id: 'link', label: 'Diagnostic link', render: () => <LinkPanel settings={d.settings} onChange={d.change} errors={d.errors} /> },
-    { id: 'uds', label: 'Diagnostic requests', wide: true, render: () => <UdsPanel uds={d.uds} settings={d.settings} log={d.udsLog} onLog={d.addUdsLog} /> },
-    { id: 'xcp', label: 'Calibration (XCP)', wide: true, render: () => <XcpPanel xcp={d.xcp} settings={d.settings} log={d.xcpLog} onLog={d.addXcpLog} /> },
+    { id: 'link', accepts: ['frames'], label: 'Diagnostic link', render: () => <LinkPanel settings={d.settings} onChange={d.change} errors={d.errors} /> },
+    { id: 'uds', accepts: ['frames'], label: 'Diagnostic requests', wide: true, render: () => <UdsPanel uds={d.uds} settings={d.settings} log={d.udsLog} onLog={d.addUdsLog} /> },
+    { id: 'xcp', accepts: ['frames'], label: 'Calibration (XCP)', wide: true, render: () => <XcpPanel xcp={d.xcp} settings={d.settings} log={d.xcpLog} onLog={d.addXcpLog} /> },
   ];
 }

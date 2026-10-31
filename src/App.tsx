@@ -10,6 +10,7 @@ import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
+import { canSourceDescriptor } from './core/can-source';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
 import { SetupPane } from './components/SetupPane';
 import { SignInCard } from './components/SignInCard';
@@ -325,6 +326,7 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStart
   const state = useWorkspace();
   const cloud = useCloud();
   const editing = editingId !== null && editingId === activeId;
+  const provides = canSourceDescriptor(state).provides;
   const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
   // Each screen has exactly one h1: the intro, the banner title, or this hidden one for a workspace with only notices or panels.
   const titled = slots.length === 0 || bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
@@ -338,9 +340,9 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStart
           {!titled && <h1 className="bw-sr-only">Plotune Bridge workspace</h1>}
           {slots.length === 0 && <EmptyIntro />}
           <ConnectionBanner onLocal={onLocalNetwork} />
-          {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}
-          {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} head={bar} />}
-          {page === 'device' && <Dashboard page="device" panels={devicePanels} head={bar} />}
+          {page === 'capture' && <Dashboard page="capture" panels={capturePanels} provides={provides} head={bar} />}
+          {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} provides={provides} head={bar} />}
+          {page === 'device' && <Dashboard page="device" panels={devicePanels} provides={provides} head={bar} />}
         </>
       )}
     </main>
