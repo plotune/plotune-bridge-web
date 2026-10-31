@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { MockEcu } from '../tests/helpers/mockEcu';
-import { configureBothChannels, connect, connected, startCapture } from './helpers';
+import { configureBothChannels, connect, connected, LOCAL_ADVANCED, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 async function expectNoAxeViolations(page: Page, label: string): Promise<void> {
@@ -15,6 +15,9 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     await page.goto('/');
     await expectNoAxeViolations(page, 'offline workspace');
     await page.getByRole('button', { name: 'Add a device' }).click();
+    await expect(page.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
+    await expectNoAxeViolations(page, 'account sign-in');
+    await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
     await expect(page.getByTestId('permission-explainer')).toBeVisible();
     await expectNoAxeViolations(page, 'permission explainer');
     await page.getByRole('button', { name: 'Continue' }).click();

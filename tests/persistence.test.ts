@@ -182,3 +182,13 @@ it('canceling during connection restores the committed endpoint and only success
   await slot.store.connect('localhost:9121');
   expect(new WorkspacePersistence(() => r.storage).load().devices[0].target).toBe('ws://localhost:9121');
 });
+
+describe('remembered remote devices', () => {
+  it('keeps a well-formed remote target across a reload, and drops a remote-looking target that is malformed', () => {
+    const store = memory();
+    store.setItem(WORKSPACE_KEY, JSON.stringify({ version: 1, devices: [{ id: 'd1', target: 'remote:proj_1/dev-1', captureChannels: [1, 2], transmitChannel: 1 }], activeId: 'd1' }));
+    expect(new WorkspacePersistence(() => store).load().devices).toEqual([expect.objectContaining({ id: 'd1', target: 'remote:proj_1/dev-1' })]);
+    store.setItem(WORKSPACE_KEY, JSON.stringify({ version: 1, devices: [{ id: 'd1', target: 'remote:proj_1/dev/1', captureChannels: [1, 2], transmitChannel: 1 }], activeId: 'd1' }));
+    expect(new WorkspacePersistence(() => store).load().devices).toEqual([]);
+  });
+});

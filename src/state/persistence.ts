@@ -35,11 +35,13 @@ const record = (v: unknown): v is Record<string, unknown> => v !== null && typeo
 const pages = Object.keys(PANEL_IDS) as PageId[];
 export const isPage = (v: unknown): v is PageId => pages.includes(v as PageId);
 
-/** Only ordinary root device addresses are remembered. Custom paths, queries and fragments may contain secrets. */
+/** Only ordinary root device addresses and well-formed remote targets are remembered. Custom paths, queries and fragments may contain secrets. */
 export function rememberableTarget(input: unknown): string | null {
   if (typeof input !== 'string' || input.length > 2048) return null;
   const target = parseTarget(input);
   if (!target.ok) return null;
+  // A remote target holds only the project and device IDs, never a ticket or token.
+  if (target.remote) return target.url;
   const url = new URL(target.url);
   return !url.username && !url.password && !url.search && !url.hash && url.pathname === '/' ? target.url : null;
 }

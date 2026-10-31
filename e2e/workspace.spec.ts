@@ -1,7 +1,7 @@
 import { createServer } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { MockEcu } from '../tests/helpers/mockEcu';
-import { configureBothChannels, connect, connected, selfSignedCert, serveBuildAt, simulateLocalNetworkPermission, startCapture } from './helpers';
+import { configureBothChannels, connect, connected, openLocalAddressForm, selfSignedCert, serveBuildAt, simulateLocalNetworkPermission, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 const BASE = 2n ** 63n + 12345n; // far above 2^53: any conversion to a double would corrupt the low digits
@@ -215,7 +215,7 @@ test.describe('browsers that cannot open a direct connection', () => {
     });
     await serveBuildAt(page, 'https://bridge.plotune.net'); // a secure origin, like the hosted page
     await page.goto('https://bridge.plotune.net/');
-    await page.getByRole('button', { name: 'Add a device' }).click();
+    await openLocalAddressForm(page);
     const banner = page.getByTestId('unsupported-browser');
     await expect(banner).toContainText('not supported for direct device connection yet');
     await expect(banner).toContainText('Chrome, Edge or Brave');

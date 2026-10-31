@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import WebSocket from 'ws';
-import { connected } from '../e2e/helpers';
+import { connected, openLocalAddressForm } from '../e2e/helpers';
 import { GeneratorControl } from './generatorControl';
 
 const env = {
@@ -71,7 +71,7 @@ test.describe('two real virtual devices in one workspace', () => {
 
   test('both stream into one trace, every row names its device, and a frame sent to one device is echoed only by that device', async ({ page }) => {
     await connected(page, env.virtual!);
-    await page.getByRole('button', { name: 'Add a device' }).click();
+    await openLocalAddressForm(page);
     await page.getByLabel('Device address').fill(env.virtual2!);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page.getByTestId('device-chip')).toHaveCount(2);

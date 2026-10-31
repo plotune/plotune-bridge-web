@@ -148,3 +148,34 @@ describe('trace buffer', () => {
     expect(buffer).toMatchObject({ length: 0, originNs: null, evicted: 0 });
   });
 });
+
+describe('remote targets (remote:<project>/<device>)', () => {
+  it('accepts a well-formed remote target unchanged, marked as remote and with no direct-address scheme', () => {
+    expect(parseTarget('remote:proj_1/11111111-2222-3333-4444-555555555555')).toEqual({
+      ok: true,
+      url: 'remote:proj_1/11111111-2222-3333-4444-555555555555',
+      scheme: null,
+      host: '',
+      loopback: false,
+      remote: true,
+    });
+  });
+
+  it('trims surrounding spaces the same way as a direct address', () => {
+    expect(parseTarget('  remote:proj_1/dev-1  ')).toMatchObject({ ok: true, url: 'remote:proj_1/dev-1', remote: true });
+  });
+
+  it.each(['remote:proj_1', 'remote:/dev-1', 'remote:proj_1/dev/1', 'remote:proj.1/dev-1', 'remote:proj_1/dev-1?x=1', `remote:${'a'.repeat(129)}/dev`])(
+    'leaves %s to the direct-address rules, so a malformed remote target never becomes a remote one',
+    (input) => {
+      const p = parseTarget(input);
+      expect(p.remote).toBeUndefined();
+      expect(p.ok === false || p.url.startsWith('ws://')).toBe(true);
+    },
+  );
+
+  it('keeps direct addresses without the remote flag', () => {
+    expect(parseTarget('192.168.1.50:9101')).not.toHaveProperty('remote');
+    expect(parseTarget('ws://localhost:9101')).not.toHaveProperty('remote');
+  });
+});

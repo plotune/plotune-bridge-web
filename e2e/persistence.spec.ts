@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { connected, configureBothChannels } from './helpers';
+import { connected, configureBothChannels, LOCAL_ADVANCED, openLocalAddressForm } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 // This spies on browser APIs; it does not simulate a permission grant.
@@ -38,7 +38,7 @@ test('zero-device first load renders the workspace and offline settings without 
   await expect(page.locator('main')).toHaveAttribute('data-page', 'diagnostics');
   await expect(page.getByRole('textbox', { name: /^Request ID/ })).toHaveValue('701');
   expect(await page.evaluate(() => (window as unknown as { __deviceAccess: unknown }).__deviceAccess)).toEqual({ sockets: 0, permissions: 0 });
-  await page.getByRole('button', { name: 'Add a device' }).click();
+  await openLocalAddressForm(page);
   await expect(page.getByTestId('permission-explainer')).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('main')).toHaveAttribute('data-page', 'diagnostics');
@@ -54,7 +54,7 @@ test('reload keeps the view, both devices and UI choices; reconnect reads live s
     await page.getByTestId('channel-2').getByRole('checkbox').uncheck();
     await page.getByLabel('Send channel').selectOption('2');
     await page.getByRole('button', { name: 'Start capture', exact: true }).click();
-    await page.getByRole('button', { name: 'Add a device' }).click();
+    await openLocalAddressForm(page);
     await page.getByLabel('Device address').fill(b.url);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page.getByTestId('device-chip')).toHaveCount(2);
@@ -90,7 +90,7 @@ test('unavailable browser storage does not prevent navigation or adding a device
   await page.goto('/');
   await page.getByRole('button', { name: 'Device', exact: true }).click();
   await expect(page.getByText('Not connected to a device.')).toBeVisible();
-  await page.getByRole('button', { name: 'Add a device' }).click();
+  await openLocalAddressForm(page);
   await expect(page.getByTestId('permission-explainer')).toBeVisible();
 });
 
@@ -131,14 +131,16 @@ test('failed and canceled address edits preserve the last working device across 
 
 test('each unfinished device stays connectable when another draft is added or removed', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add a device' }).click();
+  await openLocalAddressForm(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByRole('button', { name: 'Add a device' }).click();
   await page.getByRole('button', { name: 'Select Bridge 1' }).click();
+  await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
   await expect(page.getByLabel('Device address')).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Select Bridge 1' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Select Bridge 2' })).toBeVisible();
+  await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
   await expect(page.getByLabel('Device address')).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByText('Your workspace', { exact: true })).toBeVisible();

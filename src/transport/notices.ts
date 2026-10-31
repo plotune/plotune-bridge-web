@@ -1,5 +1,6 @@
 // Plain-language explanations of how a link ended or failed to open. Close codes are shown only in the
 // technical details; the headline and steps never assume a cause the browser does not reveal.
+import { isRemoteTarget } from './remote';
 import type { CloseInfo } from './types';
 
 export type PermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
@@ -15,7 +16,18 @@ export type NoticeKind =
   | 'permission-blocked'
   | 'timeout'
   | 'blocked-by-browser'
-  | 'ended';
+  | 'ended'
+  | 'signed-out'
+  | 'no-access'
+  | 'not-found'
+  | 'cloud-unavailable'
+  | 'device-offline';
+
+/**
+ * Reasons the remote connection sets up before the relay is reached (see createStore). They travel in
+ * CloseInfo.reason, so they stay plain strings and never carry a token, ticket or response body.
+ */
+export type RemoteFailureReason = 'not-signed-in' | 'no-access' | 'not-found' | 'cloud-unavailable';
 
 export interface Notice {
   kind: NoticeKind;
@@ -41,6 +53,7 @@ function technical(info: CloseInfo): string {
 
 /** The link never opened. The browser reveals almost nothing (always code 1006), so this lists causes, not a verdict. */
 export function explainOpenFailure(info: CloseInfo, ctx: NoticeContext): Notice {
+  if (isRemoteTarget(ctx.targetUrl)) return explainRemoteOpenFailure(info);
   const tech = technical(info);
   const scheme = ctx.targetUrl.split(':', 1)[0];
   if (info.reason === 'timeout') {
@@ -87,6 +100,81 @@ export function explainOpenFailure(info: CloseInfo, ctx: NoticeContext): Notice 
     steps,
     technical: tech,
   };
+}
+
+/** Shown when a remembered remote device cannot reconnect because this page has no account session. */
+export function signInToReconnectNotice(technicalDetails = ''): Notice {
+  return {
+    kind: 'signed-out',
+    severity: 'info',
+    title: 'Sign in to reconnect to this device',
+    summary: 'Remote devices are reached through your Plotune account. This page keeps your sign-in in memory only, so a reload signs you out.',
+    steps: ['Sign in with your Plotune account, then choose Connect next to the device.'],
+    technical: technicalDetails,
+  };
+}
+
+/** A remote connection could not be opened. Reasons come from the cloud setup step, or from the relay link itself. */
+export function explainRemoteOpenFailure(info: CloseInfo): Notice {
+  const tech = technical(info);
+  switch (info.reason as RemoteFailureReason | string) {
+    case 'not-signed-in':
+      return signInToReconnectNotice(tech);
+    case 'no-access':
+      return {
+        kind: 'no-access',
+        severity: 'error',
+        title: 'Your account cannot use this device',
+        summary: 'Your Plotune account does not have access to this device in the selected project.',
+        steps: ['Ask a project owner or admin to check your access, then try again.'],
+        technical: tech,
+      };
+    case 'not-found':
+      return {
+        kind: 'not-found',
+        severity: 'error',
+        title: 'This device is not paired to the project',
+        summary: 'The device was not found in the selected project. It may have been removed.',
+        steps: ['Choose another device, or add this one again with a new pairing code.'],
+        technical: tech,
+      };
+    case 'cloud-unavailable':
+      return {
+        kind: 'cloud-unavailable',
+        severity: 'error',
+        title: 'The Plotune cloud could not set up the connection',
+        summary: 'The cloud could not be reached or returned an error. Nothing is wrong with your device.',
+        steps: ['Check your internet connection, then try again shortly.'],
+        technical: tech,
+      };
+    case 'device is not online':
+      return {
+        kind: 'device-offline',
+        severity: 'error',
+        title: 'The device is offline',
+        summary: 'The device is paired to this project, but it is not connected to the Plotune cloud right now.',
+        steps: ['Check that the device is powered and has internet access.', 'Make sure the Bridge software is running, then try again.'],
+        technical: tech,
+      };
+    case 'timeout':
+      return {
+        kind: 'timeout',
+        severity: 'error',
+        title: 'The device did not answer',
+        summary: 'Nothing came back through the cloud before the timeout.',
+        steps: ['Check that the device is powered and has internet access.', 'Try again in a moment.'],
+        technical: tech,
+      };
+    default:
+      return {
+        kind: 'unreachable',
+        severity: 'error',
+        title: "Couldn't connect through the Plotune cloud",
+        summary: 'The connection could not be opened. The browser and the cloud do not say which step failed.',
+        steps: ['Check your internet connection, then try again.', 'Make sure the device is online.'],
+        technical: tech,
+      };
+  }
 }
 
 /** An established link ended. */

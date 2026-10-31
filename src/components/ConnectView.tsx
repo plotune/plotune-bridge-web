@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { unsupportedNotice, type BrowserInfo } from '../lib/browser';
+import { isRemoteTarget } from '../transport/remote';
 import { useHub, useHubState, useStore, useWorkspace } from '../state/context';
 import { IconCheck, IconCopy, IconInfo, IconLink } from './icons';
 import { NoticeCard } from './Notice';
@@ -90,13 +91,16 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
   };
 
   if (state.phase === 'connecting') {
+    const remote = isRemoteTarget(state.target);
     return (
       <section className="bw-card bw-connecting" aria-live="polite" data-testid="connecting">
         <p className="bw-eyebrow">Connecting</p>
         <h1>
-          <span className="bw-spinner" aria-hidden="true" /> Connecting to {state.target}
+          <span className="bw-spinner" aria-hidden="true" /> {remote ? 'Connecting through the Plotune cloud…' : <>Connecting to {state.target}</>}
         </h1>
-        {state.slowConnect ? (
+        {remote ? (
+          <p className="bw-lead">Opening a connection to your device through the cloud.</p>
+        ) : state.slowConnect ? (
           <p className="bw-lead" data-testid="prompt-reminder">
             Still waiting. If your browser is asking about access to devices on your local network, choose <strong>Allow</strong>. Otherwise the device may not be reachable.
           </p>
