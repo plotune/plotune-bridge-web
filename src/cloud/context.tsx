@@ -51,7 +51,9 @@ export interface CloudContextValue {
   /** False off bridge.plotune.net: sign-in cannot complete there, so the page offers the local network instead. */
   signInAvailable: boolean;
   /** Moves on with every change of the account session. A job started for one session must stop when this changes. */
-  sessionGeneration(): number;
+  sessionGeneration: number;
+  /** The same number, read at call time: a render that follows a token change sees the new value at once. */
+  readSessionGeneration(): number;
   /** The fallback on the sign-in screen: stops the automatic attempt for this tab and shows the workspace. */
   continueWithoutSignIn(): void;
   projects: CloudProject[];
@@ -352,8 +354,10 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   // Every change of the account session (sign-in, sign-out, a replaced token) moves this on, so a queued job can tell
   // that the session it was started for is gone.
   const readSessionGeneration = useCallback(() => sessionGeneration.current, []);
+  const [generationTick, setGenerationTick] = useState(0);
   useEffect(() => session.subscribe(() => {
     sessionGeneration.current += 1;
+    setGenerationTick(sessionGeneration.current);
   }), [session]);
 
   const dismissSignInNotice = useCallback(() => setSignInNotice(null), []);
@@ -384,7 +388,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       startSignIn,
       signOut,
       signInAvailable,
-      sessionGeneration: readSessionGeneration,
+      sessionGeneration: generationTick,
+      readSessionGeneration,
       continueWithoutSignIn,
       projects: signedIn ? projectState.items : [],
       projectsLoading: signedIn && projectState.loading,
@@ -398,7 +403,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       refreshDevices,
       createPairingCode,
     }),
-    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, readSessionGeneration, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
+    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, generationTick, readSessionGeneration, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
   );
 
   return <CloudContext.Provider value={value}>{children}</CloudContext.Provider>;

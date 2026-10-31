@@ -75,12 +75,13 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   const hub = useHub();
   const cloud = useCloud();
   const state = useWorkspace();
+  const { queueSettledFor } = useHubState();
   const remote = isRemoteTarget(state.target);
   if (state.phase === 'connecting') {
     return (
       <div className="bw-banner" role="status" data-testid="reconnecting">
         <span className="bw-spinner" aria-hidden="true" />{' '}
-        {remote ? 'Reconnecting through the Plotune cloud…' : <>Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}</>}
+        {remote ? 'Connecting through the Plotune cloud…' : <>Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}</>}
       </div>
     );
   }
@@ -88,8 +89,16 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
     if (remote && state.notice.kind === 'signed-out') {
       // A remembered remote device waiting for sign-in: an informational card, never an error.
       if (cloud.status === 'signed-out') return <SignInCard signInAvailable={cloud.signInAvailable} onSignIn={() => void cloud.startSignIn()} onLocal={onLocal} />;
-      // Signed in and closed (the queue passed it, or an edit was cancelled): always a visible Reconnect. Nothing while signing in.
       if (cloud.status === 'signed-in') {
+        // The automatic reconnect for this sign-in has not settled yet: the device is queued or about to start. No action is offered.
+        if (queueSettledFor !== cloud.readSessionGeneration()) {
+          return (
+            <div className="bw-banner" role="status" data-testid="queued-reconnect">
+              <span className="bw-spinner" aria-hidden="true" /> Waiting to connect…
+            </div>
+          );
+        }
+        // Settled: the device is closed and nothing will reconnect it automatically, so the user gets the action.
         return (
           <NoticeCard
             notice={{ kind: 'ended', severity: 'info', title: 'This device is disconnected', summary: 'Reconnect to use it through your Plotune account.', steps: [], technical: '' }}
@@ -316,27 +325,35 @@ function RememberedReconnect() {
   const cloud = useCloud();
   const hub = useHub();
   const signedIn = cloud.status === 'signed-in';
-  const { sessionGeneration } = cloud;
+  const { sessionGeneration, readSessionGeneration } = cloud;
   useEffect(() => {
     if (!signedIn) return undefined;
+    const generation = readSessionGeneration();
     const queue = hub.remoteAwaitingSignIn().map((slot) => slot.id);
-    if (queue.length === 0) return undefined;
-    const generation = sessionGeneration();
+    if (queue.length === 0) {
+      hub.setQueueSettled(generation);
+      return undefined;
+    }
     let stopped = false;
     queueMicrotask(() => {
       void (async () => {
-        for (const id of queue) {
-          if (stopped || sessionGeneration() !== generation) return;
-          const slot = hub.slot(id);
-          if (!slot || !hub.isAwaitingSignIn(slot)) continue;
-          await slot.store.connect(slot.store.getState().target);
+        try {
+          for (const id of queue) {
+            if (stopped || readSessionGeneration() !== generation) return;
+            const slot = hub.slot(id);
+            if (!slot || !hub.isAwaitingSignIn(slot)) continue;
+            await slot.store.connect(slot.store.getState().target);
+          }
+        } finally {
+          // Finished, skipped, cancelled or failed: nothing is scheduled any more for this sign-in.
+          hub.setQueueSettled(generation);
         }
       })();
     });
     return () => {
       stopped = true;
     };
-  }, [signedIn, sessionGeneration, hub]);
+  }, [signedIn, sessionGeneration, readSessionGeneration, hub]);
   return null;
 }
 

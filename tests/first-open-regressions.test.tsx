@@ -184,11 +184,14 @@ describe('finding 2: the reconnect queue is rechecked before each device', () =>
     await act(async () => rig.finishExchange(TOKEN_FROM_EXCHANGE));
     await waitFor(() => expect(rig.opens.has(DEV1)).toBe(true));
 
+    // A replaced token is a new sign-in: the queue for the new session connects the waiting device once. The queue of the
+    // old session must not connect it again when its own connection finishes.
     act(() => rig.session.setToken('a-replacement-token'));
+    await waitFor(() => expect(factoryTargets(rig).filter((target) => target === DEV2)).toHaveLength(1));
     await act(async () => rig.opens.get(DEV1)!.reject(new TransportOpenError(FIRST_OPEN_FAILED, 'not found')));
     await act(async () => undefined);
 
-    expect(factoryTargets(rig).filter((target) => target === DEV2)).toEqual([]);
+    expect(factoryTargets(rig).filter((target) => target === DEV2)).toHaveLength(1);
   });
 
   it('unmounting the page stops the queue', async () => {
@@ -227,5 +230,60 @@ describe('finding 3: a closed remembered device offers Reconnect while signed in
     fireEvent.click(reconnect);
     expect(factoryTargets(rig).filter((target) => target === DEV1)).toHaveLength(before + 1);
     expect(factoryTargets(rig).at(-1)).toBe(DEV1);
+  });
+});
+
+describe('finding 4: no Reconnect flicker between the token and the first automatic reconnect', () => {
+  it('after a successful sign-in, no Reconnect action or Reconnect text appears before the first reconnect starts', async () => {
+    const rig = makeRig({ devices: [DEVICE1] });
+    await signInThroughCallback(rig);
+    let connected = false;
+    rig.factory.mockImplementation((target: string) => {
+      connected = true;
+      return controlledTransport(target, rig.opens);
+    });
+    // Every DOM change between the token and the first connect is inspected, as a browser would paint it.
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text = document.body.textContent ?? '';
+      if (!connected && /Reconnect|Sign in to reconnect/.test(text)) seen.push(text);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    await act(async () => rig.finishExchange(TOKEN_FROM_EXCHANGE));
+    await waitFor(() => expect(connected).toBe(true));
+    await act(async () => undefined);
+    observer.disconnect();
+
+    expect(seen).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+  });
+
+  it('a device waiting behind another shows a quiet status and no Reconnect action', async () => {
+    const rig = makeRig();
+    await signInThroughCallback(rig);
+    await act(async () => rig.finishExchange(TOKEN_FROM_EXCHANGE));
+    await waitFor(() => expect(rig.opens.has(DEV1)).toBe(true));
+
+    act(() => rig.hub.select('d2'));
+    expect(await screen.findByText('Waiting to connect…')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    expect(factoryTargets(rig).filter((target) => target === DEV2)).toEqual([]);
+  });
+
+  it('after the queue settles with a failed connect, the device offers Reconnect', async () => {
+    const rig = makeRig();
+    await signInThroughCallback(rig);
+    await act(async () => rig.finishExchange(TOKEN_FROM_EXCHANGE));
+    await waitFor(() => expect(rig.opens.has(DEV1)).toBe(true));
+    act(() => rig.hub.select('d2'));
+
+    await act(async () => rig.opens.get(DEV1)!.reject(new TransportOpenError(FIRST_OPEN_FAILED, 'not found')));
+    await waitFor(() => expect(factoryTargets(rig).filter((target) => target === DEV2)).toHaveLength(1));
+    await act(async () => rig.opens.get(DEV2)!.reject(new TransportOpenError(FIRST_OPEN_FAILED, 'not found')));
+
+    expect(await within(screen.getByRole('main')).findByRole('button', { name: 'Reconnect' })).toBeVisible();
+    expect(screen.queryByText('Waiting to connect…')).toBeNull();
+    expect(factoryTargets(rig).filter((target) => target === DEV2)).toHaveLength(1);
   });
 });
