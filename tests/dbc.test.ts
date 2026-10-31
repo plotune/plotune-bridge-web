@@ -51,7 +51,7 @@ describe('parseDbc', () => {
   });
 
   it('tolerates CRLF, a byte-order mark and tabs', () => {
-    const text = '﻿' + BED.replace(/\n/g, '\r\n').replace(/^ SG_/gm, '\tSG_');
+    const text = String.fromCharCode(0xfeff) + BED.replace(/\n/g, '\r\n').replace(/^ SG_/gm, '\tSG_');
     expect(parseDbc(text).messages).toHaveLength(2);
   });
 

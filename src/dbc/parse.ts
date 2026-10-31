@@ -33,7 +33,7 @@ function multiplexing(tag: string | undefined, warnings: string[], signal: strin
  */
 export function parseDbc(text: string): Dbc {
   if (text.length > MAX_DBC_BYTES) throw new DbcError('This file is larger than 5 MB, which is too big for a DBC file.');
-  const lines = text.replace(/^﻿/, '').split(/\r\n|\r|\n/);
+  const lines = (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).split(/\r\n|\r|\n/);
   const warnings: string[] = [];
   const messages: DbcMessage[] = [];
   const byKey = new Map<string, DbcMessage>();
