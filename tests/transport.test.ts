@@ -172,3 +172,11 @@ describe('plain-language notices', () => {
     expect(n.steps.join(' ')).toMatch(/Allow/);
   });
 });
+
+describe('WebSocketTransport: connection path', () => {
+  it('is always a local-network link, with no traffic counters', async () => {
+    const transport = new WebSocketTransport('ws://192.168.1.50:9101', { webSocketImpl: Impl });
+    await expect(transport.connectionPath()).resolves.toEqual({ kind: 'local-network' });
+    expect((transport as { traffic?: unknown }).traffic).toBeUndefined();
+  });
+});

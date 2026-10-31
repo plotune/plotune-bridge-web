@@ -6,6 +6,7 @@ import {
   TransportError,
   TransportOpenError,
   type CloseInfo,
+  type ConnectionPath,
   type DeviceTransport,
   type TransportListener,
 } from './types';
@@ -125,5 +126,10 @@ export class WebSocketTransport implements DeviceTransport {
     if (!ws) return;
     this.localClose = true;
     if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) ws.close(1000, 'client closing');
+  }
+
+  /** A WebSocket is a direct link to a device on the local network; the browser exposes no path detail. */
+  async connectionPath(): Promise<ConnectionPath> {
+    return { kind: 'local-network' };
   }
 }
