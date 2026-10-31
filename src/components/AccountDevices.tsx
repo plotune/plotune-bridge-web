@@ -170,7 +170,7 @@ interface PairingState {
 function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
   const cloud = useCloud();
   const store = useStore();
-  const { projects, projectsLoading, projectsError, selectedProjectId, devices, devicesLoading, devicesError } = cloud;
+  const { projects, projectsLoading, projectsError, selectedProjectId, devices, devicesLoading, devicesLoaded, devicesError } = cloud;
   const [pairing, setPairing] = useState<PairingState | null>(null);
   const [pairBusy, setPairBusy] = useState(false);
   const [pairError, setPairError] = useState<string | null>(null);
@@ -197,7 +197,8 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
 
   const startPairing = async () => {
     const projectId = selectedProjectId;
-    if (projectId === null || pairBusy) return;
+    // The baseline must be a list that really loaded, or a device paired long ago would count as the one this code made.
+    if (projectId === null || pairBusy || !devicesLoaded) return;
     setPairBusy(true);
     setPairError(null);
     setCopied(false);
@@ -277,7 +278,7 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
         <section className="bw-devices" aria-labelledby="devices-heading">
           <div className="bw-devices-head">
             <h2 id="devices-heading">Devices{projectName ? ` in ${projectName}` : ''}</h2>
-            <button type="button" className="bw-button bw-small" onClick={() => void startPairing()} disabled={pairBusy || waiting}>
+            <button type="button" className="bw-button bw-small" onClick={() => void startPairing()} disabled={pairBusy || waiting || !devicesLoaded}>
               Add a device
             </button>
           </div>
@@ -339,7 +340,11 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
           {devicesLoading && devices.length === 0 && <p className="bw-muted">Loading devices…</p>}
           {devicesError && (
             <Alert tone="error">
-              {devicesError.message}
+              {devicesError.message}{' '}
+              {/* Adding a device waits for a loaded list, so a failed load needs its own way to try again. */}
+              <button type="button" className="bw-button bw-small" onClick={() => void cloud.refreshDevices()} disabled={devicesLoading}>
+                Try again
+              </button>
             </Alert>
           )}
           {!devicesLoading && !devicesError && devices.length === 0 && <p className="bw-muted">No devices paired to this project yet.</p>}

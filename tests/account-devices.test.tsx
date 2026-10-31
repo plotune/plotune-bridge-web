@@ -264,6 +264,63 @@ describe('adding a device with a pairing code', () => {
     await screen.findByText('plt_pair_first');
   }
 
+  it('does not start pairing until the existing devices have loaded, so one of them cannot finish the code', async () => {
+    const rig = setup();
+    let release: (devices: CloudDevice[]) => void = () => undefined;
+    vi.mocked(rig.client.listDevices).mockImplementation(() => new Promise<CloudDevice[]>((resolve) => { release = resolve; }));
+    openAccountPane();
+    fill('Username or email', 'kantr');
+    fill('Password', PASSWORD);
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await screen.findByText('Signed in');
+    const add = pairPane().getByRole('button', { name: 'Add a device' });
+    await waitFor(() => expect(add).toBeDisabled());
+    fireEvent.click(add);
+    expect(rig.client.createPairingToken).not.toHaveBeenCalled();
+    await act(async () => release([BRIDGE_A]));
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
+    await screen.findByText('plt_pair_first');
+    // The device that was already paired is the baseline, not the result.
+    await tick(3000);
+    expect(screen.queryByText('Device added')).toBeNull();
+    expect(screen.getByText('plt_pair_first')).toBeVisible();
+  });
+
+  it('lets the user retry a failed device list, and only then allows adding a device', async () => {
+    const rig = setup();
+    vi.mocked(rig.client.listDevices).mockRejectedValueOnce(new CloudError('network'));
+    openAccountPane();
+    await signIn();
+    const add = pairPane().getByRole('button', { name: 'Add a device' });
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(add).toBeDisabled();
+    fireEvent.click(retry);
+    await screen.findByText('Bridge-A');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    await waitFor(() => expect(add).toBeEnabled());
+  });
+
+  it('keeps detecting a new device when each device-list response takes longer than the poll interval', async () => {
+    const rig = setup();
+    await act(async () => undefined);
+    openAccountPane();
+    await signIn();
+    await screen.findByText('Bridge-A');
+    let calls = 0;
+    vi.mocked(rig.client.listDevices).mockImplementation(
+      () => new Promise<CloudDevice[]>((resolve) => { calls += 1; setTimeout(() => resolve([BRIDGE_A, BRIDGE_B]), 4000); }),
+    );
+    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device' }));
+    await screen.findByText('plt_pair_first');
+    await tick(3000);
+    await tick(3000);
+    await tick(3000);
+    // One request ran at a time and its answer was applied rather than discarded by the next poll.
+    expect(calls).toBeLessThanOrEqual(3);
+    expect(await screen.findByText('Device added')).toBeVisible();
+  });
+
   it('shows the one-time code with instructions and a countdown', async () => {
     const rig = setup();
     openAccountPane();
