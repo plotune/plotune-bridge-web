@@ -1,7 +1,8 @@
 // WebRTC adapter that reaches a device through the cloud signaling relay (services/runtime signaling, protocol 0.1.0-draft).
 // The browser is the offerer and opens one reliable, ordered data channel labelled 'contract'. The relay only carries
-// signaling. Once the channel opens, the signaling socket is closed (code 1000) to free the relay slot: the link no
-// longer needs it, and a later relay bye or restart does not affect the open data channel.
+// signaling. The signaling socket stays open for the life of the link and is closed only by close(): closing it earlier
+// makes the relay send the device a bye (peer_disconnected), which a device may treat as the end of the session.
+// A relay restart or close after the channel opened is ignored; it does not affect the open data channel.
 import { ContractError, ProtocolViolation } from '../protocol/errors';
 import { MAX_REQUEST_BYTES } from '../protocol/types';
 import { encodeWire, parseWire, utf8Length, type WireObject } from '../protocol/wire';
@@ -425,8 +426,7 @@ export class RemoteTransport implements DeviceTransport {
     this.phase = 'open';
     if (this.openTimer !== null) clearTimeout(this.openTimer);
     this.openTimer = null;
-    // The link no longer needs the relay. Closing now frees the slot; the device sees a bye, which is harmless here.
-    this.closeSignaling('link established');
+    // Keep signaling open: closing it would make the relay send the device a bye. close() releases the relay slot.
     const resolve = this.resolveOpen;
     this.resolveOpen = null;
     this.rejectOpen = null;

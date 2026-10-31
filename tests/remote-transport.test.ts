@@ -272,13 +272,15 @@ describe('RemoteTransport: signaling and the data channel', () => {
     expect(closes).toEqual([]);
   });
 
-  it('closes the signaling socket once the channel is open, with a normal close code', async () => {
-    const { relay, channel, opening } = await negotiate();
+  it('keeps the signaling socket open while the link is up, so the device is never sent a relay bye', async () => {
+    const { relay, channel, opening, transport } = await negotiate();
     relay.receive({ type: 'answer', sdp: 'v=0 answer-sdp', sdp_type: 'answer' });
     await tick();
     channel.open();
     await opening;
-    expect(relay.closeCalls).toEqual([{ code: 1000, reason: 'link established' }]);
+    expect(relay.closeCalls).toEqual([]);
+    transport.close();
+    expect(relay.closeCalls).toEqual([{ code: 1000, reason: 'client closing' }]);
   });
 
   it('carries one contract message per data-channel text message in both directions', async () => {
