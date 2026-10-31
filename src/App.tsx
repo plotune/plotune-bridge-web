@@ -47,9 +47,32 @@ function MeasurementControls() {
   );
 }
 
+/** Elapsed time of the running measurement, like the clock in a measurement tool. Counts from when capture started on this page. */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+}
+
+/** Mounted only while capturing, so its mount time is when this measurement started. */
+function CaptureTimer() {
+  const [startedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(startedAt);
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <span className="bw-muted bw-capture-timer" role="timer" aria-label="Capture time">
+      {formatElapsed(now - startedAt)}
+    </span>
+  );
+}
+
 function Topbar({ showControls }: { showControls: boolean }) {
   const { slots } = useHubState();
   const connected = slots.filter((s) => s.store.getState().phase === 'connected').length;
+  const capturing = slots.some((s) => s.store.getState().phase === 'connected' && s.store.getState().capturing);
   return (
     <header className="bw-topbar">
       <a className="bw-brand" href="https://plotune.net">
@@ -62,6 +85,7 @@ function Topbar({ showControls }: { showControls: boolean }) {
         <>
           <span className="bw-top-divider" />
           <MeasurementControls />
+          {capturing && <CaptureTimer />}
           <span className="bw-muted bw-top-summary">
             {connected} of {slots.length} {slots.length === 1 ? 'device' : 'devices'} connected
           </span>

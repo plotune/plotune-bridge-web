@@ -21,6 +21,8 @@ export class TraceBuffer {
   private rows: TraceRow[] = [];
   private nextKey = 1;
   evicted = 0;
+  /** Real frames currently held; markers are not counted. */
+  frameCount = 0;
   version = 0;
   originNs: bigint | null = null;
   /** Called for every pushed row, so a merged view can follow this buffer. */
@@ -40,10 +42,11 @@ export class TraceBuffer {
     const full = { ...row, key: this.nextKey++ } as TraceRow;
     if (full.kind === 'frame' && this.originNs === null) this.originNs = full.frame.timestampNs;
     this.rows.push(full);
+    if (full.kind === 'frame') this.frameCount += 1;
     // Trim in chunks so the per-frame cost stays constant.
     if (this.rows.length > this.capacity + Math.max(64, this.capacity >> 3)) {
       const excess = this.rows.length - this.capacity;
-      this.rows.splice(0, excess);
+      for (const gone of this.rows.splice(0, excess)) if (gone.kind === 'frame') this.frameCount -= 1;
       this.evicted += excess;
     }
     this.version += 1;
@@ -52,6 +55,7 @@ export class TraceBuffer {
 
   clear(): void {
     this.rows = [];
+    this.frameCount = 0;
     this.evicted = 0;
     this.originNs = null;
     this.version += 1;
