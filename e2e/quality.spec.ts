@@ -14,7 +14,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
   test('the permission explanation and the address screen', async ({ page }) => {
     await page.goto('/');
     await expectNoAxeViolations(page, 'offline workspace');
-    await page.getByRole('button', { name: 'Add a device' }).click();
+    await page.locator('.bw-setup').getByRole('button', { name: 'Add a device' }).click();
     await expect(page.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
     await expectNoAxeViolations(page, 'account sign-in');
     await page.getByRole('button', { name: LOCAL_ADVANCED }).click();

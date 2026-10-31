@@ -100,6 +100,7 @@ test('failed and canceled address edits preserve the last working device across 
     await connected(page, device.url);
     await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
     await page.locator('main').getByRole('button', { name: 'Change address' }).click();
+    await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
     await page.getByLabel('Device address').fill('ws://127.0.0.1:9/private-path');
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page.locator('[data-notice=unreachable]')).toBeVisible();
@@ -110,6 +111,7 @@ test('failed and canceled address edits preserve the last working device across 
     await page.reload();
     await expect(page.getByTestId('device-chip')).toContainText(device.url);
     await page.locator('main').getByRole('button', { name: 'Change address' }).click();
+    await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
     await page.getByLabel('Device address').fill(device.url);
     await page.evaluate(() => {
       // SIMULATION: a pending browser connection, as in the existing permission test.
@@ -133,7 +135,7 @@ test('each unfinished device stays connectable when another draft is added or re
   await page.goto('/');
   await openLocalAddressForm(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.getByRole('button', { name: 'Add a device' }).click();
+  await page.locator('.bw-setup').getByRole('button', { name: 'Add a device' }).click();
   await page.getByRole('button', { name: 'Select Bridge 1' }).click();
   await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
   await expect(page.getByLabel('Device address')).toBeVisible();
