@@ -287,6 +287,20 @@ describe('adding a device with a pairing code', () => {
     expect(screen.getByText('plt_pair_first')).toBeVisible();
   });
 
+  it('lets the user retry a failed device list, and only then allows adding a device', async () => {
+    const rig = setup();
+    vi.mocked(rig.client.listDevices).mockRejectedValueOnce(new CloudError('network'));
+    openAccountPane();
+    await signIn();
+    const add = pairPane().getByRole('button', { name: 'Add a device' });
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(add).toBeDisabled();
+    fireEvent.click(retry);
+    await screen.findByText('Bridge-A');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    await waitFor(() => expect(add).toBeEnabled());
+  });
+
   it('keeps detecting a new device when each device-list response takes longer than the poll interval', async () => {
     const rig = setup();
     await act(async () => undefined);

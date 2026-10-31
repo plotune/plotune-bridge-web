@@ -340,7 +340,11 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
           {devicesLoading && devices.length === 0 && <p className="bw-muted">Loading devices…</p>}
           {devicesError && (
             <Alert tone="error">
-              {devicesError.message}
+              {devicesError.message}{' '}
+              {/* Adding a device waits for a loaded list, so a failed load needs its own way to try again. */}
+              <button type="button" className="bw-button bw-small" onClick={() => void cloud.refreshDevices()} disabled={devicesLoading}>
+                Try again
+              </button>
             </Alert>
           )}
           {!devicesLoading && !devicesError && devices.length === 0 && <p className="bw-muted">No devices paired to this project yet.</p>}
