@@ -1244,8 +1244,18 @@ input[aria-invalid='true'] {
     padding: 0 12px;
     gap: 8px;
   }
-  .bw-top-summary {
+  .bw-top-summary,
+  .bw-top-divider {
     display: none;
+  }
+  /* Keep the logo and the accessible name; give the room to Start/Stop, the timer and Sign in. */
+  .bw-brand strong {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   .bw-panel.is-maximized {
     left: 12px;
