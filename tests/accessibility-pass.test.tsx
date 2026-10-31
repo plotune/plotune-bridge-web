@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
+import { WORKSPACE_KEY, WorkspacePersistence } from '../src/state/persistence';
 import { SignInPending } from '../src/components/SignInPending';
 import { type CloudClient, type CloudDevice, type CloudProject, type PairingToken } from '../src/cloud/client';
 import { createCloudSession, type CloudSession } from '../src/cloud/session';
@@ -63,7 +64,7 @@ function setup(): Rig {
 /** Signs in the way the real flow does: Continue redirects, plotune.net returns a one-time code, the page loads again. */
 async function signIn(rig: Rig): Promise<void> {
   const before = rig.sso.redirect.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Continue with Plotune' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
   await waitFor(() => expect(rig.sso.redirect.mock.calls.length).toBeGreaterThan(before));
   rig.sso.state.hash = `#code=${CODE}&state=${stateFromRedirect(rig.sso, rig.sso.redirect.mock.calls.length - 1)}`;
   mount(rig);
@@ -96,7 +97,7 @@ describe('landmarks and live regions', () => {
   it('while signing in the workspace is replaced, so its Start capture control is not offered', async () => {
     const rig = setup();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with Plotune' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
     await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalled());
     expect(screen.getByRole('status')).toHaveTextContent('Signing you in');
     expect(screen.queryByRole('button', { name: 'Start capture' })).toBeNull();
@@ -198,5 +199,84 @@ describe('touch sizes on phones', () => {
     expect(block).toMatch(/\.bw-button\.bw-small,/);
     expect(block).toMatch(/\.bw-icon-button \{\s*min-width: 44px;\s*\}/);
     expect(block).toMatch(/label:has\(> input\[type='checkbox'\]\) \{\s*min-height: 44px;/);
+  });
+});
+
+describe('one h1 per screen, one wording for sign-in, and no raw remote address in the sidebar', () => {
+  const h1Count = (): number => document.querySelectorAll('h1').length;
+
+  it('the signed-out empty workspace has one h1, and the topbar brand is not a heading', () => {
+    setup();
+    expect(h1Count()).toBe(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Your workspace' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Plotune Bridge' })).toBeNull();
+  });
+
+  it('the add-device pane has one h1 while signed out, while signed in, and while connecting', async () => {
+    const rig = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to connect your Bridge' })).toBeVisible();
+    expect(h1Count()).toBe(1);
+    // The primary sign-in button has one wording in the pane.
+    expect(screen.getByRole('button', { name: 'Sign in with Plotune' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Continue with Plotune' })).toBeNull();
+    await signIn(rig);
+    await screen.findByText('Bridge-A');
+    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Add a device' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect a Bridge device' })).toBeVisible();
+    expect(h1Count()).toBe(1);
+    fireEvent.click(within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect' }));
+    const connecting = await screen.findByTestId('connecting');
+    expect(within(connecting).getByRole('heading', { level: 1, name: 'Connecting' })).toBeVisible();
+    expect(h1Count()).toBe(1);
+  });
+
+  it('signed in with no devices, the intro asks for a device and does not mention signing in', async () => {
+    const rig = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    await signIn(rig);
+    // The sign-in leaves the pane open; leaving it shows the workspace intro a signed-in user sees.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    const intro = await screen.findByTestId('empty-intro');
+    expect(within(intro).getByRole('heading', { level: 1, name: 'Add your first device' })).toBeVisible();
+    expect(intro).not.toHaveTextContent(/sign in/i);
+    expect(within(intro).getByRole('button', { name: 'Add a device' })).toBeVisible();
+    expect(within(intro).queryByRole('button', { name: 'Sign in and add a device' })).toBeNull();
+    expect(h1Count()).toBe(1);
+  });
+
+  it('a workspace with a saved local device and no notice has one hidden h1 for the screen', () => {
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({
+      version: 1, devices: [{ id: 'd2', label: 'Bridge 2', target: 'ws://192.168.1.50:9101', captureChannels: [1, 2], transmitChannel: 1 }],
+      activeId: 'd2', traceView: 'all', page: 'capture', hidden: { capture: [], diagnostics: [], device: [] }, diagnostics: {}, permissionExplained: true,
+    }));
+    const hub = new DeviceHub(
+      () => new WorkspaceStore(defaultEnv({ transportFactory: vi.fn(pendingTransport), browser: BROWSER, pageIsSecure: true, queryPermission: async () => 'unknown', schedule: (fn) => fn(), slowConnectMs: 1e9 })),
+      (fn) => fn(),
+      new WorkspacePersistence(),
+    );
+    render(<App hub={hub} browser={BROWSER} pageOrigin="https://bridge.plotune.net" cloudSso={fakeSso()} />);
+    const h1s = document.querySelectorAll('h1');
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0]).toHaveClass('bw-sr-only');
+    expect(h1s[0]).toHaveTextContent('Plotune Bridge workspace');
+  });
+
+  it('a remembered remote device in the sidebar shows a friendly name, not its remote:<project>/<device> address', () => {
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({
+      version: 1, devices: [{ id: 'd1', label: 'Bridge 1', target: 'remote:proj_1/dev-1', captureChannels: [1, 2], transmitChannel: 1 }],
+      activeId: 'd1', traceView: 'all', page: 'capture', hidden: { capture: [], diagnostics: [], device: [] }, diagnostics: {}, permissionExplained: true,
+    }));
+    // A page load restores the saved workspace, as the first-open tests do.
+    const hub = new DeviceHub(
+      () => new WorkspaceStore(defaultEnv({ transportFactory: vi.fn(pendingTransport), browser: BROWSER, pageIsSecure: true, queryPermission: async () => 'unknown', schedule: (fn) => fn(), slowConnectMs: 1e9 })),
+      (fn) => fn(),
+      new WorkspacePersistence(),
+    );
+    render(<App hub={hub} browser={BROWSER} pageOrigin="https://bridge.plotune.net" cloudSso={fakeSso({ silentFailed: true })} />);
+    const sidebar = screen.getByRole('region', { name: 'Devices' });
+    expect(sidebar).toHaveTextContent('Bridge 1');
+    expect(sidebar).toHaveTextContent('Plotune cloud device');
+    expect(sidebar.innerHTML).not.toContain('remote:');
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
 import { CloudProvider, useCloud } from './cloud/context';
+import type { CloudStatus } from './cloud/context';
 import type { CloudClient } from './cloud/client';
 import type { CloudSession } from './cloud/session';
 import type { SsoBrowser } from './cloud/sso';
@@ -84,6 +85,7 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
       // The staged connect, with Cancel always visible. Cancel returns to the device list of the add-device pane.
       return (
         <section className="bw-card bw-connecting" data-testid="reconnecting">
+          <h1 className="bw-eyebrow">Connecting</h1>
           <ConnectStatus stage={state.connectStage} />
           <div className="bw-actions">
             <button type="button" className="bw-button" onClick={() => hub.cancelConnect(hub.active.id)}>
@@ -267,9 +269,26 @@ function SignInBanner() {
   return null;
 }
 
-/** First visit: say what to do and give one obvious way to start. The sidebar "+" is easy to miss. */
+/**
+ * The empty workspace: say what to do and give one obvious way to start. Signed out, the way to start is signing in. Signed in,
+ * the account is already there, so the intro only asks for a device. The sidebar "+" is easy to miss.
+ */
 function EmptyIntro() {
   const hub = useHub();
+  const cloud = useCloud();
+  if (cloud.status === 'signed-in') {
+    return (
+      <div className="bw-offline-intro" data-testid="empty-intro">
+        <h1>Add your first device</h1>
+        <p>Pair a Bridge device to your project and connect to it from anywhere. You can also explore the panels offline, or connect on your local network.</p>
+        <div className="bw-actions">
+          <button type="button" className="bw-button bw-primary" onClick={() => hub.addDevice()}>
+            Add a device
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="bw-offline-intro" data-testid="empty-intro">
       <h1>Your workspace</h1>
@@ -283,6 +302,16 @@ function EmptyIntro() {
   );
 }
 
+/**
+ * Whether the connection banner is the screen's own title: a remote attempt (its card is headed "Connecting") or the
+ * sign-in card for a remote device. Other banners are notices, and the screen then gets a visually hidden heading.
+ */
+function bannerHasTitle(phase: string, target: string, noticeKind: string | undefined, cloudStatus: CloudStatus): boolean {
+  if (!isRemoteTarget(target)) return false;
+  if (phase === 'connecting') return true;
+  return phase === 'closed' && noticeKind === 'signed-out' && cloudStatus === 'signed-out';
+}
+
 /** Lets the sign-in card open the add-device pane straight into the local-network form. */
 interface AddModeProps {
   startLocal: boolean;
@@ -293,8 +322,12 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStart
   const diag = useDiagnostics();
   const diagPanels = diagnosticsPanels(diag);
   const { slots, editingId, activeId } = useHubState();
+  const state = useWorkspace();
+  const cloud = useCloud();
   const editing = editingId !== null && editingId === activeId;
   const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
+  // Each screen has exactly one h1: the intro, the banner title, or this hidden one for a workspace with only notices or panels.
+  const titled = slots.length === 0 || bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
   return (
     <main className="bw-main" data-page={page}>
       <SignInBanner />
@@ -302,6 +335,7 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStart
         <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} /></>
       ) : (
         <>
+          {!titled && <h1 className="bw-sr-only">Plotune Bridge workspace</h1>}
           {slots.length === 0 && <EmptyIntro />}
           <ConnectionBanner onLocal={onLocalNetwork} />
           {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}

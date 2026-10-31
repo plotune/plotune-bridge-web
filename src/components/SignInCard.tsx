@@ -3,7 +3,7 @@
 export function SignInCard({ signInAvailable, onSignIn, onLocal }: { signInAvailable: boolean; onSignIn: () => void; onLocal: () => void }) {
   return (
     <section className="bw-card bw-sign-in-card" aria-labelledby="sign-in-card-title">
-      <h2 id="sign-in-card-title">Sign in to connect to your device</h2>
+      <h1 id="sign-in-card-title">Sign in to connect to your device</h1>
       <p>Remote devices are reached through your Plotune account.</p>
       {!signInAvailable && (
         <p className="bw-muted">Sign-in with a Plotune account works on bridge.plotune.net. On this address you can still connect to a device on your local network.</p>

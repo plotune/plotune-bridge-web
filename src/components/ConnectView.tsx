@@ -91,11 +91,14 @@ function Connecting({ target, remote }: { target: string; remote: boolean }) {
   }, []);
   return (
     <section className="bw-card bw-connecting" aria-live={remote ? undefined : 'polite'} data-testid="connecting">
-      <p className="bw-eyebrow">Connecting</p>
       {remote ? (
-        <ConnectStatus stage={state.connectStage} />
+        <>
+          <h1 className="bw-eyebrow">Connecting</h1>
+          <ConnectStatus stage={state.connectStage} />
+        </>
       ) : (
         <>
+          <p className="bw-eyebrow">Connecting</p>
           <h1>
             <span className="bw-spinner" aria-hidden="true" /> <>Connecting to {target}</>
           </h1>
@@ -151,6 +154,8 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
   return (
     <div className="bw-connect">
       {!browser.supported && <UnsupportedBanner browser={browser} />}
+      {/* A notice without the form has no title of its own, so the pane gets a hidden one. */}
+      {!showForm && <h1 className="bw-sr-only">Connect a Bridge device</h1>}
       {state.notice && (
         <NoticeCard
           notice={state.notice}

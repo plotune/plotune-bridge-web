@@ -336,7 +336,7 @@ export function AccountDevices({ onAdvanced }: { onAdvanced: () => void }) {
     const active = document.activeElement;
     if (active === null || active === document.body) titleRef.current?.focus();
   }, []);
-  // After Sign out in this pane the focused button is gone: focus goes to Continue with Plotune, the next step.
+  // After Sign out in this pane the focused button is gone: focus goes to Sign in with Plotune, the next step.
   const continueRef = useRef<HTMLButtonElement>(null);
   const wasSignedIn = useRef(signedIn);
   useEffect(() => {
@@ -359,7 +359,7 @@ export function AccountDevices({ onAdvanced }: { onAdvanced: () => void }) {
           </p>
           <div className="bw-actions">
             <button ref={continueRef} type="button" className="bw-button bw-primary" onClick={() => void cloud.startSignIn()} disabled={cloud.status === 'signing-in'}>
-              Continue with Plotune
+              Sign in with Plotune
             </button>
           </div>
           <p className="bw-fine">

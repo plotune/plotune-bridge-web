@@ -1441,9 +1441,34 @@ input[aria-invalid='true'] {
   max-width: 560px;
   margin: 16px auto;
 }
-.bw-sign-in-card h2 {
+.bw-sign-in-card h1 {
   margin: 0 0 8px;
   font-size: 17px;
+  font-weight: 700;
+  letter-spacing: normal;
+  line-height: 1.4;
+}
+/* A heading that is styled as the small eyebrow label (the connecting card's title). */
+.bw-card h1.bw-eyebrow {
+  margin: 0;
+  font-size: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  font-weight: 700;
+  line-height: var(--leading-base);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+/* Visually hidden, still announced: the heading of a screen whose title is not on screen. */
+.bw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---- Project ID for the device setup page ----------------------------------------------- */
