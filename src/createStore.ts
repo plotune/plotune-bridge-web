@@ -90,6 +90,8 @@ function cloudRemoteTransport(projectId: string, deviceUuid: string, deps: Cloud
       return inner.target;
     },
     setListener: (listener) => inner.setListener(listener),
+    // The stages of the open are what the connecting screen shows; the wrapper must pass them on.
+    onStage: (listener) => inner.onStage(listener),
     open: async () => {
       try {
         await inner.open();

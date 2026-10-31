@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContractError } from '../src/protocol/errors';
 import type { WireObject } from '../src/protocol/wire';
 import { transportFactoryFor } from '../src/transport/factory';
-import { isRemoteTarget, parseRemoteTarget, RemoteTransport, type RemoteCredentials, type RemoteTransportOptions } from '../src/transport/remote';
-import { TransportError, TransportOpenError, type CloseInfo } from '../src/transport/types';
+import { CONNECT_STAGE_LIMITS_MS, isRemoteTarget, parseRemoteTarget, RemoteTransport, type RemoteCredentials, type RemoteTransportOptions } from '../src/transport/remote';
+import { TransportError, TransportOpenError, type CloseInfo, type ConnectStage } from '../src/transport/types';
 
 const TICKET = 'TICKET-SECRET-7f3a';
 const RELAY = 'wss://relay.test/v1/bridge/signal';
@@ -375,9 +375,9 @@ describe('RemoteTransport: failures to open', () => {
     [4003, 'ticket rejected or expired'],
     [4008, 'relay is busy'],
     [4001, 'replaced by another browser session'],
-    [1006, 'could not reach the relay'],
-    [1011, 'relay closed the connection'],
-  ])('relay close code %i rejects open with the reason "%s"', async (code, reason) => {
+    [1006, 'cloud unreachable'],
+    [1011, 'cloud unreachable'],
+  ])('a relay close code %i before registration rejects open with the reason "%s"', async (code, reason) => {
     const { relay, opening, outcome } = await setup();
     relay.serverClose(code);
     await opening;
@@ -401,24 +401,26 @@ describe('RemoteTransport: failures to open', () => {
     expect((outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'device is not online', initiatedBy: 'remote' });
   });
 
-  it('a device that never joins the room times out as "device is not online", not as a generic timeout', async () => {
-    const { relay, opening, outcome } = await setup({ openTimeoutMs: 30_000 });
+  it('a device that never joins the room times out as "device is not online" after the device stage, not as a generic timeout', async () => {
+    const { relay, opening, outcome } = await setup();
     relay.open();
     relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
-    await tick(29_000);
+    await tick(CONNECT_STAGE_LIMITS_MS.device - 1);
     expect(outcome.error).toBeUndefined();
-    await tick(2_000);
+    await tick(1);
     await opening;
     expect((outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'device is not online', initiatedBy: 'local' });
     expect(relay.closeCalls).toHaveLength(1);
   });
 
-  it('times out with the reason "timeout" when the relay never answers', async () => {
-    const { relay, opening, outcome } = await setup({ openTimeoutMs: 30_000 });
+  it('times out with the reason "cloud unreachable" when the relay never registers the browser', async () => {
+    const { relay, opening, outcome } = await setup();
     relay.open();
-    await tick(30_000);
+    await tick(CONNECT_STAGE_LIMITS_MS.cloud - 1);
+    expect(outcome.error).toBeUndefined();
+    await tick(1);
     await opening;
-    expect((outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', code: null, reason: 'timeout', initiatedBy: 'local' });
+    expect((outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', code: null, reason: 'cloud unreachable', initiatedBy: 'local' });
   });
 
   it('a bye from the device before open rejects open', async () => {
@@ -467,7 +469,7 @@ describe('RemoteTransport: failures to open', () => {
     await env.opening;
     const error = env.outcome.error as TransportOpenError;
     expect(error).toBeInstanceOf(TransportOpenError);
-    expect(error.info).toMatchObject({ phase: 'connecting', reason: 'credentials unavailable' });
+    expect(error.info).toMatchObject({ phase: 'connecting', reason: 'cloud unreachable' });
     expect(FakeRelaySocket.instances).toHaveLength(0);
   });
 
@@ -491,7 +493,7 @@ describe('RemoteTransport: failures to open', () => {
     FakeRelaySocket.throwOnConstruct = Object.assign(new Error('blocked'), { name: 'SecurityError' });
     const { opening, outcome } = await setup();
     await opening;
-    expect((outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'SecurityError' });
+    expect((outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'cloud unreachable' });
   });
 
   it('an open() call on a link that already ended rejects without reconnecting', async () => {
@@ -750,3 +752,128 @@ describe('RemoteTransport: connectionPath and traffic', () => {
     expect(await env.transport.traffic()).toBeNull();
   });
 });
+
+// -- staged open ----------------------------------------------------------------------------------------------------
+
+/** Like setup(), but the stage reports are recorded from before open() starts. */
+async function stagedSetup(overrides: Partial<RemoteTransportOptions> = {}) {
+  const transport = new RemoteTransport(TARGET, {
+    getCredentials: vi.fn(async () => CREDS),
+    relayUrl: RELAY,
+    webSocketImpl: FakeRelaySocket as unknown as typeof WebSocket,
+    peerConnectionImpl: FakePeerConnection as unknown as typeof RTCPeerConnection,
+    signalIntervalMs: 100,
+    ...overrides,
+  });
+  const stages: Array<ConnectStage | null> = [];
+  transport.onStage((stage) => stages.push(stage));
+  const closes: CloseInfo[] = [];
+  transport.setListener({ message: () => undefined, closed: (info) => closes.push(info) });
+  const outcome: { resolved: boolean; error: unknown } = { resolved: false, error: undefined };
+  const opening = transport.open().then(
+    () => {
+      outcome.resolved = true;
+    },
+    (error: unknown) => {
+      outcome.error = error;
+    },
+  );
+  await tick();
+  return { transport, stages, closes, opening, outcome, relay: FakeRelaySocket.instances[FakeRelaySocket.instances.length - 1] };
+}
+
+describe('RemoteTransport: staged open', () => {
+  it('reports the stages in order, and the open clears every stage timer once it succeeds', async () => {
+    const env = await stagedSetup();
+    env.relay.open();
+    env.relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
+    env.relay.receive({ type: 'peer', role: 'device', state: 'connected', peer_id: 'dev-1' });
+    await tick(150);
+    expect(env.stages).toEqual(['cloud', 'device', 'link']);
+    const pc = FakePeerConnection.instances[0];
+    env.relay.receive({ type: 'answer', sdp: 'v=0 answer-sdp', sdp_type: 'answer', from: 'dev-1', to: 'browser-1' });
+    await tick();
+    pc.channel!.open();
+    await tick();
+    await env.opening;
+    expect(env.outcome.resolved).toBe(true);
+    expect(env.stages).toEqual(['cloud', 'device', 'link', null]);
+    // Past the hard cap and every stage limit: nothing fires on an open link.
+    await tick(CONNECT_STAGE_LIMITS_MS.total * 2);
+    expect(env.outcome.error).toBeUndefined();
+    expect(env.closes).toEqual([]);
+  });
+
+  it('the cloud stage gives up after its own 10 seconds with "cloud unreachable"', async () => {
+    const env = await stagedSetup();
+    expect(env.stages).toEqual(['cloud']);
+    await tick(CONNECT_STAGE_LIMITS_MS.cloud - 1);
+    expect(env.outcome.error).toBeUndefined();
+    await tick(1);
+    await env.opening;
+    expect((env.outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'cloud unreachable', initiatedBy: 'local' });
+    expect(env.stages).toEqual(['cloud', null]);
+  });
+
+  it('the device stage gives up after its own 8 seconds with "device is not online"', async () => {
+    const env = await stagedSetup();
+    env.relay.open();
+    env.relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
+    await tick(CONNECT_STAGE_LIMITS_MS.device - 1);
+    expect(env.outcome.error).toBeUndefined();
+    await tick(1);
+    await env.opening;
+    expect((env.outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'device is not online', initiatedBy: 'local' });
+  });
+
+  it('the link stage gives up after its own 15 seconds with "link setup timed out"', async () => {
+    const env = await stagedSetup();
+    env.relay.open();
+    env.relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
+    env.relay.receive({ type: 'peer', role: 'device', state: 'connected', peer_id: 'dev-1' });
+    await tick(CONNECT_STAGE_LIMITS_MS.link - 1);
+    expect(env.outcome.error).toBeUndefined();
+    await tick(1);
+    await env.opening;
+    expect((env.outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'link setup timed out', initiatedBy: 'local' });
+  });
+
+  it('the hard cap of 25 seconds ends the running stage with its own reason, even when that stage has time left', async () => {
+    const env = await stagedSetup({ stageLimitsMs: { link: 30_000 } });
+    env.relay.open();
+    env.relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
+    env.relay.receive({ type: 'peer', role: 'device', state: 'connected', peer_id: 'dev-1' });
+    await tick(CONNECT_STAGE_LIMITS_MS.total - 1);
+    expect(env.outcome.error).toBeUndefined();
+    await tick(1);
+    await env.opening;
+    expect((env.outcome.error as TransportOpenError).info).toMatchObject({ reason: 'link setup timed out' });
+    expect(env.relay.closeCalls).toHaveLength(1);
+  });
+
+  it('the hard cap also ends a device stage that was given more time', async () => {
+    const env = await stagedSetup({ stageLimitsMs: { device: 30_000 } });
+    env.relay.open();
+    env.relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
+    await tick(CONNECT_STAGE_LIMITS_MS.total);
+    await env.opening;
+    expect((env.outcome.error as TransportOpenError).info).toMatchObject({ reason: 'device is not online' });
+  });
+
+  it('cancelling during a stage closes the relay socket once, reports the stage as over, and no timer fires afterwards', async () => {
+    const env = await stagedSetup();
+    env.relay.open();
+    env.relay.receive({ type: 'registered', peer_id: 'browser-1', role: 'browser', device_id: 'dev-1' });
+    await tick(2_000);
+    env.transport.close();
+    await env.opening;
+    expect((env.outcome.error as TransportOpenError).info).toMatchObject({ phase: 'connecting', reason: 'closed by this page', initiatedBy: 'local' });
+    expect(env.stages).toEqual(['cloud', 'device', null]);
+    expect(env.relay.closeCalls).toHaveLength(1);
+    const error = env.outcome.error;
+    await tick(CONNECT_STAGE_LIMITS_MS.total * 2);
+    expect(env.outcome.error).toBe(error);
+    expect(env.relay.closeCalls).toHaveLength(1);
+  });
+});
+

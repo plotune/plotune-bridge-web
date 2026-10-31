@@ -37,6 +37,9 @@ export interface LinkTraffic {
   bytesReceived: number;
 }
 
+/** The stage of a remote connection that is running, for the connecting screen. */
+export type ConnectStage = 'cloud' | 'device' | 'link';
+
 export interface DeviceTransport {
   /** Adapter name, shown only in technical details. */
   readonly kind: string;
@@ -47,6 +50,8 @@ export interface DeviceTransport {
   send(message: WireObject): void;
   close(): void;
   setListener(listener: TransportListener): void;
+  /** Reports each connection stage as it starts, and null once connecting ends. Optional: only staged adapters report it. */
+  onStage?(listener: (stage: ConnectStage | null) => void): void;
   /** The network path of the open link. Optional: adapters that cannot tell report nothing. Must not throw. */
   connectionPath?(): Promise<ConnectionPath>;
   /** Byte counters of the open link, or null when they are not available. Optional. */

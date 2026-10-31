@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { CloudError } from '../cloud/client';
 import { useCloud } from '../cloud/context';
-import { useStore } from '../state/context';
+import { useHub, useHubState, useStore } from '../state/context';
 import { REMOTE_TARGET_PREFIX } from '../transport/remote';
 import { IconCheck, IconCopy } from './icons';
 
@@ -32,10 +32,8 @@ function Alert({ tone, id, children }: { tone: 'error' | 'warning'; id?: string;
 
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
-/** "3 hours ago" style text for a pairing time. Falls back to "recently" for a value that is not a date. */
-function pairedAgo(iso: string, now: number): string {
-  const time = Date.parse(iso);
-  if (Number.isNaN(time)) return 'recently';
+/** "3 hours ago" style text for a time in milliseconds, relative to `now`. */
+function agoText(time: number, now: number): string {
   const seconds = Math.round((time - now) / 1000);
   if (Math.abs(seconds) < 60) return 'just now';
   const units = [
@@ -49,6 +47,12 @@ function pairedAgo(iso: string, now: number): string {
     if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
   }
   return 'just now';
+}
+
+/** "3 hours ago" style text for a pairing time. Falls back to "recently" for a value that is not a date. */
+function pairedAgo(iso: string, now: number): string {
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? 'recently' : agoText(time, now);
 }
 
 function countdown(ms: number): string {
@@ -67,11 +71,18 @@ interface PairingState {
 function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
   const cloud = useCloud();
   const store = useStore();
+  const hub = useHub();
+  const { slots } = useHubState();
   const { projects, projectsLoading, projectsError, selectedProjectId, devices, devicesLoading, devicesLoaded, devicesError } = cloud;
   const [pairing, setPairing] = useState<PairingState | null>(null);
   const [pairBusy, setPairBusy] = useState(false);
   const [pairError, setPairError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Relative times in the device list ("tried 2 minutes ago") are refreshed every 30 seconds.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   // Which copy button was used last, for its "Copied" feedback. The project ID is not a secret; account tokens are never shown.
   const [copied, setCopied] = useState<'code' | 'project' | null>(null);
 
@@ -265,19 +276,33 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
           {!devicesLoading && !devicesError && devices.length === 0 && <p className="bw-muted">No devices paired to this project yet.</p>}
           {devices.length > 0 && (
             <ul className="bw-device-list" aria-label="Devices in this project">
-              {devices.map((device) => (
-                <li key={device.deviceUuid} className="bw-device-row">
-                  <div className="bw-device-info">
-                    <span className="bw-mono">{device.deviceId || 'Bridge device'}</span>
-                    <span className="bw-muted">
-                      {device.deviceType} · Paired {pairedAgo(device.pairedAt, now)}
-                    </span>
-                  </div>
-                  <button type="button" className="bw-button bw-primary bw-small" onClick={() => connect(device.deviceUuid)}>
-                    Connect
-                  </button>
-                </li>
-              ))}
+              {devices.map((device) => {
+                // Only what this page knows: the cloud has no presence data, so a device is never called online or offline.
+                const target = `${REMOTE_TARGET_PREFIX}${selectedProjectId}/${device.deviceUuid}`;
+                const phase = slots.find((slot) => slot.store.getState().target === target)?.store.getState().phase;
+                const connecting = phase === 'connecting';
+                const connected = phase === 'connected';
+                const failedAt = hub.lastFailureAt(target);
+                const unreachable = !connecting && !connected && failedAt !== null;
+                const status = connecting
+                  ? 'Connecting…'
+                  : connected
+                    ? 'Connected'
+                    : unreachable
+                      ? `Not reachable · tried ${agoText(failedAt, now)}`
+                      : `${device.deviceType} · Paired ${pairedAgo(device.pairedAt, now)}`;
+                return (
+                  <li key={device.deviceUuid} className="bw-device-row">
+                    <div className="bw-device-info">
+                      <span className="bw-mono">{device.deviceId || 'Bridge device'}</span>
+                      <span className="bw-muted">{status}</span>
+                    </div>
+                    <button type="button" className="bw-button bw-primary bw-small" onClick={() => connect(device.deviceUuid)} disabled={connecting || connected}>
+                      {unreachable ? 'Try again' : 'Connect'}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

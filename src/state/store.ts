@@ -9,7 +9,7 @@ import type { CanFrame, ChannelStatistics, ChannelStatus, DeviceDescriptor, Fram
 import { DeviceSession } from '../device/session';
 import { explainClose, explainOpenFailure, signInToReconnectNotice, type Notice, type PermissionState } from '../transport/notices';
 import { isRemoteTarget } from '../transport/remote';
-import { TransportOpenError, type CloseInfo, type ConnectionPath, type DeviceTransport, type LinkTraffic, type TransportFactory } from '../transport/types';
+import { TransportOpenError, type CloseInfo, type ConnectionPath, type ConnectStage, type DeviceTransport, type LinkTraffic, type TransportFactory } from '../transport/types';
 import { TraceBuffer } from './trace';
 import type { DevicePreferences } from './persistence';
 
@@ -31,6 +31,8 @@ export interface WorkspaceState {
   notice: Notice | null;
   /** True once a connection attempt has taken a while: the browser may be waiting for the user's permission answer. */
   slowConnect: boolean;
+  /** The running stage of a remote connection (cloud, device, link). Null when not connecting, or for a direct address. */
+  connectStage: ConnectStage | null;
   permission: PermissionState;
   descriptor: DeviceDescriptor | null;
   /** The real network path of the open link. Null while not connected or before the first check. */
@@ -90,6 +92,7 @@ const INITIAL: WorkspaceState = {
   target: '',
   notice: null,
   slowConnect: false,
+  connectStage: null,
   permission: 'unknown',
   descriptor: null,
   connectionPath: null,
@@ -215,7 +218,7 @@ export class WorkspaceStore {
     }
 
     const generation = this.beginGeneration();
-    this.set({ phase: 'connecting', target: target.url, notice: null, slowConnect: false, actionError: null, descriptor: null, connectionPath: null, traffic: null, channels: [], statistics: [], capturing: false });
+    this.set({ phase: 'connecting', target: target.url, notice: null, slowConnect: false, connectStage: target.remote ? 'cloud' : null, actionError: null, descriptor: null, connectionPath: null, traffic: null, channels: [], statistics: [], capturing: false });
     // The slow-connect hint is about the browser's local-network prompt, which a remote connection never shows.
     if (!target.remote) {
       this.slowTimer = setTimeout(() => {
@@ -224,6 +227,10 @@ export class WorkspaceStore {
     }
 
     const transport = this.env.transportFactory(target.url);
+    // The stage is shown on the connecting screen; a stage report from an attempt that is over is ignored.
+    transport.onStage?.((stage) => {
+      if (generation === this.generation) this.set({ connectStage: stage });
+    });
     this.transport = transport;
     const session = new DeviceSession(transport, {
       frames: (batch) => generation === this.generation && this.onBatch(batch),
@@ -254,6 +261,7 @@ export class WorkspaceStore {
       });
       this.set({
         phase: 'connected',
+        connectStage: null,
         descriptor,
         channels: descriptor.channels,
         capturing: descriptor.channels.some((c) => c.streaming),

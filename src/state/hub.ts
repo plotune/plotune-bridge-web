@@ -5,6 +5,7 @@ import type { WorkspaceStore } from './store';
 import { emptyWorkspace, PANEL_IDS, rememberableTarget, type PageId, type SavedDevice, type SavedWorkspace, type WorkspacePersistence } from './persistence';
 import type { DiagSettings } from '../diagnostics/settings';
 import { isRemoteTarget } from '../transport/remote';
+import { RETRY_NOTICE_KINDS, type Notice } from '../transport/notices';
 
 export interface Slot {
   id: string;
@@ -43,6 +44,8 @@ export class DeviceHub {
   private readonly empty: Slot;
   /** The last accepted endpoint, separate from an in-flight/failed address edit. */
   private readonly connectedTargets = new Map<string, string>();
+  /** Failed attempts of remote devices in this page session, by target. Cleared by a connect or by sign-out. */
+  private readonly failures = new Map<string, { at: number; notice: Notice }>();
 
   constructor(
     private readonly makeStore: () => WorkspaceStore,
@@ -106,9 +109,53 @@ export class DeviceHub {
         slot.remembered = true;
         this.connectedTargets.set(slot.id, store.getState().target);
       }
+      this.recordReachability(store.getState());
       this.set({ ...(this.state.editingId === slot.id && store.getState().phase === 'connected' ? { editingId: null } : {}) }, true);
     }));
     return slot;
+  }
+
+  /**
+   * Remembers when a remote device last failed to answer, from the notice of the attempt. A user cancel is not a failure,
+   * and a successful connect forgets the earlier failure.
+   */
+  private recordReachability(state: { target: string; phase: string; notice: Notice | null }): void {
+    if (!isRemoteTarget(state.target)) return;
+    if (state.phase === 'connected') {
+      this.failures.delete(state.target);
+      return;
+    }
+    if (state.phase !== 'closed' || state.notice === null || !RETRY_NOTICE_KINDS.includes(state.notice.kind)) return;
+    const previous = this.failures.get(state.target);
+    if (previous?.notice !== state.notice) this.failures.set(state.target, { at: Date.now(), notice: state.notice });
+  }
+
+  /** When this device last failed to answer in this page session, or null. */
+  lastFailureAt(target: string): number | null {
+    return this.failures.get(target)?.at ?? null;
+  }
+
+  /** Forgets every remembered failure: called when the account session ends. */
+  clearFailures(): void {
+    this.failures.clear();
+    this.set({});
+  }
+
+  /**
+   * Cancels a connection attempt from its connecting screen. The attempt ends and leaves no connection behind (a late answer
+   * is ignored by the store's generation check). The user stays on the device list of the add-device pane: a remembered
+   * device keeps its slot; an unremembered one is replaced by an empty entry, so the pane never drops to the empty workspace.
+   */
+  cancelConnect(id: string): void {
+    const slot = this.slot(id);
+    if (!slot) return;
+    slot.store.disconnect();
+    if (slot.remembered) {
+      this.set({ activeId: id, editingId: id });
+      return;
+    }
+    this.removeDevice(id);
+    this.addDevice();
   }
 
   setPage(page: PageId): void { this.set({ page }); }

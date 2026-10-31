@@ -13,6 +13,8 @@ import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnosti
 import { SetupPane } from './components/SetupPane';
 import { SignInCard } from './components/SignInCard';
 import { SignInPending } from './components/SignInPending';
+import { ConnectStatus } from './components/ConnectStatus';
+import { RETRY_NOTICE_KINDS } from './transport/notices';
 import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
 import type { DeviceHub } from './state/hub';
 import { isRemoteTarget } from './transport/remote';
@@ -78,10 +80,23 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   const { queueSettledFor } = useHubState();
   const remote = isRemoteTarget(state.target);
   if (state.phase === 'connecting') {
+    if (remote) {
+      // The staged connect, with Cancel always visible. Cancel returns to the device list of the add-device pane.
+      return (
+        <section className="bw-card bw-connecting" data-testid="reconnecting">
+          <ConnectStatus stage={state.connectStage} />
+          <div className="bw-actions">
+            <button type="button" className="bw-button" onClick={() => hub.cancelConnect(hub.active.id)}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      );
+    }
     return (
       <div className="bw-banner" role="status" data-testid="reconnecting">
         <span className="bw-spinner" aria-hidden="true" />{' '}
-        {remote ? 'Connecting through the Plotune cloud…' : <>Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}</>}
+        <>Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}</>
       </div>
     );
   }
@@ -113,13 +128,15 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
       return null;
     }
     if (remote) {
+      // The causes that can be acted on (device, cloud, link) offer Try again; anything else keeps Reconnect.
+      const retry = RETRY_NOTICE_KINDS.includes(state.notice.kind);
       return (
         <NoticeCard
           notice={state.notice}
           actions={
             <>
               <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
-                Reconnect
+                {retry ? 'Try again' : 'Reconnect'}
               </button>
               <button type="button" className="bw-button" onClick={() => hub.editDevice(hub.active.id)}>
                 Choose a device
@@ -326,6 +343,11 @@ function RememberedReconnect() {
   const hub = useHub();
   const signedIn = cloud.status === 'signed-in';
   const { sessionGeneration, readSessionGeneration } = cloud;
+  // Failed attempts are remembered for this page session only, and a session that ends forgets them.
+  const signedOut = cloud.status === 'signed-out';
+  useEffect(() => {
+    if (signedOut) hub.clearFailures();
+  }, [signedOut, hub]);
   useEffect(() => {
     if (!signedIn) return undefined;
     const generation = readSessionGeneration();

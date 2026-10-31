@@ -451,3 +451,56 @@ describe('the project ID for the device setup page', () => {
   });
 });
 
+
+describe('device list states for a paired device', () => {
+  /** A transport that refuses to open with the reason a device that does not answer gives. */
+  function unreachableTransport(target: string): DeviceTransport {
+    return {
+      ...pendingTransport(target),
+      open: () => Promise.reject(new TransportOpenError({ phase: 'connecting', code: null, reason: 'device is not online', wasClean: false, initiatedBy: 'local' }, 'the device is not online')),
+    };
+  }
+
+  async function listedRow(name = 'Bridge-A') {
+    const list = await screen.findByRole('list', { name: 'Devices in this project' });
+    return within(list).getByText(name).closest('li') as HTMLElement;
+  }
+
+  it('a device that did not answer shows "Not reachable" with the time, and its button reads Try again', async () => {
+    const rig = setup({ transportFactory: unreachableTransport });
+    openAccountPane();
+    await signIn(rig);
+    const list = await screen.findByRole('list', { name: 'Devices in this project' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Connect' }));
+    expect(await within(await listedRow()).findByText(/Not reachable · tried just now/)).toBeVisible();
+    expect(within(await listedRow()).getByRole('button', { name: 'Try again' })).toBeEnabled();
+    expect(within(await listedRow()).queryByText(/Paired/)).toBeNull();
+  });
+
+  it('a cancelled attempt is not marked: the row is back to Paired with Connect', async () => {
+    const rig = setup();
+    openAccountPane();
+    await signIn(rig);
+    const list = await screen.findByRole('list', { name: 'Devices in this project' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Connect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    const row = await listedRow();
+    expect(within(row).getByText(/Paired/)).toBeVisible();
+    expect(within(row).getByRole('button', { name: 'Connect' })).toBeVisible();
+    expect(screen.queryByText(/Not reachable/)).toBeNull();
+  });
+
+  it('the not-reachable mark is forgotten when the account signs out', async () => {
+    const rig = setup({ transportFactory: unreachableTransport });
+    openAccountPane();
+    await signIn(rig);
+    const list = await screen.findByRole('list', { name: 'Devices in this project' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Connect' }));
+    expect(await within(await listedRow()).findByText(/Not reachable/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    await signIn(rig);
+    expect(within(await listedRow()).getByText(/Paired/)).toBeVisible();
+    expect(screen.queryByText(/Not reachable/)).toBeNull();
+  });
+});
