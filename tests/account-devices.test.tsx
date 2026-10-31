@@ -389,7 +389,7 @@ describe('adding a device with a pairing code', () => {
     const rig = setup();
     openAccountPane();
     await startPairing(rig);
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy pairing code' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('plt_pair_first'));
   });
 });
@@ -412,3 +412,42 @@ describe('the local-network address stays available', () => {
     expect(await screen.findByRole('heading', { name: /sign in to connect your bridge/i })).toBeVisible();
   });
 });
+
+describe('the project ID for the device setup page', () => {
+  it('shows the project ID under the project choice, with its own copy button, when no pairing code is shown', async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const rig = setup();
+    openAccountPane();
+    await signIn(rig);
+    await screen.findByText('Bridge-A');
+    expect(screen.getByText('proj-1', { selector: '.bw-mono' })).toBeVisible();
+    const copy = screen.getByRole('button', { name: 'Copy project ID' });
+    expect(copy.tagName).toBe('BUTTON');
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('proj-1'));
+    expect(await screen.findByRole('button', { name: 'Copy project ID' })).toHaveTextContent('Copied');
+    expect(document.body.innerHTML).not.toContain(TOKEN);
+  });
+
+  it('while a pairing code is shown, the code card carries the project ID, the hint, and two distinctly named copy buttons', async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const rig = setup();
+    openAccountPane();
+    await signIn(rig);
+    await screen.findByText('Bridge-A');
+    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device' }));
+    await screen.findByText('plt_pair_first');
+    expect(screen.getByText('Enter this project ID and the code on your device.')).toBeVisible();
+    expect(screen.getAllByRole('button', { name: 'Copy project ID' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Copy pairing code' })).toHaveLength(1);
+    expect(screen.queryByText(/^Project ID:/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy project ID' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('proj-1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy pairing code' }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('plt_pair_first'));
+    expect(writeText).toHaveBeenCalledTimes(2);
+  });
+});
+

@@ -72,7 +72,8 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
   const [pairBusy, setPairBusy] = useState(false);
   const [pairError, setPairError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [copied, setCopied] = useState(false);
+  // Which copy button was used last, for its "Copied" feedback. The project ID is not a secret; account tokens are never shown.
+  const [copied, setCopied] = useState<'code' | 'project' | null>(null);
 
   // A code belongs to the project it was made for; switching projects drops it from view.
   const current = pairing !== null && pairing.projectId === selectedProjectId ? pairing : null;
@@ -98,7 +99,7 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
     if (projectId === null || pairBusy || !devicesLoaded) return;
     setPairBusy(true);
     setPairError(null);
-    setCopied(false);
+    setCopied(null);
     try {
       const token = await cloud.createPairingCode();
       setNow(Date.now());
@@ -110,13 +111,13 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
     }
   };
 
-  const copyCode = (code: string) => {
+  const copyText = (value: string, what: 'code' | 'project') => {
     const clipboard = navigator.clipboard;
     if (!clipboard) return;
-    void clipboard.writeText(code).then(
+    void clipboard.writeText(value).then(
       () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), COPIED_MS);
+        setCopied(what);
+        setTimeout(() => setCopied((current) => (current === what ? null : current)), COPIED_MS);
       },
       () => undefined,
     );
@@ -157,6 +158,15 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
           ))}
         </select>
       </div>
+      {selectedProjectId !== null && current === null && (
+        // While a pairing code is shown, the code card carries the project ID, so the copy button is not repeated here.
+        <p className="bw-muted bw-project-id-line">
+          Project ID: <span className="bw-mono">{selectedProjectId}</span>{' '}
+          <button type="button" className="bw-button bw-small" onClick={() => copyText(selectedProjectId, 'project')} aria-label="Copy project ID">
+            {copied === 'project' ? <IconCheck aria-hidden="true" /> : <IconCopy aria-hidden="true" />} {copied === 'project' ? 'Copied' : 'Copy'}
+          </button>
+        </p>
+      )}
       {projectsError && (
         <Alert tone="error">
           {projectsError.message}
@@ -204,11 +214,19 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
               <p className="bw-eyebrow">Pairing code</p>
               <code className="bw-pairing-code">{current.code}</code>
               <div className="bw-actions">
-                <button type="button" className="bw-button bw-small" onClick={() => copyCode(current.code)}>
-                  {copied ? <IconCheck aria-hidden="true" /> : <IconCopy aria-hidden="true" />} {copied ? 'Copied' : 'Copy'}
+                <button type="button" className="bw-button bw-small" onClick={() => copyText(current.code, 'code')} aria-label="Copy pairing code">
+                  {copied === 'code' ? <IconCheck aria-hidden="true" /> : <IconCopy aria-hidden="true" />} {copied === 'code' ? 'Copied' : 'Copy'}
                 </button>
                 <span className="bw-muted">Expires in {countdown(current.expiresAtMs - now)}</span>
               </div>
+              <div className="bw-project-id-row">
+                <span className="bw-muted">Project ID</span>
+                <span className="bw-mono bw-project-id-value">{selectedProjectId}</span>
+                <button type="button" className="bw-button bw-small" onClick={() => copyText(selectedProjectId ?? '', 'project')} aria-label="Copy project ID">
+                  {copied === 'project' ? <IconCheck aria-hidden="true" /> : <IconCopy aria-hidden="true" />} {copied === 'project' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <p className="bw-hint">Enter this project ID and the code on your device.</p>
               <p>{PAIRING_LIFETIME_NOTE}</p>
               <p role="status" className="bw-hint">
                 Waiting for your device…
