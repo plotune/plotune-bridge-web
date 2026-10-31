@@ -18,6 +18,25 @@ export interface TransportListener {
   closed(info: CloseInfo): void;
 }
 
+/** The kind of an ICE candidate, as the browser reports it. */
+export type CandidateKind = 'host' | 'srflx' | 'prflx' | 'relay' | 'unknown';
+
+/**
+ * How the open link actually travels. Only types and protocols are kept: candidate addresses and ports
+ * are never part of this value, so it can be shown or logged without exposing the network location.
+ */
+export type ConnectionPath =
+  | { kind: 'local-network' }
+  | { kind: 'direct'; local: CandidateKind; remote: CandidateKind; protocol: string | null }
+  | { kind: 'relay'; protocol: string | null }
+  | { kind: 'unknown' };
+
+/** Bytes moved over the open link, when the adapter can count them. */
+export interface LinkTraffic {
+  bytesSent: number;
+  bytesReceived: number;
+}
+
 export interface DeviceTransport {
   /** Adapter name, shown only in technical details. */
   readonly kind: string;
@@ -28,6 +47,10 @@ export interface DeviceTransport {
   send(message: WireObject): void;
   close(): void;
   setListener(listener: TransportListener): void;
+  /** The network path of the open link. Optional: adapters that cannot tell report nothing. Must not throw. */
+  connectionPath?(): Promise<ConnectionPath>;
+  /** Byte counters of the open link, or null when they are not available. Optional. */
+  traffic?(): Promise<LinkTraffic | null>;
 }
 
 export type TransportFactory = (target: string) => DeviceTransport;

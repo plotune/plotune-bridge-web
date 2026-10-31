@@ -9,11 +9,14 @@ import type { CanFrame, ChannelStatistics, ChannelStatus, DeviceDescriptor, Fram
 import { DeviceSession } from '../device/session';
 import { explainClose, explainOpenFailure, signInToReconnectNotice, type Notice, type PermissionState } from '../transport/notices';
 import { isRemoteTarget } from '../transport/remote';
-import { TransportOpenError, type CloseInfo, type TransportFactory } from '../transport/types';
+import { TransportOpenError, type CloseInfo, type ConnectionPath, type DeviceTransport, type LinkTraffic, type TransportFactory } from '../transport/types';
 import { TraceBuffer } from './trace';
 import type { DevicePreferences } from './persistence';
 
 export type Phase = 'idle' | 'connecting' | 'connected' | 'closed';
+
+/** How often the network path of an open link is re-read. */
+export const PATH_REFRESH_MS = 10_000;
 
 export interface TxLogEntry {
   id: number;
@@ -30,6 +33,10 @@ export interface WorkspaceState {
   slowConnect: boolean;
   permission: PermissionState;
   descriptor: DeviceDescriptor | null;
+  /** The real network path of the open link. Null while not connected or before the first check. */
+  connectionPath: ConnectionPath | null;
+  /** Byte counters of the open link when the adapter reports them (relay only). Null otherwise. */
+  traffic: LinkTraffic | null;
   channels: ChannelStatus[];
   statistics: ChannelStatistics[];
   capturing: boolean;
@@ -55,6 +62,8 @@ export interface WorkspaceEnv {
   /** Coalesces notifications to one per frame of the display. */
   schedule(fn: () => void): void;
   statsIntervalMs: number;
+  /** Interval for re-reading the connection path. Defaults to PATH_REFRESH_MS. */
+  pathIntervalMs?: number;
   slowConnectMs: number;
 }
 
@@ -83,6 +92,8 @@ const INITIAL: WorkspaceState = {
   slowConnect: false,
   permission: 'unknown',
   descriptor: null,
+  connectionPath: null,
+  traffic: null,
   channels: [],
   statistics: [],
   capturing: false,
@@ -97,6 +108,23 @@ const INITIAL: WorkspaceState = {
   traceVersion: 0,
 };
 
+/** Adapters may throw or reject; a failed check is reported as an unknown path, never as an error. */
+async function readPath(transport: DeviceTransport): Promise<ConnectionPath> {
+  try {
+    return transport.connectionPath ? await transport.connectionPath() : { kind: 'unknown' };
+  } catch {
+    return { kind: 'unknown' };
+  }
+}
+
+async function readTraffic(transport: DeviceTransport): Promise<LinkTraffic | null> {
+  try {
+    return transport.traffic ? await transport.traffic() : null;
+  } catch {
+    return null;
+  }
+}
+
 export class WorkspaceStore {
   readonly trace = new TraceBuffer();
   private state: WorkspaceState = INITIAL;
@@ -104,7 +132,9 @@ export class WorkspaceStore {
   private readonly frameListeners = new Set<FrameListener>();
   private session: DeviceSession | null = null;
   private generation = 0;
+  private transport: DeviceTransport | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pathTimer: ReturnType<typeof setInterval> | null = null;
   private slowTimer: ReturnType<typeof setTimeout> | null = null;
   private notifyQueued = false;
   private txCounter = 0;
@@ -185,7 +215,7 @@ export class WorkspaceStore {
     }
 
     const generation = this.beginGeneration();
-    this.set({ phase: 'connecting', target: target.url, notice: null, slowConnect: false, actionError: null, descriptor: null, channels: [], statistics: [], capturing: false });
+    this.set({ phase: 'connecting', target: target.url, notice: null, slowConnect: false, actionError: null, descriptor: null, connectionPath: null, traffic: null, channels: [], statistics: [], capturing: false });
     // The slow-connect hint is about the browser's local-network prompt, which a remote connection never shows.
     if (!target.remote) {
       this.slowTimer = setTimeout(() => {
@@ -194,6 +224,7 @@ export class WorkspaceStore {
     }
 
     const transport = this.env.transportFactory(target.url);
+    this.transport = transport;
     const session = new DeviceSession(transport, {
       frames: (batch) => generation === this.generation && this.onBatch(batch),
       batchesLost: (count) => generation === this.generation && this.onBatchesLost(count),
@@ -233,6 +264,7 @@ export class WorkspaceStore {
         permission,
         traceVersion: this.trace.version,
       });
+      this.startPathPolling();
       this.startPolling();
     } catch (error) {
       if (generation !== this.generation) return;
@@ -271,7 +303,7 @@ export class WorkspaceStore {
     this.beginGeneration();
     session?.close();
     this.session = null;
-    this.set({ phase: 'closed', capturing: false, notice: { kind: 'ended', severity: 'info', title: 'Disconnected', summary: 'You disconnected from the device.', steps: [], technical: '' } });
+    this.set({ phase: 'closed', capturing: false, connectionPath: null, traffic: null, notice: { kind: 'ended', severity: 'info', title: 'Disconnected', summary: 'You disconnected from the device.', steps: [], technical: '' } });
   }
 
   /** Back to address entry without touching the device. */
@@ -282,17 +314,21 @@ export class WorkspaceStore {
   private beginGeneration(): number {
     this.generation += 1;
     this.stopPolling();
+    this.stopPathPolling();
     this.clearSlowTimer();
     const previous = this.session;
     this.session = null;
+    this.transport = null;
     previous?.close();
     return this.generation;
   }
 
   private onClosed(info: CloseInfo): void {
     this.stopPolling();
+    this.stopPathPolling();
     this.session = null;
-    this.set({ phase: 'closed', capturing: false, notice: explainClose(info) });
+    this.transport = null;
+    this.set({ phase: 'closed', capturing: false, connectionPath: null, traffic: null, notice: explainClose(info) });
   }
 
   // -- stream -------------------------------------------------------------------
@@ -361,6 +397,29 @@ export class WorkspaceStore {
   private stopPolling(): void {
     if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = null;
+  }
+
+  /** Reads the path now and then every PATH_REFRESH_MS. The timer is cleared by beginGeneration, onClosed and disconnect. */
+  private startPathPolling(): void {
+    this.stopPathPolling();
+    const generation = this.generation;
+    const refresh = () => void this.refreshPath(generation);
+    refresh();
+    this.pathTimer = setInterval(refresh, this.env.pathIntervalMs ?? PATH_REFRESH_MS);
+  }
+
+  private stopPathPolling(): void {
+    if (this.pathTimer) clearInterval(this.pathTimer);
+    this.pathTimer = null;
+  }
+
+  private async refreshPath(generation: number): Promise<void> {
+    const transport = this.transport;
+    if (!transport || generation !== this.generation) return;
+    const [connectionPath, traffic] = await Promise.all([readPath(transport), readTraffic(transport)]);
+    // A result that arrives after the link changed belongs to the old link and is dropped.
+    if (generation !== this.generation || this.state.phase !== 'connected') return;
+    this.set({ connectionPath, traffic });
   }
 
   private clearSlowTimer(): void {

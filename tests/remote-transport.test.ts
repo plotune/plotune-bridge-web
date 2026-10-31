@@ -96,6 +96,8 @@ class FakePeerConnection {
   readonly remoteCandidates: RTCIceCandidateInit[] = [];
   readonly channels: FakeDataChannel[] = [];
   closed = false;
+  /** What getStats() resolves with, or the error it rejects with. */
+  statsResult: Map<string, object> | Error = new Map();
   onicecandidate: ((e: { candidate: RTCIceCandidateInit & { candidate: string } | null }) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
 
@@ -122,6 +124,10 @@ class FakePeerConnection {
   }
   close(): void {
     this.closed = true;
+  }
+  async getStats(): Promise<Map<string, object>> {
+    if (this.statsResult instanceof Error) throw this.statsResult;
+    return this.statsResult;
   }
   // -- test controls --
   gather(candidate: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null } | null): void {
@@ -636,5 +642,111 @@ describe('RemoteTransport: the ticket never leaves the registration frame', () =
         if (frame.includes(TICKET)) expect(frame).toBe(REGISTER);
       }
     }
+  });
+});
+
+// -- connection path (getStats on the open link) ------------------------------------------------------------------
+
+const LOCAL_ADDRESS = '192.0.2.10';
+const LOCAL_PORT = 50000;
+const REMOTE_ADDRESS = '198.51.100.7';
+const REMOTE_PORT = 51000;
+
+/** A report with one selected pair. Candidates carry addresses and ports on purpose, so the no-address check can fail. */
+function pairReport(
+  localKind: string,
+  remoteKind: string,
+  options: { pair?: Record<string, unknown>; local?: Record<string, unknown>; remote?: Record<string, unknown>; transport?: boolean } = {},
+): Map<string, object> {
+  const report = new Map<string, object>();
+  if (options.transport !== false) report.set('T1', { type: 'transport', id: 'T1', selectedCandidatePairId: 'P1' });
+  report.set('P1', { type: 'candidate-pair', id: 'P1', localCandidateId: 'L1', remoteCandidateId: 'R1', nominated: true, state: 'succeeded', bytesSent: 1200, bytesReceived: 3400, ...options.pair });
+  report.set('L1', { type: 'local-candidate', id: 'L1', candidateType: localKind, protocol: 'udp', address: LOCAL_ADDRESS, port: LOCAL_PORT, ip: LOCAL_ADDRESS, ...options.local });
+  report.set('R1', { type: 'remote-candidate', id: 'R1', candidateType: remoteKind, protocol: 'udp', address: REMOTE_ADDRESS, port: REMOTE_PORT, ip: REMOTE_ADDRESS, ...options.remote });
+  return report;
+}
+
+describe('RemoteTransport: connectionPath and traffic', () => {
+  it('host to host is a direct link', async () => {
+    const env = await openLink();
+    env.pc.statsResult = pairReport('host', 'host');
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'direct', local: 'host', remote: 'host', protocol: 'udp' });
+  });
+
+  it('a server-reflexive remote candidate is still direct', async () => {
+    const env = await openLink();
+    env.pc.statsResult = pairReport('host', 'srflx');
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'direct', local: 'host', remote: 'srflx', protocol: 'udp' });
+  });
+
+  it('a relay candidate on the local side is reported as relay, with its relay protocol', async () => {
+    const env = await openLink();
+    env.pc.statsResult = pairReport('relay', 'host', { local: { relayProtocol: 'tls' } });
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'relay', protocol: 'tls' });
+  });
+
+  it('a relay candidate on the remote side is reported as relay, falling back to the protocol field', async () => {
+    const env = await openLink();
+    env.pc.statsResult = pairReport('srflx', 'relay', { remote: { protocol: 'tcp' } });
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'relay', protocol: 'tcp' });
+  });
+
+  it('a pair with no transport entry falls back to the nominated and succeeded pair, then to a selected pair', async () => {
+    const env = await openLink();
+    const withoutTransport = pairReport('host', 'host', { transport: false, pair: { nominated: false, state: 'in-progress', selected: false } });
+    withoutTransport.set('P2', { type: 'candidate-pair', id: 'P2', localCandidateId: 'L2', remoteCandidateId: 'R2', nominated: true, state: 'succeeded', selected: false });
+    withoutTransport.set('L2', { type: 'local-candidate', id: 'L2', candidateType: 'relay', protocol: 'udp' });
+    withoutTransport.set('R2', { type: 'remote-candidate', id: 'R2', candidateType: 'host', protocol: 'udp' });
+    env.pc.statsResult = withoutTransport;
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'relay', protocol: 'udp' });
+
+    const selectedOnly = pairReport('host', 'srflx', { transport: false, pair: { nominated: false, state: 'in-progress', selected: true } });
+    env.pc.statsResult = selectedOnly;
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'direct', local: 'host', remote: 'srflx', protocol: 'udp' });
+  });
+
+  it('reports unknown when nothing is selected or the candidates are missing', async () => {
+    const env = await openLink();
+    env.pc.statsResult = new Map<string, object>([['P1', { type: 'candidate-pair', id: 'P1', nominated: false, state: 'in-progress' }]]);
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'unknown' });
+    env.pc.statsResult = pairReport('host', 'host', { transport: false, pair: { nominated: false, state: 'failed' } });
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'unknown' });
+    env.pc.statsResult = new Map<string, object>([['T1', { type: 'transport', id: 'T1', selectedCandidatePairId: 'MISSING' }]]);
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'unknown' });
+    env.pc.statsResult = new Map<string, object>([['T1', { type: 'transport', id: 'T1', selectedCandidatePairId: 'P1' }], ['P1', { type: 'candidate-pair', id: 'P1', localCandidateId: 'L1', remoteCandidateId: 'R1' }]]);
+    expect(await env.transport.connectionPath()).toEqual({ kind: 'unknown' });
+  });
+
+  it('reports unknown, never throws, when getStats rejects', async () => {
+    const env = await openLink();
+    env.pc.statsResult = new Error(`stats failed for ${REMOTE_ADDRESS}`);
+    await expect(env.transport.connectionPath()).resolves.toEqual({ kind: 'unknown' });
+    await expect(env.transport.traffic()).resolves.toBeNull();
+  });
+
+  it('reports unknown before the link is open, without touching the peer connection', async () => {
+    const env = await setup();
+    await expect(env.transport.connectionPath()).resolves.toEqual({ kind: 'unknown' });
+    await expect(env.transport.traffic()).resolves.toBeNull();
+  });
+
+  it('never returns an address, a port or the raw candidate line', async () => {
+    const env = await openLink();
+    for (const report of [pairReport('relay', 'srflx'), pairReport('host', 'host'), pairReport('prflx', 'relay', { pair: { bytesSent: 9 } })]) {
+      env.pc.statsResult = report;
+      const path = await env.transport.connectionPath();
+      const text = JSON.stringify(path) + JSON.stringify(await env.transport.traffic());
+      for (const leak of [LOCAL_ADDRESS, REMOTE_ADDRESS, String(LOCAL_PORT), String(REMOTE_PORT), 'ip', 'address', 'port']) {
+        expect(text).not.toContain(leak);
+      }
+    }
+  });
+
+  it('traffic reports the selected pair byte counters, and null when they are missing', async () => {
+    const env = await openLink();
+    env.pc.statsResult = pairReport('relay', 'host');
+    expect(await env.transport.traffic()).toEqual({ bytesSent: 1200, bytesReceived: 3400 });
+    env.pc.statsResult = pairReport('host', 'host', { pair: { bytesSent: undefined, bytesReceived: undefined } });
+    expect(await env.transport.traffic()).toBeNull();
   });
 });

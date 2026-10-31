@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserInfo } from '../src/lib/browser';
 import { WorkspaceStore, type WorkspaceEnv } from '../src/state/store';
 import type { PermissionState } from '../src/transport/notices';
-import type { TransportFactory } from '../src/transport/types';
+import { PATH_REFRESH_MS } from '../src/state/store';
+import type { ConnectionPath, LinkTraffic, TransportFactory } from '../src/transport/types';
 import { FakeTransport } from './helpers/fakes';
 import { MockDeviceCore, type MockDeviceOptions } from './helpers/mockDevice';
 import { MockEcu } from './helpers/mockEcu';
@@ -378,5 +379,120 @@ describe('diagnostics access to the same frame stream', () => {
     await flush();
     off();
     expect(seen).toEqual([0x708]);
+  });
+});
+
+// -- connection path -----------------------------------------------------------------------------------------------
+
+/** A link whose path and counters the test controls. Counts how often the store asks. */
+class PathTransport extends FakeTransport {
+  path: ConnectionPath = { kind: 'direct', local: 'host', remote: 'host', protocol: 'udp' };
+  counters: LinkTraffic | null = null;
+  pathCalls = 0;
+  failPath = false;
+  async connectionPath(): Promise<ConnectionPath> {
+    this.pathCalls++;
+    if (this.failPath) throw new Error('stats unavailable');
+    return this.path;
+  }
+  async traffic(): Promise<LinkTraffic | null> {
+    return this.counters;
+  }
+}
+
+function pathRig(): { store: WorkspaceStore; transports: PathTransport[]; device: MockDeviceCore } {
+  const device = new MockDeviceCore();
+  const transports: PathTransport[] = [];
+  const store = new WorkspaceStore({
+    transportFactory: (target) => {
+      const t = new PathTransport(target, device);
+      transports.push(t);
+      return t;
+    },
+    browser: CHROME, pageIsSecure: true, pageOrigin: 'https://bridge.plotune.net', queryPermission: async () => 'unknown',
+    schedule: (f) => f(), statsIntervalMs: 1000, slowConnectMs: 1500,
+  });
+  return { store, transports, device };
+}
+
+describe('connection path', () => {
+  it('is null before connecting, read once after the session opens, and refreshed on the path interval', async () => {
+    const { store, transports } = pathRig();
+    expect(store.getState().connectionPath).toBeNull();
+    await store.connect('192.168.1.50:9101');
+    await flush();
+    expect(store.getState().connectionPath).toEqual({ kind: 'direct', local: 'host', remote: 'host', protocol: 'udp' });
+    expect(transports[0].pathCalls).toBe(1);
+
+    transports[0].path = { kind: 'relay', protocol: 'udp' };
+    transports[0].counters = { bytesSent: 10, bytesReceived: 20 };
+    await vi.advanceTimersByTimeAsync(PATH_REFRESH_MS);
+    expect(transports[0].pathCalls).toBe(2);
+    expect(store.getState()).toMatchObject({ connectionPath: { kind: 'relay', protocol: 'udp' }, traffic: { bytesSent: 10, bytesReceived: 20 } });
+  });
+
+  it('a failed check becomes unknown, and failed counters become null', async () => {
+    const { store, transports } = pathRig();
+    await store.connect('192.168.1.50:9101');
+    transports[0].failPath = true;
+    await vi.advanceTimersByTimeAsync(PATH_REFRESH_MS);
+    expect(store.getState().connectionPath).toEqual({ kind: 'unknown' });
+    expect(store.getState().phase).toBe('connected');
+  });
+
+  it('is cleared on disconnect, and the refresh timer stops', async () => {
+    const { store, transports } = pathRig();
+    await store.connect('192.168.1.50:9101');
+    await flush();
+    const timersWhileConnected = vi.getTimerCount();
+    store.disconnect();
+    expect(store.getState()).toMatchObject({ connectionPath: null, traffic: null, phase: 'closed' });
+    const calls = transports[0].pathCalls;
+    await vi.advanceTimersByTimeAsync(PATH_REFRESH_MS * 3);
+    expect(transports[0].pathCalls).toBe(calls);
+    expect(vi.getTimerCount()).toBeLessThan(timersWhileConnected);
+  });
+
+  it('is cleared when the device closes the link, and the refresh timer stops', async () => {
+    const { store, transports } = pathRig();
+    await store.connect('192.168.1.50:9101');
+    await flush();
+    transports[0].dropWith(1006);
+    expect(store.getState()).toMatchObject({ connectionPath: null, traffic: null, phase: 'closed' });
+    const calls = transports[0].pathCalls;
+    await vi.advanceTimersByTimeAsync(PATH_REFRESH_MS * 3);
+    expect(transports[0].pathCalls).toBe(calls);
+  });
+
+  it('is reset as soon as a reconnect starts, and a new link starts its own refresh', async () => {
+    const { store, transports } = pathRig();
+    await store.connect('192.168.1.50:9101');
+    await flush();
+    void store.connect('192.168.1.50:9101');
+    expect(store.getState().connectionPath).toBeNull();
+    await flush();
+    expect(store.getState().connectionPath).toEqual({ kind: 'direct', local: 'host', remote: 'host', protocol: 'udp' });
+    // The first link is closed by the reconnect and must not be asked again.
+    const firstCalls = transports[0].pathCalls;
+    await vi.advanceTimersByTimeAsync(PATH_REFRESH_MS);
+    expect(transports[0].pathCalls).toBe(firstCalls);
+    expect(transports[1].pathCalls).toBeGreaterThan(0);
+  });
+
+  it('leaves no refresh timer behind after connect and disconnect', async () => {
+    const { store } = pathRig();
+    const before = vi.getTimerCount();
+    await store.connect('192.168.1.50:9101');
+    await flush();
+    store.disconnect();
+    expect(vi.getTimerCount()).toBe(before);
+  });
+
+  it('a transport without connectionPath reports unknown rather than failing', async () => {
+    const r = rig();
+    await r.store.connect('192.168.1.50:9101');
+    await flush();
+    expect(r.store.getState().connectionPath).toEqual({ kind: 'unknown' });
+    expect(r.store.getState().traffic).toBeNull();
   });
 });

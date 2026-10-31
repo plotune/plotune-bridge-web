@@ -6,7 +6,16 @@
 import { ContractError, ProtocolViolation } from '../protocol/errors';
 import { MAX_REQUEST_BYTES } from '../protocol/types';
 import { encodeWire, parseWire, utf8Length, type WireObject } from '../protocol/wire';
-import { TransportError, TransportOpenError, type CloseInfo, type DeviceTransport, type TransportListener } from './types';
+import {
+  TransportError,
+  TransportOpenError,
+  type CandidateKind,
+  type CloseInfo,
+  type ConnectionPath,
+  type DeviceTransport,
+  type LinkTraffic,
+  type TransportListener,
+} from './types';
 import { CLIENT_CLOSE_PROTOCOL } from './websocket';
 
 export const REMOTE_TARGET_PREFIX = 'remote:';
@@ -92,6 +101,51 @@ function validRelayAddress(url: string): boolean {
 
 function isRecord(value: unknown): value is Signal {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+type StatsEntry = Signal;
+
+const CANDIDATE_KINDS: readonly string[] = ['host', 'srflx', 'prflx', 'relay'];
+
+function unknownPath(): ConnectionPath {
+  return { kind: 'unknown' };
+}
+
+function candidateKind(value: unknown): CandidateKind {
+  return typeof value === 'string' && CANDIDATE_KINDS.includes(value) ? (value as CandidateKind) : 'unknown';
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/** Copies the report into a plain map keyed by stats id. Only record-shaped entries are kept. */
+function readStats(report: RTCStatsReport): Map<string, StatsEntry> {
+  const entries = new Map<string, StatsEntry>();
+  report.forEach((value: unknown, id: string) => {
+    if (isRecord(value)) entries.set(id, value);
+  });
+  return entries;
+}
+
+/**
+ * The candidate pair in use: the transport entry's selectedCandidatePairId first, then a pair that is
+ * nominated and succeeded, then any pair marked selected. Returns null when nothing is selected.
+ */
+function selectedPair(stats: Map<string, StatsEntry>): StatsEntry | null {
+  for (const entry of stats.values()) {
+    if (entry.type !== 'transport' || typeof entry.selectedCandidatePairId !== 'string') continue;
+    const pair = stats.get(entry.selectedCandidatePairId);
+    if (pair?.type === 'candidate-pair') return pair;
+  }
+  const pairs = [...stats.values()].filter((entry) => entry.type === 'candidate-pair');
+  return pairs.find((pair) => pair.nominated === true && pair.state === 'succeeded') ?? pairs.find((pair) => pair.selected === true) ?? null;
+}
+
+function candidateOf(stats: Map<string, StatsEntry>, id: unknown, type: 'local-candidate' | 'remote-candidate'): StatsEntry | null {
+  if (typeof id !== 'string') return null;
+  const entry = stats.get(id);
+  return entry?.type === type ? entry : null;
 }
 
 export class RemoteTransport implements DeviceTransport {
@@ -181,6 +235,47 @@ export class RemoteTransport implements DeviceTransport {
   /** Idempotent. An open link reports initiatedBy 'local'; a link still connecting rejects open(). */
   close(): void {
     this.terminate(endInfo('closed by this page', 'local', 1000, true), 'closed before the link opened');
+  }
+
+  /**
+   * Reports the path of the open link from the selected candidate pair. Only candidate types and protocols
+   * are read; addresses and ports are never copied out. Any failure is reported as unknown, never thrown.
+   */
+  async connectionPath(): Promise<ConnectionPath> {
+    try {
+      const stats = await this.statsSnapshot();
+      const pair = stats ? selectedPair(stats) : null;
+      const local = stats && pair ? candidateOf(stats, pair.localCandidateId, 'local-candidate') : null;
+      const remote = stats && pair ? candidateOf(stats, pair.remoteCandidateId, 'remote-candidate') : null;
+      if (!local || !remote) return unknownPath();
+      const localKind = candidateKind(local.candidateType);
+      const remoteKind = candidateKind(remote.candidateType);
+      if (localKind === 'relay' || remoteKind === 'relay') {
+        const relay = localKind === 'relay' ? local : remote;
+        return { kind: 'relay', protocol: optionalString(relay.relayProtocol) ?? optionalString(relay.protocol) };
+      }
+      return { kind: 'direct', local: localKind, remote: remoteKind, protocol: optionalString(local.protocol) ?? optionalString(remote.protocol) };
+    } catch {
+      return unknownPath();
+    }
+  }
+
+  /** Byte counters of the selected candidate pair, or null when the link is not open or the counters are missing. */
+  async traffic(): Promise<LinkTraffic | null> {
+    try {
+      const stats = await this.statsSnapshot();
+      const pair = stats ? selectedPair(stats) : null;
+      if (!pair || typeof pair.bytesSent !== 'number' || typeof pair.bytesReceived !== 'number') return null;
+      return { bytesSent: pair.bytesSent, bytesReceived: pair.bytesReceived };
+    } catch {
+      return null;
+    }
+  }
+
+  private async statsSnapshot(): Promise<Map<string, StatsEntry> | null> {
+    const pc = this.pc;
+    if (this.phase !== 'open' || !pc) return null;
+    return readStats(await pc.getStats());
   }
 
   private async connect(): Promise<void> {
