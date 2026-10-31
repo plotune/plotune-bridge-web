@@ -50,6 +50,8 @@ export interface CloudContextValue {
   signOut(): void;
   /** False off bridge.plotune.net: sign-in cannot complete there, so the page offers the local network instead. */
   signInAvailable: boolean;
+  /** Moves on with every change of the account session. A job started for one session must stop when this changes. */
+  sessionGeneration(): number;
   /** The fallback on the sign-in screen: stops the automatic attempt for this tab and shows the workspace. */
   continueWithoutSignIn(): void;
   projects: CloudProject[];
@@ -132,6 +134,9 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   const deviceRequest = useRef<{ projectId: string; token: string; promise: Promise<void> } | null>(null);
   // The fragment is read once per page load; StrictMode runs effects twice and a one-time code can be used only once.
   const bootstrapped = useRef(false);
+  // Identifies the newest callback exchange; the fallback moves it on so an older exchange cannot change the page.
+  const callbackRun = useRef(0);
+  const sessionGeneration = useRef(0);
   const [boot] = useState(() => {
     const hash = sso.readHash();
     return { hash, plan: planBoot(sso, hash, session.getToken() !== null) };
@@ -261,21 +266,28 @@ export function CloudProvider({ children, client = defaultClient, session = clou
         else if (parsed.error !== 'login_required') setSignInNotice(SIGN_IN_NOT_COMPLETED);
         return;
       }
+      const run = ++callbackRun.current;
+      const current = () => run === callbackRun.current;
       setExchanging(true);
       try {
         const token = await client.exchangeBridgeCode(parsed.code, pending.verifier);
+        // The user gave up on this attempt (the fallback): a late answer signs nobody in and shows nothing.
+        if (!current()) return;
         session.setToken(token.accessToken, Math.floor(Date.now() / 1000) + token.expiresIn);
         if (session.getToken() === null) throw new CloudError('bad-response');
         setUsername(token.username);
         clearSignedOutThisTab(sso.storage);
         clearSilentFailed(sso.storage);
         setSignInNotice(null);
-        await loadProjects();
+        // The callback's loading state ends with the token; the project list loads in the signed-in workspace.
+        setExchanging(false);
+        void loadProjects();
       } catch (error) {
+        if (!current()) return;
         markSilentFailed(sso.storage);
         setSignInNotice(error instanceof CloudError && error.code === 'sign-in-expired' ? SIGN_IN_EXPIRED : SIGN_IN_NOT_COMPLETED);
       } finally {
-        setExchanging(false);
+        if (current()) setExchanging(false);
       }
     },
     [client, session, sso, loadProjects],
@@ -327,12 +339,22 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   }, [session, sso]);
 
   const continueWithoutSignIn = useCallback(() => {
-    // The attempt is abandoned: a pair that comes back later is then ignored as a mismatch, and no automatic attempt runs here.
+    // The attempt is abandoned: a late exchange answer is ignored, a pair that comes back later is a mismatch, and no
+    // automatic attempt runs in this tab until the user chooses Sign in.
+    callbackRun.current += 1;
     clearPending(sso.storage);
     markSilentFailed(sso.storage);
     setRedirecting(false);
+    setExchanging(false);
     setBootPending(false);
   }, [sso]);
+
+  // Every change of the account session (sign-in, sign-out, a replaced token) moves this on, so a queued job can tell
+  // that the session it was started for is gone.
+  const readSessionGeneration = useCallback(() => sessionGeneration.current, []);
+  useEffect(() => session.subscribe(() => {
+    sessionGeneration.current += 1;
+  }), [session]);
 
   const dismissSignInNotice = useCallback(() => setSignInNotice(null), []);
 
@@ -362,6 +384,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       startSignIn,
       signOut,
       signInAvailable,
+      sessionGeneration: readSessionGeneration,
       continueWithoutSignIn,
       projects: signedIn ? projectState.items : [],
       projectsLoading: signedIn && projectState.loading,
@@ -375,7 +398,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       refreshDevices,
       createPairingCode,
     }),
-    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
+    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, readSessionGeneration, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
   );
 
   return <CloudContext.Provider value={value}>{children}</CloudContext.Provider>;

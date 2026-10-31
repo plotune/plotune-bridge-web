@@ -184,10 +184,14 @@ export class DeviceHub {
    * a device the user added in this page, or any direct address, is never started by the sign-in.
    */
   remoteAwaitingSignIn(): Slot[] {
-    return this.state.slots.filter((slot) => {
-      const state = slot.store.getState();
-      return slot.remembered && isRemoteTarget(state.target) && state.phase === 'closed' && state.notice?.kind === 'signed-out';
-    });
+    return this.state.slots.filter((slot) => this.isAwaitingSignIn(slot));
+  }
+
+  /** True while this device is still in the hub, remembered, closed and waiting for a sign-in. Rechecked before each reconnect. */
+  isAwaitingSignIn(slot: Slot): boolean {
+    if (this.slot(slot.id) !== slot) return false;
+    const state = slot.store.getState();
+    return slot.remembered && isRemoteTarget(state.target) && state.phase === 'closed' && state.notice?.kind === 'signed-out';
   }
 
   setTraceView(view: 'all' | string): void {

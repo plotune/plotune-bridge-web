@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
 import { CloudProvider, useCloud } from './cloud/context';
 import type { CloudClient } from './cloud/client';
@@ -86,10 +86,22 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   }
   if (state.phase === 'closed' && state.notice) {
     if (remote && state.notice.kind === 'signed-out') {
-      // A remembered remote device waiting for sign-in: an informational card, never an error. Once signed in, the device
-      // reconnects by itself, so nothing is shown in the meantime.
-      if (cloud.status !== 'signed-out') return null;
-      return <SignInCard signInAvailable={cloud.signInAvailable} onSignIn={() => void cloud.startSignIn()} onLocal={onLocal} />;
+      // A remembered remote device waiting for sign-in: an informational card, never an error.
+      if (cloud.status === 'signed-out') return <SignInCard signInAvailable={cloud.signInAvailable} onSignIn={() => void cloud.startSignIn()} onLocal={onLocal} />;
+      // Signed in and closed (the queue passed it, or an edit was cancelled): always a visible Reconnect. Nothing while signing in.
+      if (cloud.status === 'signed-in') {
+        return (
+          <NoticeCard
+            notice={{ kind: 'ended', severity: 'info', title: 'This device is disconnected', summary: 'Reconnect to use it through your Plotune account.', steps: [], technical: '' }}
+            actions={
+              <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
+                Reconnect
+              </button>
+            }
+          />
+        );
+      }
+      return null;
     }
     if (remote) {
       return (
@@ -296,29 +308,35 @@ function Workspace({ browser, pageOrigin, onLocalNetwork, ...add }: { browser: B
 }
 
 /**
- * After a sign-in, every remembered remote device that was waiting for it reconnects, one after another. Once per sign-in:
- * a later reload or a second sign-in starts it again, and nothing that was not remembered is ever started here.
+ * After a sign-in, every remembered remote device that is still waiting for it reconnects, one after another. The queue is
+ * rechecked before each device: a device removed from the hub, connected by hand meanwhile, or no longer waiting is skipped.
+ * The whole queue stops when the account session changes (sign-out, or a token replaced) or when this component unmounts.
  */
 function RememberedReconnect() {
   const cloud = useCloud();
   const hub = useHub();
   const signedIn = cloud.status === 'signed-in';
-  const started = useRef(false);
+  const { sessionGeneration } = cloud;
   useEffect(() => {
-    if (!signedIn) {
-      started.current = false;
-      return;
-    }
-    if (started.current) return;
-    started.current = true;
-    const waiting = hub.remoteAwaitingSignIn();
-    if (waiting.length === 0) return;
+    if (!signedIn) return undefined;
+    const queue = hub.remoteAwaitingSignIn().map((slot) => slot.id);
+    if (queue.length === 0) return undefined;
+    const generation = sessionGeneration();
+    let stopped = false;
     queueMicrotask(() => {
       void (async () => {
-        for (const slot of waiting) await slot.store.connect(slot.store.getState().target);
+        for (const id of queue) {
+          if (stopped || sessionGeneration() !== generation) return;
+          const slot = hub.slot(id);
+          if (!slot || !hub.isAwaitingSignIn(slot)) continue;
+          await slot.store.connect(slot.store.getState().target);
+        }
       })();
     });
-  }, [signedIn, hub]);
+    return () => {
+      stopped = true;
+    };
+  }, [signedIn, sessionGeneration, hub]);
   return null;
 }
 
