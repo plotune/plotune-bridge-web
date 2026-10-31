@@ -6,6 +6,7 @@ export type ByteOrder = 'intel' | 'motorola';
 export type Multiplexing = { kind: 'none' } | { kind: 'switch' } | { kind: 'muxed'; value: number };
 
 export interface DbcSignal {
+  /** The full name when the file carries a long symbol (Vector tools shorten names to 32 characters). */
   name: string;
   /** DBC bit number of the first bit: the least significant bit for Intel, the most significant bit for Motorola. */
   startBit: number;

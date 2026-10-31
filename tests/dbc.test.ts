@@ -65,7 +65,20 @@ describe('parseDbc', () => {
     expect(() => parseDbc('hello')).toThrow(DbcError);
     expect(() => parseDbc('hello')).toThrow(/No messages found/);
     expect(() => parseDbc(' SG_ A : 0|8@1+ (1,0) [0|0] "" Y\n')).toThrow(/before any message/);
-    expect(() => parseDbc('BO_ 1 A: 8 X\n SG_ B : 0|65@1+ (1,0) [0|0] "" Y\n')).toThrow(/1 to 64/);
+  });
+
+  it('skips a signal longer than 64 bits with a warning and still loads the rest (real J1939 files have 1600-bit text fields)', () => {
+    const dbc = parseDbc('BO_ 1 A: 8 X\n SG_ Text : 0|1600@1+ (1,0) [0|0] "" Y\n SG_ Ok : 0|8@1+ (1,0) [0|0] "" Y\n');
+    expect(dbc.messages[0].signals.map((s) => s.name)).toEqual(['Ok']);
+    expect(dbc.warnings).toEqual([expect.stringMatching(/Text in A is 1600 bits long/)]);
+  });
+
+  it('uses the long names Vector tools keep in SystemSignalLongSymbol / SystemMessageLongSymbol', () => {
+    const text = 'BO_ 1739 ADAS_A12: 8 X\n SG_ LCA_SteeringWheelTakeOverAlert_m : 15|3@0+ (1,0) [0|0] "" Y\nBA_ "SystemSignalLongSymbol" SG_ 1739 LCA_SteeringWheelTakeOverAlert_m "LCA_SteeringWheelTakeOverAlert_mirror";\nBA_ "SystemMessageLongSymbol" BO_ 1739 "ADAS_A12_LongMessageName";\nVAL_ 1739 LCA_SteeringWheelTakeOverAlert_m 7 "No alert" ;\n';
+    const { message } = find(text, 1739);
+    expect(message.name).toBe('ADAS_A12_LongMessageName');
+    expect(message.signals[0].name).toBe('LCA_SteeringWheelTakeOverAlert_mirror');
+    expect(message.signals[0].labels.get(7)).toBe('No alert');
   });
 
   it('warns about extended multiplexing and duplicate identifiers instead of failing', () => {

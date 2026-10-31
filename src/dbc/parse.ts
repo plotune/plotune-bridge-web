@@ -8,6 +8,8 @@ const BO = /^BO_\s+(\d+)\s+([A-Za-z_]\w*)\s*:\s*(\d+)\s+(\S+)/;
 const SG = /^SG_\s+([A-Za-z_]\w*)\s*(M|m\d+M?)?\s*:\s*(\d+)\|(\d+)@([01])([+-])\s*\(\s*([^,\s]+)\s*,\s*([^)\s]+)\s*\)\s*\[\s*([^|\s]*)\s*\|\s*([^\]\s]*)\s*\]\s*"([^"]*)"/;
 const VAL = /^VAL_\s+(\d+)\s+([A-Za-z_]\w*)\s+(.*);\s*$/;
 const VALTYPE = /^SIG_VALTYPE_\s+(\d+)\s+([A-Za-z_]\w*)\s*:\s*([012])\s*;/;
+const LONG_SIGNAL = /^BA_\s+"SystemSignalLongSymbol"\s+SG_\s+(\d+)\s+([A-Za-z_]\w*)\s+"([^"]+)"\s*;/;
+const LONG_MESSAGE = /^BA_\s+"SystemMessageLongSymbol"\s+BO_\s+(\d+)\s+"([^"]+)"\s*;/;
 const LABEL = /(-?\d+)\s+"([^"]*)"/g;
 
 function num(text: string, what: string, line: number): number {
@@ -42,6 +44,9 @@ export function parseDbc(text: string): Dbc {
   let current: DbcMessage | null = null;
   let inComment = false;
   let sawMuxExtended = false;
+  // Vector tools cap names at 32 characters and keep the full name in an attribute; applied once the file is read.
+  const longSignals: { id: number; short: string; long: string }[] = [];
+  const longMessages: { id: number; long: string }[] = [];
 
   lines.forEach((full, index) => {
     const lineNo = index + 1;
@@ -80,7 +85,11 @@ export function parseDbc(text: string): Dbc {
     if ((m = SG.exec(line))) {
       if (!current) throw new DbcError(`Line ${lineNo}: signal ${m[1]} comes before any message.`);
       const length = Number(m[4]);
-      if (length < 1 || length > 64) throw new DbcError(`Line ${lineNo}: signal ${m[1]} has a length of ${length} bits; 1 to 64 is supported.`);
+      if (length < 1 || length > 64) {
+        // Long text or multi-packet fields exist in real files (J1939). One of them must not block the whole database.
+        warnings.push(`Signal ${m[1]} in ${current.name} is ${length} bits long; only 1 to 64 bits are supported, so it is not decoded.`);
+        return;
+      }
       const signal: DbcSignal = {
         name: m[1],
         startBit: Number(m[3]),
@@ -103,6 +112,14 @@ export function parseDbc(text: string): Dbc {
       sawMuxExtended = true;
       return;
     }
+    if ((m = LONG_SIGNAL.exec(line))) {
+      longSignals.push({ id: Number(m[1]), short: m[2], long: m[3] });
+      return;
+    }
+    if ((m = LONG_MESSAGE.exec(line))) {
+      longMessages.push({ id: Number(m[1]), long: m[2] });
+      return;
+    }
     if ((m = VAL.exec(line))) {
       const message = rawIdToMessage.get(Number(m[1]));
       const signal = message?.signals.find((s) => s.name === m![2]);
@@ -121,6 +138,14 @@ export function parseDbc(text: string): Dbc {
     }
   });
 
+  for (const { id, long } of longMessages) {
+    const message = rawIdToMessage.get(id);
+    if (message) message.name = long;
+  }
+  for (const { id, short, long } of longSignals) {
+    const signal = rawIdToMessage.get(id)?.signals.find((x) => x.name === short);
+    if (signal) signal.name = long;
+  }
   if (sawMuxExtended) warnings.push('This file uses extended multiplexing (SG_MUL_VAL_). Those signals are decoded without their multiplexer condition.');
   if (messages.length === 0) throw new DbcError('No messages found. Is this a DBC file?');
   return { messages, warnings };
