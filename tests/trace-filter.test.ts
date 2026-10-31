@@ -16,6 +16,15 @@ describe('trace filter', () => {
     expect(frameMatches(frame(), { ...NO_FILTER, text: '123' })).toBe(false);
   });
 
+  it('matches IDs and data as displayed: zero-padded IDs and decimal payloads', () => {
+    expect(frameMatches(frame({ id: 1 }), { ...NO_FILTER, text: '001' })).toBe(true);
+    expect(frameMatches(frame({ id: 0x7e8, extended: true }), { ...NO_FILTER, text: '000007e8' })).toBe(true);
+    expect(frameMatches(frame({ id: 0x7e8, extended: true }), { ...NO_FILTER, text: '000007E8' })).toBe(true);
+    expect(frameMatches(frame(), { ...NO_FILTER, text: '98 241' })).toBe(true); // 62 F1 90 shown as 98 241 144
+    expect(frameMatches(frame(), { ...NO_FILTER, text: '241 144' })).toBe(true);
+    expect(frameMatches(frame(), { ...NO_FILTER, text: '98 242' })).toBe(false);
+  });
+
   it('filters by channel and direction together', () => {
     expect(frameMatches(frame({ channel: 2 }), { ...NO_FILTER, channel: 1 })).toBe(false);
     expect(frameMatches(frame({ direction: 'tx' }), { ...NO_FILTER, direction: 'rx' })).toBe(false);

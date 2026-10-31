@@ -25,15 +25,17 @@ export function formatTraceData(data: Uint8Array, radix: Radix): string {
   return radix === 'hex' ? bytesToHex(data, ' ').toUpperCase() : Array.from(data, (b) => String(b)).join(' ');
 }
 
+/** Matches what the trace shows, in either number format: padded hex ID (001, 000007E8), plain hex, decimal ID, and the data bytes in hex or decimal. */
 export function frameMatches(frame: CanFrame, f: TraceFilter): boolean {
   if (f.channel !== null && frame.channel !== f.channel) return false;
   if (f.direction !== null && frame.direction !== f.direction) return false;
   const q = f.text.trim().toLowerCase().replace(/^0x/, '');
   if (q === '') return true;
-  const idHex = frame.id.toString(16);
-  if (idHex.includes(q) || String(frame.id) === q) return true;
-  const dataHex = bytesToHex(frame.data, ' ');
-  return dataHex.includes(q) || dataHex.replace(/ /g, '').includes(q.replace(/\s/g, ''));
+  if (formatId(frame.id, frame.extended).toLowerCase().includes(q) || frame.id.toString(16).includes(q) || String(frame.id) === q) return true;
+  const squash = (v: string) => v.replace(/\s/g, '');
+  const hex = bytesToHex(frame.data, ' ');
+  const dec = Array.from(frame.data, (b) => String(b)).join(' ');
+  return hex.includes(q) || squash(hex).includes(squash(q)) || dec.includes(q);
 }
 
 /** Frames follow the filter. Markers (drops, gaps, connection notes) always stay: a filter must never hide a loss. */
