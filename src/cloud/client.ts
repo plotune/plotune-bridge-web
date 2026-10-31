@@ -1,15 +1,15 @@
 // Typed client for the Plotune account Worker (api.plotune.net) and the Stream Worker (stream.plotune.net).
 // Requests never carry cookies (credentials: 'omit'); the account token is passed in by the caller and only
-// ever sent as a bearer header. Thrown errors carry fixed, safe messages: no token, password or response body
-// is ever placed in an error.
+// ever sent as a bearer header. Thrown errors carry fixed, safe messages: no token, code, verifier or response body
+// is ever placed in an error. Sign-in happens on plotune.net; this client only exchanges the one-time code.
 
 export const DEFAULT_API_BASE = 'https://api.plotune.net';
 export const DEFAULT_STREAM_BASE = 'https://stream.plotune.net';
 export const REQUEST_TIMEOUT_MS = 15_000;
 
 export type CloudErrorCode =
-  | 'bad-credentials'
   | 'invalid-request'
+  | 'sign-in-expired'
   | 'service-unavailable'
   | 'unauthorized'
   | 'forbidden'
@@ -19,8 +19,8 @@ export type CloudErrorCode =
   | 'bad-response';
 
 const SAFE_MESSAGES: Record<CloudErrorCode, string> = {
-  'bad-credentials': 'The username or password is not correct.',
   'invalid-request': 'The cloud rejected the request.',
+  'sign-in-expired': 'Sign-in expired. Try again.',
   'service-unavailable': 'The cloud service is temporarily unavailable. Try again later.',
   unauthorized: 'Your cloud session is no longer valid. Sign in again.',
   forbidden: 'Your cloud account does not have permission for this action.',
@@ -72,8 +72,11 @@ export interface IceServersResult {
   expiresAt: number;
 }
 
-export interface LoginResult {
+export interface BridgeToken {
   accessToken: string;
+  /** Lifetime in seconds, counted from the moment the exchange succeeded. */
+  expiresIn: number;
+  username: string;
 }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -85,7 +88,8 @@ export interface CloudClientOptions {
 }
 
 export interface CloudClient {
-  login(usernameOrEmail: string, password: string): Promise<LoginResult>;
+  /** Exchanges the one-time code from the plotune.net redirect, with its PKCE verifier, for an account token. */
+  exchangeBridgeCode(code: string, verifier: string): Promise<BridgeToken>;
   listProjects(token: string): Promise<CloudProject[]>;
   listDevices(token: string, projectId: string): Promise<CloudDevice[]>;
   createPairingToken(token: string, projectId: string): Promise<PairingToken>;
@@ -100,8 +104,8 @@ interface RequestSpec {
   /** Sent as Authorization: Bearer. */
   bearer?: string;
   json?: Record<string, unknown>;
-  /** Login maps 401/403 to bad-credentials; every other route maps them to unauthorized/forbidden. */
-  isLogin?: boolean;
+  /** The bridge exchange maps 400 (code invalid, expired or already used) to sign-in-expired. */
+  badRequestCode?: CloudErrorCode;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -116,8 +120,8 @@ function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function codeForStatus(status: number, isLogin: boolean): CloudErrorCode {
-  if (isLogin && (status === 401 || status === 403)) return 'bad-credentials';
+function codeForStatus(status: number, badRequestCode: CloudErrorCode | undefined): CloudErrorCode {
+  if (status === 400 && badRequestCode !== undefined) return badRequestCode;
   if (status === 401) return 'unauthorized';
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not-found';
@@ -150,7 +154,7 @@ async function send(fetchImpl: FetchLike, spec: RequestSpec): Promise<unknown> {
     } catch {
       throw new CloudError('network');
     }
-    if (!response.ok) throw new CloudError(codeForStatus(response.status, spec.isLogin === true));
+    if (!response.ok) throw new CloudError(codeForStatus(response.status, spec.badRequestCode));
     try {
       return await response.json();
     } catch {
@@ -165,9 +169,10 @@ function unexpected(): CloudError {
   return new CloudError('bad-response');
 }
 
-function parseLogin(body: unknown): LoginResult {
-  if (!isRecord(body) || !nonEmptyString(body.access_token)) throw unexpected();
-  return { accessToken: body.access_token };
+function parseBridgeToken(body: unknown): BridgeToken {
+  if (!isRecord(body) || !nonEmptyString(body.access_token) || !finiteNumber(body.expires_in) || body.expires_in <= 0) throw unexpected();
+  if (typeof body.username !== 'string') throw unexpected();
+  return { accessToken: body.access_token, expiresIn: body.expires_in, username: body.username };
 }
 
 function parseProject(value: unknown): CloudProject {
@@ -254,16 +259,15 @@ export function createCloudClient(options: CloudClientOptions = {}): CloudClient
     `${projectPath(projectId)}/devices/${encodeURIComponent(requireText(deviceUuid))}`;
 
   return {
-    async login(usernameOrEmail, password) {
-      const username = requireText(usernameOrEmail);
-      requireText(password);
+    async exchangeBridgeCode(code, verifier) {
+      // No Authorization header: the one-time code and its verifier are the whole credential here.
       const body = await send(fetchImpl, {
         method: 'POST',
-        url: `${apiBase}/login`,
-        json: { username_or_email: username, password },
-        isLogin: true,
+        url: `${apiBase}/auth/bridge-token`,
+        json: { code: requireText(code), code_verifier: requireText(verifier) },
+        badRequestCode: 'sign-in-expired',
       });
-      return parseLogin(body);
+      return parseBridgeToken(body);
     },
 
     async listProjects(token) {

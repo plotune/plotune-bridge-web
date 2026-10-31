@@ -109,6 +109,53 @@ button:disabled {
   align-items: center;
   gap: 12px;
 }
+.bw-account-menu {
+  position: relative;
+}
+.bw-topbar-account-button {
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bw-account-menu-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 230px;
+  padding: 8px 0;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-menu);
+}
+.bw-account-menu-who {
+  margin: 0;
+  padding: 6px 14px 8px;
+  font-size: 12px;
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+.bw-account-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.bw-account-menu-item:hover,
+.bw-account-menu-item:focus-visible {
+  background: var(--color-chrome);
+  outline: none;
+}
 .bw-device-chip {
   display: flex;
   align-items: center;

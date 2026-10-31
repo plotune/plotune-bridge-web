@@ -47,51 +47,66 @@ function header(init: RequestInit, name: string): string | null {
   return new Headers(init.headers).get(name);
 }
 
-describe('login', () => {
-  it('posts credentials as JSON without cookies and returns the access token', async () => {
-    const { fetchImpl, calls } = fakeFetch(json(200, { access_token: ACCOUNT_TOKEN, token_type: 'bearer', expires_in: 3600 }));
-    const result = await clientWith(fetchImpl).login('deniz', 'correct horse');
-    expect(result).toEqual({ accessToken: ACCOUNT_TOKEN });
+const CODE = 'one-time-code-value';
+const VERIFIER = 'pkce-verifier-value';
+const BRIDGE_TOKEN_BODY = { access_token: ACCOUNT_TOKEN, token_type: 'bearer', expires_in: 28800, username: 'kantr' };
+
+describe('exchangeBridgeCode', () => {
+  it('posts the code and verifier as JSON, with no cookies and no Authorization header, and returns the token', async () => {
+    const { fetchImpl, calls } = fakeFetch(json(200, BRIDGE_TOKEN_BODY));
+    const result = await clientWith(fetchImpl).exchangeBridgeCode(CODE, VERIFIER);
+    expect(result).toEqual({ accessToken: ACCOUNT_TOKEN, expiresIn: 28800, username: 'kantr' });
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe(`${API}/login`);
+    expect(calls[0].url).toBe(`${API}/auth/bridge-token`);
     expect(calls[0].init.method).toBe('POST');
     expect(calls[0].init.credentials).toBe('omit');
+    expect(calls[0].init.redirect).toBe('error');
     expect(header(calls[0].init, 'Content-Type')).toBe('application/json');
     expect(header(calls[0].init, 'Authorization')).toBeNull();
-    expect(JSON.parse(String(calls[0].init.body))).toEqual({ username_or_email: 'deniz', password: 'correct horse' });
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ code: CODE, code_verifier: VERIFIER });
   });
 
-  it('maps 401 and 403 to bad-credentials', async () => {
-    for (const status of [401, 403]) {
-      const { fetchImpl } = fakeFetch(json(status, { detail: 'nope' }));
-      expect(await failure(clientWith(fetchImpl).login('deniz', 'x'))).toMatchObject({ code: 'bad-credentials' });
-    }
+  it('maps 400 (code invalid, expired or already used) to sign-in-expired with the fixed message', async () => {
+    const { fetchImpl } = fakeFetch(json(400, { error: 'invalid_grant' }));
+    const error = await failure(clientWith(fetchImpl).exchangeBridgeCode(CODE, VERIFIER));
+    expect(error).toMatchObject({ code: 'sign-in-expired' });
+    expect(error.message).toBe('Sign-in expired. Try again.');
   });
 
-  it('maps 400 and 422 to invalid-request and 503 to service-unavailable', async () => {
-    const bad = fakeFetch(json(422, { error: { code: 'invalid_request', message: 'bad' } }), json(400, {}));
-    expect(await failure(clientWith(bad.fetchImpl).login('deniz', 'x'))).toMatchObject({ code: 'invalid-request' });
-    expect(await failure(clientWith(bad.fetchImpl).login('deniz', 'x'))).toMatchObject({ code: 'invalid-request' });
-    const down = fakeFetch(json(503, { error: { code: 'service_unavailable' } }));
-    expect(await failure(clientWith(down.fetchImpl).login('deniz', 'x'))).toMatchObject({ code: 'service-unavailable' });
+  it('maps 401 to unauthorized and 503 to service-unavailable', async () => {
+    const { fetchImpl } = fakeFetch(json(401, {}), json(503, { error: { code: 'service_unavailable' } }));
+    expect(await failure(clientWith(fetchImpl).exchangeBridgeCode(CODE, VERIFIER))).toMatchObject({ code: 'unauthorized' });
+    expect(await failure(clientWith(fetchImpl).exchangeBridgeCode(CODE, VERIFIER))).toMatchObject({ code: 'service-unavailable' });
   });
 
   it('maps a network failure to network', async () => {
     const { fetchImpl } = fakeFetch(() => Promise.reject(new TypeError('Failed to fetch')));
-    expect(await failure(clientWith(fetchImpl).login('deniz', 'x'))).toMatchObject({ code: 'network' });
+    expect(await failure(clientWith(fetchImpl).exchangeBridgeCode(CODE, VERIFIER))).toMatchObject({ code: 'network' });
   });
 
-  it('rejects a success body without a non-empty access_token', async () => {
-    for (const body of [{}, { access_token: '' }, { access_token: 42 }, ['x'], null, 'token']) {
+  it('rejects a success body without a usable token, lifetime or username', async () => {
+    const bodies = [
+      {},
+      { access_token: '', expires_in: 60, username: 'kantr' },
+      { access_token: 42, expires_in: 60, username: 'kantr' },
+      { access_token: ACCOUNT_TOKEN, expires_in: 0, username: 'kantr' },
+      { access_token: ACCOUNT_TOKEN, expires_in: '60', username: 'kantr' },
+      { access_token: ACCOUNT_TOKEN, expires_in: 60 },
+      { access_token: ACCOUNT_TOKEN, expires_in: 60, username: 7 },
+      ['x'],
+      null,
+      'token',
+    ];
+    for (const body of bodies) {
       const { fetchImpl } = fakeFetch(json(200, body));
-      expect(await failure(clientWith(fetchImpl).login('deniz', 'x'))).toMatchObject({ code: 'bad-response' });
+      expect(await failure(clientWith(fetchImpl).exchangeBridgeCode(CODE, VERIFIER))).toMatchObject({ code: 'bad-response' });
     }
   });
 
-  it('refuses empty input without touching the network', async () => {
+  it('refuses an empty code or verifier without touching the network', async () => {
     const { fetchImpl, calls } = fakeFetch();
-    expect(await failure(clientWith(fetchImpl).login('', 'x'))).toMatchObject({ code: 'invalid-request' });
-    expect(await failure(clientWith(fetchImpl).login('deniz', ''))).toMatchObject({ code: 'invalid-request' });
+    expect(await failure(clientWith(fetchImpl).exchangeBridgeCode('', VERIFIER))).toMatchObject({ code: 'invalid-request' });
+    expect(await failure(clientWith(fetchImpl).exchangeBridgeCode(CODE, ''))).toMatchObject({ code: 'invalid-request' });
     expect(calls).toHaveLength(0);
   });
 });
@@ -265,22 +280,21 @@ describe('fetchIceServers', () => {
 });
 
 describe('errors and safety', () => {
-  it('never puts tokens, passwords or response bodies into messages', async () => {
-    const password = 'hunter2-very-secret';
-    const leaky = JSON.stringify({ error: { code: 'bad_credentials', message: `no such user, password ${password} token ${ACCOUNT_TOKEN}` }, detail: ACCOUNT_TOKEN });
-    const { fetchImpl } = fakeFetch(new Response(leaky, { status: 401 }), new Response(leaky, { status: 500 }));
+  it('never puts tokens, codes, verifiers or response bodies into messages', async () => {
+    const leaky = JSON.stringify({ error: { code: 'invalid_grant', message: `bad code ${CODE} verifier ${VERIFIER} token ${ACCOUNT_TOKEN}` }, detail: ACCOUNT_TOKEN });
+    const { fetchImpl } = fakeFetch(new Response(leaky, { status: 400 }), new Response(leaky, { status: 500 }));
     const client = clientWith(fetchImpl);
-    const first = await failure(client.login('deniz', password));
+    const first = await failure(client.exchangeBridgeCode(CODE, VERIFIER));
     const second = await failure(client.listProjects(ACCOUNT_TOKEN));
     for (const error of [first, second]) {
       expect(error).toBeInstanceOf(Error);
       expect(error.name).toBe('CloudError');
-      expect(error.message).not.toContain(password);
-      expect(error.message).not.toContain(ACCOUNT_TOKEN);
-      expect(error.message).not.toContain('bad_credentials');
-      expect(String(error)).not.toContain(ACCOUNT_TOKEN);
+      for (const secret of [CODE, VERIFIER, ACCOUNT_TOKEN, 'invalid_grant']) {
+        expect(error.message).not.toContain(secret);
+        expect(String(error)).not.toContain(secret);
+      }
     }
-    expect(first.code).toBe('bad-credentials');
+    expect(first.code).toBe('sign-in-expired');
     expect(second.code).toBe('service-unavailable');
   });
 
@@ -348,11 +362,11 @@ describe('defaults', () => {
     const client = createCloudClient({
       fetchImpl: async (url) => {
         seen.push(url);
-        return json(200, { access_token: 'x.y.z' });
+        return json(200, BRIDGE_TOKEN_BODY);
       },
     });
-    await client.login('deniz', 'pw');
-    expect(seen).toEqual([`${API}/login`]);
+    await client.exchangeBridgeCode(CODE, VERIFIER);
+    expect(seen).toEqual([`${API}/auth/bridge-token`]);
   });
 
   it('honours custom bases', async () => {
@@ -365,8 +379,8 @@ describe('defaults', () => {
         return json(200, { items: [] });
       },
     });
-    await client.login('deniz', 'pw').catch(() => undefined);
+    await client.exchangeBridgeCode(CODE, VERIFIER).catch(() => undefined);
     await client.listProjects(ACCOUNT_TOKEN);
-    expect(seen).toEqual(['https://api.test.invalid/login', 'https://stream.test.invalid/v1/projects']);
+    expect(seen).toEqual(['https://api.test.invalid/auth/bridge-token', 'https://stream.test.invalid/v1/projects']);
   });
 });
