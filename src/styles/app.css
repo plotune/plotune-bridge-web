@@ -1531,3 +1531,24 @@ input[aria-invalid='true'] {
 h1[tabindex='-1']:focus {
   outline: none;
 }
+
+.bw-trace-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--color-row-rule);
+}
+.bw-trace-filter input[type='search'] {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 36px;
+}
+.bw-trace-filter select {
+  min-height: 36px;
+}
+.bw-capture-timer {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
