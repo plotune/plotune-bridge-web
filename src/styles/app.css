@@ -1445,3 +1445,24 @@ input[aria-invalid='true'] {
   margin: 0 0 8px;
   font-size: 17px;
 }
+
+/* ---- Project ID for the device setup page ----------------------------------------------- */
+.bw-project-id-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.bw-project-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.bw-project-id-value {
+  overflow-wrap: anywhere;
+  user-select: all;
+}

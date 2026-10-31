@@ -12,6 +12,7 @@ import {
   type CandidateKind,
   type CloseInfo,
   type ConnectionPath,
+  type ConnectStage,
   type DeviceTransport,
   type LinkTraffic,
   type TransportListener,
@@ -20,6 +21,21 @@ import { CLIENT_CLOSE_PROTOCOL } from './websocket';
 
 export const REMOTE_TARGET_PREFIX = 'remote:';
 export const DEFAULT_RELAY_URL = 'wss://stream.plotune.net/v1/bridge/signal';
+
+/**
+ * Time limits of a remote open, in milliseconds. The stages run one after another: cloud (ticket, ICE servers and relay
+ * registration), device (the device joins the relay room), link (offer, answer and the data channel). `total` is a hard cap
+ * over all stages; when it runs out, the reason is that of the stage still running.
+ */
+export const CONNECT_STAGE_LIMITS_MS = { cloud: 10_000, device: 8_000, link: 15_000, total: 25_000 };
+export type ConnectStageLimits = typeof CONNECT_STAGE_LIMITS_MS;
+
+/** The reason each stage gives when its limit runs out. These are the reasons the notices explain. */
+export const STAGE_TIMEOUT_REASON: Record<ConnectStage, string> = {
+  cloud: 'cloud unreachable',
+  device: 'device is not online',
+  link: 'link setup timed out',
+};
 
 const TARGET_PATTERN = /^remote:([A-Za-z0-9_-]{1,128})\/([A-Za-z0-9_-]{1,128})$/;
 const PROTOCOL_VERSION = '0.1.0-draft';
@@ -45,8 +61,8 @@ export interface RemoteTransportOptions {
   getCredentials: (projectId: string, deviceUuid: string) => Promise<RemoteCredentials>;
   /** Must be wss:// and carry no query string. */
   relayUrl?: string;
-  /** Covers credentials, relay registration, the device joining and the data channel opening. */
-  openTimeoutMs?: number;
+  /** Overrides for the stage limits (see CONNECT_STAGE_LIMITS_MS). */
+  stageLimitsMs?: Partial<ConnectStageLimits>;
   /** Spacing between signaling messages. 100 ms keeps the browser at 10 messages per second, half the relay rate. */
   signalIntervalMs?: number;
   /** Inbound messages larger than this (UTF-16 code units) are a protocol violation. */
@@ -73,6 +89,11 @@ export function parseRemoteTarget(target: string): RemoteTarget | null {
 
 function endInfo(reason: string, initiatedBy: EndInfo['initiatedBy'], code: number | null = null, wasClean = false): EndInfo {
   return { code, reason, wasClean, initiatedBy };
+}
+
+/** A close during the cloud stage: the specific refusals keep their reason; everything else is the cloud not answering. */
+function cloudCloseReason(code: number): string {
+  return code === 4001 || code === 4003 || code === 4008 ? relayCloseReason(code) : 'cloud unreachable';
 }
 
 function relayCloseReason(code: number): string {
@@ -154,7 +175,7 @@ export class RemoteTransport implements DeviceTransport {
   private readonly parsed: RemoteTarget | null;
   private readonly getCredentials: RemoteTransportOptions['getCredentials'];
   private readonly relayUrl: string;
-  private readonly openTimeoutMs: number;
+  private readonly limits: ConnectStageLimits;
   private readonly signalIntervalMs: number;
   private readonly maxInboundChars: number;
   private readonly maxBufferedBytes: number;
@@ -165,7 +186,10 @@ export class RemoteTransport implements DeviceTransport {
   private phase: Phase = 'idle';
   private resolveOpen: (() => void) | null = null;
   private rejectOpen: ((error: TransportOpenError) => void) | null = null;
-  private openTimer: ReturnType<typeof setTimeout> | null = null;
+  private stageTimer: ReturnType<typeof setTimeout> | null = null;
+  private totalTimer: ReturnType<typeof setTimeout> | null = null;
+  private stage: ConnectStage | null = null;
+  private readonly stageListeners = new Set<(stage: ConnectStage | null) => void>();
 
   // Signaling state. The ticket lives only in this field and in the registration frame.
   private ticket = '';
@@ -191,7 +215,7 @@ export class RemoteTransport implements DeviceTransport {
     this.parsed = parseRemoteTarget(target);
     this.getCredentials = options.getCredentials;
     this.relayUrl = options.relayUrl ?? DEFAULT_RELAY_URL;
-    this.openTimeoutMs = options.openTimeoutMs ?? 30_000;
+    this.limits = { ...CONNECT_STAGE_LIMITS_MS, ...options.stageLimitsMs };
     this.signalIntervalMs = options.signalIntervalMs ?? 100;
     this.maxInboundChars = options.maxInboundChars ?? 1 << 20;
     this.maxBufferedBytes = options.maxBufferedBytes ?? 64 * 1024;
@@ -211,13 +235,39 @@ export class RemoteTransport implements DeviceTransport {
       this.phase = 'connecting';
       this.resolveOpen = resolve;
       this.rejectOpen = reject;
-      this.openTimer = setTimeout(() => {
-        const offline = this.registered && !this.devicePresent;
-        const reason = offline ? 'device is not online' : 'timeout';
-        this.terminate(endInfo(reason, 'local'), offline ? 'the device is not online' : 'timed out waiting for the device');
-      }, this.openTimeoutMs);
+      this.totalTimer = setTimeout(() => this.failStage(), this.limits.total);
+      this.enterStage('cloud');
       void this.connect();
     });
+  }
+
+  /** Reports each stage as it starts, and null when the link stops connecting. */
+  onStage(listener: (stage: ConnectStage | null) => void): void {
+    this.stageListeners.add(listener);
+  }
+
+  private enterStage(stage: ConnectStage): void {
+    if (this.stageTimer !== null) clearTimeout(this.stageTimer);
+    this.stageTimer = setTimeout(() => this.failStage(), this.limits[stage]);
+    this.setStage(stage);
+  }
+
+  /** Fails the stage that is running (its own limit, or the hard cap) with that stage's reason. */
+  private failStage(): void {
+    const reason = STAGE_TIMEOUT_REASON[this.stage ?? 'cloud'];
+    this.terminate(endInfo(reason, 'local'), reason);
+  }
+
+  private setStage(stage: ConnectStage | null): void {
+    this.stage = stage;
+    for (const listener of [...this.stageListeners]) listener(stage);
+  }
+
+  private clearTimers(): void {
+    if (this.stageTimer !== null) clearTimeout(this.stageTimer);
+    if (this.totalTimer !== null) clearTimeout(this.totalTimer);
+    this.stageTimer = null;
+    this.totalTimer = null;
   }
 
   /** Throws ContractError(DEVICE_DISCONNECTED) unless the data channel is open. */
@@ -293,7 +343,7 @@ export class RemoteTransport implements DeviceTransport {
       credentials = await this.getCredentials(target.projectId, target.deviceUuid);
     } catch {
       // The caller's error may name the ticket or session; it is deliberately not forwarded.
-      this.terminate(endInfo('credentials unavailable', 'local'), 'could not get remote access for this device');
+      this.terminate(endInfo('cloud unreachable', 'local'), 'could not get remote access for this device');
       return;
     }
     if (this.phase !== 'connecting') return;
@@ -311,8 +361,8 @@ export class RemoteTransport implements DeviceTransport {
     let ws: WebSocket;
     try {
       ws = new Impl(this.relayUrl);
-    } catch (error) {
-      this.terminate(endInfo(error instanceof Error ? error.name : 'error', 'local'), 'could not start the relay connection');
+    } catch {
+      this.terminate(endInfo('cloud unreachable', 'local'), 'could not start the relay connection');
       return;
     }
     this.ws = ws;
@@ -332,7 +382,7 @@ export class RemoteTransport implements DeviceTransport {
       this.outbox = [];
       this.clearPace();
       if (this.phase === 'connecting') {
-        const reason = relayCloseReason(event.code);
+        const reason = this.stage === 'cloud' ? cloudCloseReason(event.code) : relayCloseReason(event.code);
         this.terminate(endInfo(reason, 'remote', event.code, event.wasClean), reason);
       }
     };
@@ -358,11 +408,13 @@ export class RemoteTransport implements DeviceTransport {
     switch (message.type) {
       case 'registered':
         this.registered = true;
+        if (this.stage === 'cloud') this.enterStage(this.devicePresent ? 'link' : 'device');
         this.maybeOffer();
         return;
       case 'peer':
         if (message.role === 'device' && message.state === 'connected') {
           this.devicePresent = true;
+          if (this.stage === 'cloud' || this.stage === 'device') this.enterStage('link');
           this.maybeOffer();
         }
         return;
@@ -519,8 +571,8 @@ export class RemoteTransport implements DeviceTransport {
   private onChannelOpen(channel: RTCDataChannel): void {
     if (channel !== this.channel || this.phase !== 'connecting') return;
     this.phase = 'open';
-    if (this.openTimer !== null) clearTimeout(this.openTimer);
-    this.openTimer = null;
+    this.clearTimers();
+    this.setStage(null);
     // Keep signaling open: closing it would make the relay send the device a bye. close() releases the relay slot.
     const resolve = this.resolveOpen;
     this.resolveOpen = null;
@@ -556,8 +608,8 @@ export class RemoteTransport implements DeviceTransport {
   }
 
   private teardown(): void {
-    if (this.openTimer !== null) clearTimeout(this.openTimer);
-    this.openTimer = null;
+    this.clearTimers();
+    this.setStage(null);
     this.closeSignaling('client closing');
     this.localCandidates = [];
     this.remoteCandidates = [];

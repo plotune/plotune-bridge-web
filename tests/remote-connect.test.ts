@@ -61,8 +61,9 @@ describe('remote targets in the store', () => {
     ['no-access', 'no-access', 'Your account cannot use this device'],
     ['not-found', 'not-found', 'This device is not paired to the project'],
     ['cloud-unavailable', 'cloud-unavailable', 'The Plotune cloud could not set up the connection'],
-    ['device is not online', 'device-offline', 'The device is offline'],
-    ['timeout', 'timeout', 'The device did not answer'],
+    ['device is not online', 'device-offline', 'Your device is not reachable'],
+    ['cloud unreachable', 'cloud-unreachable', "Couldn't reach the Plotune cloud"],
+    ['link setup timed out', 'link-timeout', 'The connection could not be set up'],
   ])('explains the %s failure as %s', async (reason, kind, title) => {
     const r = remoteRig({ phase: 'connecting', code: null, reason, wasClean: false, initiatedBy: 'local' });
     await r.store.connect(TARGET);

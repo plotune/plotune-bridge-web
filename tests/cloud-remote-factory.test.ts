@@ -112,3 +112,16 @@ describe('cloud remote transport: credentials and relay', () => {
     await expect(opening).rejects.toBeInstanceOf(TransportOpenError);
   });
 });
+
+describe('cloud remote transport: stages', () => {
+  it('passes the stage reports of the remote adapter on, so the connecting screen can show them', async () => {
+    const client = fakeClient();
+    const transport = cloudRemoteFactory({ client, session: signedInSession() })('proj_1', 'dev-1');
+    const stages: Array<string | null> = [];
+    transport.onStage?.((stage) => stages.push(stage));
+    // Opening starts the cloud stage synchronously; the reports reach the listener through this wrapper.
+    const opening = transport.open().catch(() => undefined);
+    expect(stages[0]).toBe('cloud');
+    await opening;
+  });
+});

@@ -1,7 +1,7 @@
 // Plain-language explanations of how a link ended or failed to open. Close codes are shown only in the
 // technical details; the headline and steps never assume a cause the browser does not reveal.
 import { isRemoteTarget } from './remote';
-import type { CloseInfo } from './types';
+import type { CloseInfo, ConnectStage } from './types';
 
 export type PermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
 
@@ -21,7 +21,9 @@ export type NoticeKind =
   | 'no-access'
   | 'not-found'
   | 'cloud-unavailable'
-  | 'device-offline';
+  | 'device-offline'
+  | 'cloud-unreachable'
+  | 'link-timeout';
 
 /**
  * Reasons the remote connection sets up before the relay is reached (see createStore). They travel in
@@ -151,18 +153,27 @@ export function explainRemoteOpenFailure(info: CloseInfo): Notice {
       return {
         kind: 'device-offline',
         severity: 'error',
-        title: 'The device is offline',
-        summary: 'The device is paired to this project, but it is not connected to the Plotune cloud right now.',
-        steps: ['Check that the device is powered and has internet access.', 'Make sure the Bridge software is running, then try again.'],
+        title: 'Your device is not reachable',
+        summary: 'The Plotune cloud is working, but your device did not answer. It may be powered off, offline, or its firmware may not support cloud connections yet.',
+        steps: ['Make sure the device is powered on and connected to Wi-Fi.', 'Then try again.'],
         technical: tech,
       };
-    case 'timeout':
+    case 'cloud unreachable':
       return {
-        kind: 'timeout',
+        kind: 'cloud-unreachable',
         severity: 'error',
-        title: 'The device did not answer',
-        summary: 'Nothing came back through the cloud before the timeout.',
-        steps: ['Check that the device is powered and has internet access.', 'Try again in a moment.'],
+        title: "Couldn't reach the Plotune cloud",
+        summary: 'The Plotune cloud did not answer in time. Your device may be fine.',
+        steps: ['Check your internet connection, then try again.'],
+        technical: tech,
+      };
+    case 'link setup timed out':
+      return {
+        kind: 'link-timeout',
+        severity: 'error',
+        title: 'The connection could not be set up',
+        summary: 'The Plotune cloud and your device found each other, but the connection between them could not be set up in time.',
+        steps: ['Check that your network does not block the connection. Firewalls and some Wi-Fi networks do.', 'Then try again.'],
         technical: tech,
       };
     default:
@@ -252,5 +263,20 @@ export function explainClose(info: CloseInfo): Notice {
         steps: ['Connect again.'],
         technical: tech,
       };
+  }
+}
+
+/** Failures of a remote open that name a cause the user can act on. They offer "Try again" first. */
+export const RETRY_NOTICE_KINDS: readonly NoticeKind[] = ['device-offline', 'cloud-unreachable', 'link-timeout'];
+
+/** The headline and the detail line for the connecting screen, for each stage of a remote open. */
+export function stageCopy(stage: ConnectStage | null): { title: string; detail: string | null } {
+  switch (stage) {
+    case 'device':
+      return { title: 'Waiting for your device…', detail: 'Make sure it is powered on and connected to Wi-Fi.' };
+    case 'link':
+      return { title: 'Setting up the connection…', detail: null };
+    default:
+      return { title: 'Contacting the Plotune cloud…', detail: null };
   }
 }
