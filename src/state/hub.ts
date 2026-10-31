@@ -4,6 +4,7 @@ import { TraceBuffer, type TraceRow } from './trace';
 import type { WorkspaceStore } from './store';
 import { emptyWorkspace, PANEL_IDS, rememberableTarget, type PageId, type SavedDevice, type SavedWorkspace, type WorkspacePersistence } from './persistence';
 import type { DiagSettings } from '../diagnostics/settings';
+import { isRemoteTarget } from '../transport/remote';
 
 export interface Slot {
   id: string;
@@ -176,6 +177,17 @@ export class DeviceHub {
   select(id: string): void {
     const slot = this.slot(id);
     if (slot) this.set({ activeId: id, ...(!slot.remembered || slot.store.getState().phase === 'idle' ? { editingId: id } : {}) });
+  }
+
+  /**
+   * Remembered remote devices restored in the needs-sign-in state. Only these reconnect automatically after a sign-in:
+   * a device the user added in this page, or any direct address, is never started by the sign-in.
+   */
+  remoteAwaitingSignIn(): Slot[] {
+    return this.state.slots.filter((slot) => {
+      const state = slot.store.getState();
+      return slot.remembered && isRemoteTarget(state.target) && state.phase === 'closed' && state.notice?.kind === 'signed-out';
+    });
   }
 
   setTraceView(view: 'all' | string): void {

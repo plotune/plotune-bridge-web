@@ -1416,3 +1416,32 @@ input[aria-invalid='true'] {
 @media (max-width: 640px) {
   .bw-device-row .bw-button { width: 100%; }
 }
+
+/* ---- Sign-in in progress and the sign-in card ----------------------------------------- */
+.bw-signing-in {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+.bw-signing-in h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.bw-signing-in-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+.bw-sign-in-card {
+  max-width: 560px;
+  margin: 16px auto;
+}
+.bw-sign-in-card h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}

@@ -48,6 +48,10 @@ export interface CloudContextValue {
   startSignIn(prompt?: 'login'): Promise<void>;
   /** Forgets the account in this page only. plotune.net is not touched, and this tab will not sign in silently again. */
   signOut(): void;
+  /** False off bridge.plotune.net: sign-in cannot complete there, so the page offers the local network instead. */
+  signInAvailable: boolean;
+  /** The fallback on the sign-in screen: stops the automatic attempt for this tab and shows the workspace. */
+  continueWithoutSignIn(): void;
   projects: CloudProject[];
   projectsLoading: boolean;
   projectsError: CloudError | null;
@@ -88,6 +92,20 @@ function asCloudError(error: unknown): CloudError {
   return error instanceof CloudError ? error : new CloudError('bad-response');
 }
 
+type BootPlan = 'callback' | 'auto' | 'stale' | 'none';
+
+/**
+ * What the page does on load, decided from storage and the address bar only. It is read on the first render, so the page
+ * can show the sign-in state before the effect starts the redirect or the callback. The effect acts on this plan.
+ */
+function planBoot(sso: SsoBrowser, hash: string, hasSession: boolean): BootPlan {
+  if (hash !== '') return 'callback';
+  if (!ssoSupported(sso) || hasSession || sso.storage === null) return 'none';
+  if (signedOutThisTab(sso.storage) || silentAttemptFailed(sso.storage)) return 'none';
+  // A pending pair with no fragment means an earlier attempt never came back (back button, closed tab, a page in between).
+  return readPending(sso.storage) !== null ? 'stale' : 'auto';
+}
+
 export interface CloudProviderProps {
   children: ReactNode;
   /** Injected by tests; the app uses the real client, the app-wide session and the browser's sign-in hooks. */
@@ -114,6 +132,12 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   const deviceRequest = useRef<{ projectId: string; token: string; promise: Promise<void> } | null>(null);
   // The fragment is read once per page load; StrictMode runs effects twice and a one-time code can be used only once.
   const bootstrapped = useRef(false);
+  const [boot] = useState(() => {
+    const hash = sso.readHash();
+    return { hash, plan: planBoot(sso, hash, session.getToken() !== null) };
+  });
+  // True from the first render while a callback or an automatic attempt is about to run, so no workspace flashes.
+  const [bootPending, setBootPending] = useState(() => boot.plan === 'callback' || boot.plan === 'auto');
 
   const loadDevices = useCallback(
     (projectId: string): Promise<void> => {
@@ -262,26 +286,26 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
-    const hash = sso.readHash();
-    if (hash !== '') {
+    // Off the supported origin the plan is 'none' and nothing here reads or writes storage.
+    if (boot.plan === 'callback') {
       sso.clearHash();
       // The fragment is already gone; the completion (which updates state) runs as a separate task, after this effect.
-      queueMicrotask(() => void completeSignIn(hash));
+      queueMicrotask(() => void completeSignIn(boot.hash).finally(() => setBootPending(false)));
       return;
     }
-    // Off the supported origin the automatic attempt never runs, and it reads and writes no storage.
-    if (!ssoSupported(sso)) return;
-    if (session.getToken() !== null || sso.storage === null) return;
-    if (signedOutThisTab(sso.storage) || silentAttemptFailed(sso.storage)) return;
-    // A pending pair with no fragment means an earlier attempt never came back (back button, closed tab, a page in between).
-    // Retrying it would not come back either, so it counts as a failure and nothing is redirected.
-    if (readPending(sso.storage) !== null) {
+    if (boot.plan === 'stale') {
+      // Retrying a pair that never came back would not come back either, so it counts as a failure and nothing is redirected.
       clearPending(sso.storage);
       markSilentFailed(sso.storage);
       return;
     }
-    queueMicrotask(() => void redirectToPlotune('none'));
-  }, [sso, session, completeSignIn, redirectToPlotune]);
+    if (boot.plan === 'auto') {
+      queueMicrotask(() => void redirectToPlotune('none').then((started) => {
+        if (!started) markSilentFailed(sso.storage);
+        setBootPending(false);
+      }));
+    }
+  }, [sso, boot, completeSignIn, redirectToPlotune]);
 
   // A page restored from the back/forward cache may still show "signing in" from a redirect that was abandoned.
   useEffect(() => {
@@ -302,6 +326,14 @@ export function CloudProvider({ children, client = defaultClient, session = clou
     setDeviceState({ items: [], loading: false, error: null, projectId: null, loaded: false });
   }, [session, sso]);
 
+  const continueWithoutSignIn = useCallback(() => {
+    // The attempt is abandoned: a pair that comes back later is then ignored as a mismatch, and no automatic attempt runs here.
+    clearPending(sso.storage);
+    markSilentFailed(sso.storage);
+    setRedirecting(false);
+    setBootPending(false);
+  }, [sso]);
+
   const dismissSignInNotice = useCallback(() => setSignInNotice(null), []);
 
   const refreshDevices = useCallback(async () => {
@@ -319,7 +351,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
 
   const selectProject = useCallback((projectId: string) => chooseProject(projectId), [chooseProject]);
 
-  const status: CloudStatus = redirecting || exchanging ? 'signing-in' : signedIn ? 'signed-in' : 'signed-out';
+  const status: CloudStatus = redirecting || exchanging || bootPending ? 'signing-in' : signedIn ? 'signed-in' : 'signed-out';
+  const signInAvailable = ssoSupported(sso);
   const value = useMemo<CloudContextValue>(
     () => ({
       status,
@@ -328,6 +361,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       dismissSignInNotice,
       startSignIn,
       signOut,
+      signInAvailable,
+      continueWithoutSignIn,
       projects: signedIn ? projectState.items : [],
       projectsLoading: signedIn && projectState.loading,
       projectsError: signedIn ? projectState.error : null,
@@ -340,7 +375,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       refreshDevices,
       createPairingCode,
     }),
-    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
+    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
   );
 
   return <CloudContext.Provider value={value}>{children}</CloudContext.Provider>;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
 import { CloudProvider, useCloud } from './cloud/context';
 import type { CloudClient } from './cloud/client';
@@ -11,6 +11,8 @@ import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './comp
 import { NoticeCard } from './components/Notice';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
 import { SetupPane } from './components/SetupPane';
+import { SignInCard } from './components/SignInCard';
+import { SignInPending } from './components/SignInPending';
 import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
 import type { DeviceHub } from './state/hub';
 import { isRemoteTarget } from './transport/remote';
@@ -68,9 +70,10 @@ function Topbar({ showControls }: { showControls: boolean }) {
   );
 }
 
-function ConnectionBanner() {
+function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   const store = useStore();
   const hub = useHub();
+  const cloud = useCloud();
   const state = useWorkspace();
   const remote = isRemoteTarget(state.target);
   if (state.phase === 'connecting') {
@@ -82,23 +85,21 @@ function ConnectionBanner() {
     );
   }
   if (state.phase === 'closed' && state.notice) {
+    if (remote && state.notice.kind === 'signed-out') {
+      // A remembered remote device waiting for sign-in: an informational card, never an error. Once signed in, the device
+      // reconnects by itself, so nothing is shown in the meantime.
+      if (cloud.status !== 'signed-out') return null;
+      return <SignInCard signInAvailable={cloud.signInAvailable} onSignIn={() => void cloud.startSignIn()} onLocal={onLocal} />;
+    }
     if (remote) {
-      // A remote device reconnects with the account session; without one the only useful step is signing in.
-      const signedOut = state.notice.kind === 'signed-out';
       return (
         <NoticeCard
           notice={state.notice}
           actions={
             <>
-              {signedOut ? (
-                <button type="button" className="bw-button bw-primary" onClick={() => hub.editDevice(hub.active.id)}>
-                  Sign in
-                </button>
-              ) : (
-                <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
-                  Reconnect
-                </button>
-              )}
+              <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
+                Reconnect
+              </button>
               <button type="button" className="bw-button" onClick={() => hub.editDevice(hub.active.id)}>
                 Choose a device
               </button>
@@ -146,11 +147,14 @@ function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId
 }
 
 /** The add-device pane. The Plotune account is the default; the local-network address form stays behind "Advanced". */
-function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal }: { browser: BrowserInfo; pageOrigin: string } & AddModeProps) {
   const hub = useHub();
   const store = useStore();
   const state = useWorkspace();
-  const [mode, setMode] = useState<'account' | 'local'>('account');
+  // Starts in the local-network form only when the user asked for it; the request is used up when this pane closes.
+  const [mode, setMode] = useState<'account' | 'local'>(() => (startLocal ? 'local' : 'account'));
+  const onMode = setMode;
+  useEffect(() => () => setStartLocal(false), [setStartLocal]);
   const connecting = state.phase === 'connecting';
   const cancel = (
     <div className="bw-actions">
@@ -162,7 +166,8 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
 
   if (mode === 'account' && !connecting) {
     // A failed remote connection is explained above the device list; a local-network failure is shown in the local form.
-    const remoteNotice = state.notice && isRemoteTarget(state.target) ? state.notice : null;
+    // A signed-out remote device is explained by the sign-in card, so the pane does not repeat it.
+    const remoteNotice = state.notice && isRemoteTarget(state.target) && state.notice.kind !== 'signed-out' ? state.notice : null;
     const retry = remoteNotice !== null && remoteNotice.kind !== 'signed-out' && remoteNotice.kind !== 'ended';
     return (
       <div className="bw-add-device">
@@ -183,7 +188,7 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
             }
           />
         )}
-        <AccountDevices onAdvanced={() => setMode('local')} />
+        <AccountDevices onAdvanced={() => onMode('local')} />
         {cancel}
       </div>
     );
@@ -194,7 +199,7 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
       <ConnectView browser={browser} pageOrigin={pageOrigin} />
       {!connecting && (
         <>
-          <button type="button" className="bw-link-button" onClick={() => setMode('account')}>
+          <button type="button" className="bw-link-button" onClick={() => onMode('account')}>
             Use my Plotune account
           </button>
           {cancel}
@@ -204,16 +209,9 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
   );
 }
 
-/** While a sign-in redirect or exchange runs, and the notice when one failed. Shown above the page on any page. */
+/** The notice when a sign-in failed. The sign-in itself is shown by SignInPending, which replaces the page while it runs. */
 function SignInBanner() {
   const cloud = useCloud();
-  if (cloud.status === 'signing-in') {
-    return (
-      <div className="bw-banner" role="status">
-        <span className="bw-spinner" aria-hidden="true" /> Signing you in…
-      </div>
-    );
-  }
   if (cloud.signInNotice !== null) {
     return (
       <div className="bw-notice bw-notice-error" role="alert">
@@ -247,7 +245,13 @@ function EmptyIntro() {
   );
 }
 
-function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; onPage: (page: PageId) => void; browser: BrowserInfo; pageOrigin: string }) {
+/** Lets the sign-in card open the add-device pane straight into the local-network form. */
+interface AddModeProps {
+  startLocal: boolean;
+  setStartLocal: (value: boolean) => void;
+}
+
+function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStartLocal, onLocalNetwork }: { page: PageId; onPage: (page: PageId) => void; browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
   const diag = useDiagnostics();
   const diagPanels = diagnosticsPanels(diag);
   const { slots, editingId, activeId } = useHubState();
@@ -257,11 +261,11 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; on
     <main className="bw-main" data-page={page}>
       <SignInBanner />
       {editing ? (
-        <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} /></>
+        <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} /></>
       ) : (
         <>
           {slots.length === 0 && <EmptyIntro />}
-          <ConnectionBanner />
+          <ConnectionBanner onLocal={onLocalNetwork} />
           {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}
           {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} head={bar} />}
           {page === 'device' && <Dashboard page="device" panels={devicePanels} head={bar} />}
@@ -278,24 +282,64 @@ function ActiveStore({ children }: { children: React.ReactNode }) {
   return <StoreProvider store={slot.store}>{children}</StoreProvider>;
 }
 
-function Workspace({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+function Workspace({ browser, pageOrigin, onLocalNetwork, ...add }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
   const { activeId, page } = useHubState();
   const hub = useHub();
   return (
     <ActiveStore>
       <div className="bw-shell">
         <SetupPane />
-        <WorkspaceBody key={activeId} page={page} onPage={(next) => hub.setPage(next)} browser={browser} pageOrigin={pageOrigin} />
+        <WorkspaceBody key={activeId} page={page} onPage={(next) => hub.setPage(next)} browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} {...add} />
       </div>
     </ActiveStore>
   );
 }
 
+/**
+ * After a sign-in, every remembered remote device that was waiting for it reconnects, one after another. Once per sign-in:
+ * a later reload or a second sign-in starts it again, and nothing that was not remembered is ever started here.
+ */
+function RememberedReconnect() {
+  const cloud = useCloud();
+  const hub = useHub();
+  const signedIn = cloud.status === 'signed-in';
+  const started = useRef(false);
+  useEffect(() => {
+    if (!signedIn) {
+      started.current = false;
+      return;
+    }
+    if (started.current) return;
+    started.current = true;
+    const waiting = hub.remoteAwaitingSignIn();
+    if (waiting.length === 0) return;
+    queueMicrotask(() => {
+      void (async () => {
+        for (const slot of waiting) await slot.store.connect(slot.store.getState().target);
+      })();
+    });
+  }, [signedIn, hub]);
+  return null;
+}
+
 function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
+  const cloud = useCloud();
+  const hub = useHub();
+  // Set by the sign-in card's local-network button, and used up when the add-device pane it opens closes.
+  const [startLocal, setStartLocal] = useState(false);
+  const onLocalNetwork = () => {
+    setStartLocal(true);
+    hub.editDevice(hub.active.id);
+  };
   return (
     <>
       <Topbar showControls />
-      <Workspace browser={browser} pageOrigin={pageOrigin} />
+      <RememberedReconnect />
+      {cloud.status === 'signing-in' ? (
+        <SignInPending onContinueWithout={cloud.continueWithoutSignIn} />
+      ) : (
+        <Workspace browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} startLocal={startLocal} setStartLocal={setStartLocal} />
+      )}
     </>
   );
 }
