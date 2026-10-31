@@ -81,14 +81,24 @@ service worker/offline installation is added. The shell leaves panels available 
 future standalone tools; DBC/A2L viewers and an offline calibration setter are not
 implemented. Native browser local-network prompts and hardware remain unverified.
 
+### Sign-in
+
+Bridge has no password form. plotune.net is the only login page: **Continue with Plotune** (or **Sign in** in the top bar) sends the browser to `https://www.plotune.net/bridge/authorize` with a random PKCE (S256) challenge and state. After signing in there, plotune.net returns the browser to this page with a one-time code in the URL fragment. The page clears the fragment at once, checks the state, and exchanges the code and its verifier for an account token.
+
+- The PKCE verifier and the state are kept in `sessionStorage` only until the return trip uses them. The code, the token and the verifier are never written to `localStorage`.
+- The token is kept in memory only, so a reload drops it. Reloading costs one quick bounce through plotune.net: the page asks plotune.net again (`prompt=none`) on every load, and a signed-in browser comes straight back with a new code.
+- The automatic attempt runs on a page load when there is no token in memory, the browser keeps session storage, you have not signed out in this tab, and no earlier attempt failed.
+- The automatic attempt stops for the tab after a failure: a `login_required`, `access_denied` or other error return, a state mismatch, a failed exchange, or an earlier attempt that never came back (for example after the back button). The page then shows **Sign in** and does not retry on its own. A successful sign-in clears the failure, and so does **Sign in** or **Switch account**.
+- **Sign out** in the account menu forgets the account in this page and stops automatic sign-in for this tab until you choose **Sign in**. It does not touch plotune.net. **Switch account** asks plotune.net for its login form.
+- Sign-in is only active on `https://bridge.plotune.net`, the one address plotune.net returns to. On any other origin (a local build such as `http://localhost:4173` or `http://127.0.0.1:4173`, or a preview) the page makes no automatic attempt and does not redirect. **Sign in** and **Continue with Plotune** show a notice that sign-in works on bridge.plotune.net, and the local-network workspace (**Advanced: connect on the local network instead**) keeps working as before.
+
 ### Remote mode
 
-The add-device pane signs in with a Plotune account by default. The account token is kept in memory only, so a reload signs you out.
+Remote mode needs a signed-in account (see **Sign-in** above).
 
-1. Sign in with your Plotune username or email.
-2. Choose the project. Its devices are listed. The page remembers the chosen project and the remote devices you connected to, as IDs only; a remembered device needs a sign-in before it reconnects.
-3. To add a device, choose **Add a device** and enter the one-time `plt_pair_…` code on the Bridge device within 2 minutes.
-4. Choose **Connect** next to a device. The connection goes through the Plotune cloud relay (WebRTC).
+1. Choose the project. Its devices are listed. The page remembers the chosen project and the remote devices you connected to, as IDs only; a remembered device needs a sign-in before it reconnects.
+2. To add a device, choose **Add a device** and enter the one-time `plt_pair_…` code on the Bridge device within 2 minutes.
+3. Choose **Connect** next to a device. The connection goes through the Plotune cloud relay (WebRTC).
 
 The local-network address form is still available behind **Advanced: connect on the local network instead**, and it works as before.
 
@@ -132,9 +142,9 @@ The page sets its own Content-Security-Policy through a `<meta>` tag because Git
 
 ## Scope
 
-**Built:** device connection over WebSocket; permission explanation, denial handling and retry; unsupported-browser notice; replace-on-connect and close-code handling; two-channel capture with a basic live trace; channel and device status; drop, overflow and transit-loss display; send frame; client-side ISO-TP, generic UDS and XCP-on-CAN; maximizable and full-screen panels with a show/hide menu; light Plotune theme.
+**Built:** device connection over WebSocket; permission explanation, denial handling and retry; unsupported-browser notice; replace-on-connect and close-code handling; two-channel capture with a basic live trace; channel and device status; drop, overflow and transit-loss display; send frame; client-side ISO-TP, generic UDS and XCP-on-CAN; maximizable and full-screen panels with a show/hide menu; light Plotune theme; Plotune account sign-in through plotune.net; remote access through the Plotune cloud relay (WebRTC).
 
-**Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: Plotune account sign-in, remote access (relay or WebRTC), and any CAN FD view (Classic CAN only).
+**Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: any CAN FD view (Classic CAN only).
 
 ## Assumptions
 

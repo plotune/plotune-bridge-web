@@ -12,7 +12,7 @@ const ICE = [{ urls: 'turn:turn.example.test:3478', username: 'u', credential: '
 
 function fakeClient(overrides: Partial<CloudClient> = {}): CloudClient {
   return {
-    login: vi.fn(async () => ({ accessToken: ACCOUNT_TOKEN })),
+    exchangeBridgeCode: vi.fn(async () => ({ accessToken: ACCOUNT_TOKEN, expiresIn: 28800, username: 'kantr' })),
     listProjects: vi.fn(async () => []),
     listDevices: vi.fn(async () => []),
     createPairingToken: vi.fn(async () => ({ pairingToken: 'plt_pair_x', expiresAt: 0, expiresIn: 120 })),

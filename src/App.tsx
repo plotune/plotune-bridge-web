@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
-import { CloudProvider } from './cloud/context';
+import { CloudProvider, useCloud } from './cloud/context';
 import type { CloudClient } from './cloud/client';
 import type { CloudSession } from './cloud/session';
+import type { SsoBrowser } from './cloud/sso';
 import { AccountDevices } from './components/AccountDevices';
+import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
@@ -59,6 +61,9 @@ function Topbar({ showControls }: { showControls: boolean }) {
           </span>
         </>
       )}
+      <div className="bw-top-end">
+        <AccountMenu />
+      </div>
     </header>
   );
 }
@@ -199,6 +204,33 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
   );
 }
 
+/** While a sign-in redirect or exchange runs, and the notice when one failed. Shown above the page on any page. */
+function SignInBanner() {
+  const cloud = useCloud();
+  if (cloud.status === 'signing-in') {
+    return (
+      <div className="bw-banner" role="status">
+        <span className="bw-spinner" aria-hidden="true" /> Signing you in…
+      </div>
+    );
+  }
+  if (cloud.signInNotice !== null) {
+    return (
+      <div className="bw-notice bw-notice-error" role="alert">
+        <div className="bw-notice-body">
+          <p>{cloud.signInNotice}</p>
+          <div className="bw-notice-actions">
+            <button type="button" className="bw-button" onClick={() => cloud.dismissSignInNotice()}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 /** First visit: say what to do and give one obvious way to start. The sidebar "+" is easy to miss. */
 function EmptyIntro() {
   const hub = useHub();
@@ -223,6 +255,7 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; on
   const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
   return (
     <main className="bw-main" data-page={page}>
+      <SignInBanner />
       {editing ? (
         <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} /></>
       ) : (
@@ -271,14 +304,15 @@ export interface AppProps {
   hub: DeviceHub;
   browser: BrowserInfo;
   pageOrigin?: string;
-  /** Tests inject a fake cloud client and their own session. The app uses the defaults. */
+  /** Tests inject a fake cloud client, their own session and a fake browser sign-in hook. The app uses the defaults. */
   cloudClient?: CloudClient;
   cloudSession?: CloudSession;
+  cloudSso?: SsoBrowser;
 }
 
-export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession }: AppProps) {
+export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso }: AppProps) {
   return (
-    <CloudProvider client={cloudClient} session={cloudSession}>
+    <CloudProvider client={cloudClient} session={cloudSession} sso={cloudSso}>
       <HubProvider hub={hub}>
         <div className="bw-app">
           <Shell browser={browser} pageOrigin={pageOrigin} />

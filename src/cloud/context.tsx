@@ -1,19 +1,52 @@
-// React access to the Plotune account: sign-in, the project list, the selected project and its devices.
-// The account token lives only in the session (memory). The only thing written to storage is the selected project ID.
-import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+// React access to the Plotune account: sign-in through plotune.net, the project list, the selected project and its devices.
+// The account token lives only in the session (memory). The only thing written to storage is the selected project ID,
+// plus the sign-in flags and the PKCE verifier/state that sso.ts keeps in sessionStorage for the round trip.
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { readStored, removeStored, writeStored } from '../lib/storage';
 import { createCloudClient, CloudError, type CloudClient, type CloudDevice, type CloudProject, type PairingToken } from './client';
 import { cloudSession, type CloudSession } from './session';
+import {
+  buildAuthorizeUrl,
+  clearPending,
+  clearSignedOutThisTab,
+  createBrowserSso,
+  createPkce,
+  clearSilentFailed,
+  markSignedOutThisTab,
+  markSilentFailed,
+  parseCallbackHash,
+  randomState,
+  readPending,
+  savePending,
+  signedOutThisTab,
+  silentAttemptFailed,
+  ssoSupported,
+  type SignInPrompt,
+  type SsoBrowser,
+} from './sso';
 
 export const SELECTED_PROJECT_KEY = 'bw.cloud.project';
 const MAX_ID_LENGTH = 128;
+
+/** Friendly, fixed sign-in notices. None of them contains a code, token, state or verifier. */
+export const SIGN_IN_NOT_COMPLETED = 'Sign-in could not be completed. Try again.';
+export const SIGN_IN_EXPIRED = 'Sign-in expired. Try again.';
+export const SIGN_IN_CANCELLED = 'Sign-in was cancelled. Try again when you are ready.';
+export const SIGN_IN_UNSUPPORTED_ORIGIN = 'Sign-in with a Plotune account works on bridge.plotune.net. On this address you can still connect to a device on your local network.';
+export const SIGN_IN_NEEDS_STORAGE ='Sign-in needs this tab to keep a little browser storage. Allow site data for this page and try again.';
 
 export type CloudStatus = 'signed-out' | 'signing-in' | 'signed-in';
 
 export interface CloudContextValue {
   status: CloudStatus;
-  /** Rejects with CloudError. The password is passed on and never kept. */
-  signIn(usernameOrEmail: string, password: string): Promise<void>;
+  /** The username from the last successful sign-in, while signed in. */
+  username: string | null;
+  /** A fixed notice about a failed or abandoned sign-in, or null. */
+  signInNotice: string | null;
+  dismissSignInNotice(): void;
+  /** Redirects the browser to plotune.net. 'login' asks plotune.net for its login form even if a session exists. */
+  startSignIn(prompt?: 'login'): Promise<void>;
+  /** Forgets the account in this page only. plotune.net is not touched, and this tab will not sign in silently again. */
   signOut(): void;
   projects: CloudProject[];
   projectsLoading: boolean;
@@ -33,6 +66,7 @@ export interface CloudContextValue {
 
 const CloudContext = createContext<CloudContextValue | null>(null);
 const defaultClient: CloudClient = createCloudClient();
+const defaultSso: SsoBrowser = createBrowserSso();
 
 interface ListState<T> {
   items: T[];
@@ -56,15 +90,19 @@ function asCloudError(error: unknown): CloudError {
 
 export interface CloudProviderProps {
   children: ReactNode;
-  /** Injected by tests; the app uses the real client and the app-wide session. */
+  /** Injected by tests; the app uses the real client, the app-wide session and the browser's sign-in hooks. */
   client?: CloudClient;
   session?: CloudSession;
+  sso?: SsoBrowser;
 }
 
-export function CloudProvider({ children, client = defaultClient, session = cloudSession }: CloudProviderProps) {
+export function CloudProvider({ children, client = defaultClient, session = cloudSession, sso = defaultSso }: CloudProviderProps) {
   // The token is read from the session on every render; subscribing keeps the status current when it expires or is cleared.
   const signedIn = useSyncExternalStore(session.subscribe, () => session.getToken() !== null);
-  const [signingIn, setSigningIn] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [exchanging, setExchanging] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+  const [signInNotice, setSignInNotice] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(readSelectedProject);
   const [projectState, setProjectState] = useState<ListState<CloudProject>>({ items: [], loading: false, error: null });
   const [deviceState, setDeviceState] = useState<ListState<CloudDevice> & { projectId: string | null; loaded: boolean }>({ items: [], loading: false, error: null, projectId: null, loaded: false });
@@ -74,6 +112,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   // One device-list request per project and session at a time. A caller that asks while one is running (the pairing poll
   // on a slow connection) shares it, instead of starting another that would make the running response look stale.
   const deviceRequest = useRef<{ projectId: string; token: string; promise: Promise<void> } | null>(null);
+  // The fragment is read once per page load; StrictMode runs effects twice and a one-time code can be used only once.
+  const bootstrapped = useRef(false);
 
   const loadDevices = useCallback(
     (projectId: string): Promise<void> => {
@@ -134,27 +174,135 @@ export function CloudProvider({ children, client = defaultClient, session = clou
     }
   }, [client, session, chooseProject, loadDevices]);
 
-  const signIn = useCallback(
-    async (usernameOrEmail: string, password: string) => {
-      setSigningIn(true);
+  /**
+   * Sends the browser to plotune.net with a fresh PKCE challenge and state. Returns false when nothing was sent: the
+   * verifier and state could not be kept for the return trip, or the browser refused to make the random values.
+   */
+  const redirectToPlotune = useCallback(
+    async (prompt?: SignInPrompt): Promise<boolean> => {
       try {
-        const { accessToken } = await client.login(usernameOrEmail, password);
-        session.setToken(accessToken);
-        if (session.getToken() === null) throw new CloudError('bad-response');
-        await loadProjects();
-      } finally {
-        setSigningIn(false);
+        const pkce = await createPkce();
+        const state = randomState();
+        if (!savePending(sso.storage, { verifier: pkce.verifier, state })) return false;
+        setRedirecting(true);
+        sso.redirect(buildAuthorizeUrl({ challenge: pkce.challenge, state, prompt }));
+        return true;
+      } catch {
+        return false;
       }
     },
-    [client, session, loadProjects],
+    [sso],
   );
+
+  const startSignIn = useCallback(
+    async (prompt?: 'login') => {
+      // plotune.net only returns to bridge.plotune.net. Elsewhere a redirect would strand the verifier on another origin,
+      // so nothing is redirected and nothing is stored.
+      if (!ssoSupported(sso)) {
+        setSignInNotice(SIGN_IN_UNSUPPORTED_ORIGIN);
+        return;
+      }
+      // The user asked to sign in: both the sign-out and the failure flags stop applying to this tab.
+      clearSignedOutThisTab(sso.storage);
+      clearSilentFailed(sso.storage);
+      setSignInNotice(null);
+      const started = await redirectToPlotune(prompt);
+      if (!started) setSignInNotice(sso.storage === null ? SIGN_IN_NEEDS_STORAGE : SIGN_IN_NOT_COMPLETED);
+    },
+    [sso, redirectToPlotune],
+  );
+
+  /** Handles the fragment plotune.net sent back. The fragment has already been removed from the address bar. */
+  const completeSignIn = useCallback(
+    async (hash: string) => {
+      const parsed = parseCallbackHash(hash);
+      const pending = readPending(sso.storage);
+      // The verifier and state are single-use: they leave storage now, whatever happens next.
+      clearPending(sso.storage);
+      // Every outcome other than a successful exchange stops the automatic attempt until the user chooses Sign in.
+      // A stray fragment with nothing pending is not a failed sign-in, so it stays silent, but it still counts as a failure here.
+      if (parsed === null && pending === null) {
+        markSilentFailed(sso.storage);
+        return;
+      }
+      if (parsed === null || pending === null || parsed.state !== pending.state) {
+        markSilentFailed(sso.storage);
+        setSignInNotice(SIGN_IN_NOT_COMPLETED);
+        return;
+      }
+      if (parsed.kind === 'error') {
+        markSilentFailed(sso.storage);
+        // login_required is the expected answer to the automatic attempt: the user simply is not signed in there.
+        if (parsed.error === 'access_denied') setSignInNotice(SIGN_IN_CANCELLED);
+        else if (parsed.error !== 'login_required') setSignInNotice(SIGN_IN_NOT_COMPLETED);
+        return;
+      }
+      setExchanging(true);
+      try {
+        const token = await client.exchangeBridgeCode(parsed.code, pending.verifier);
+        session.setToken(token.accessToken, Math.floor(Date.now() / 1000) + token.expiresIn);
+        if (session.getToken() === null) throw new CloudError('bad-response');
+        setUsername(token.username);
+        clearSignedOutThisTab(sso.storage);
+        clearSilentFailed(sso.storage);
+        setSignInNotice(null);
+        await loadProjects();
+      } catch (error) {
+        markSilentFailed(sso.storage);
+        setSignInNotice(error instanceof CloudError && error.code === 'sign-in-expired' ? SIGN_IN_EXPIRED : SIGN_IN_NOT_COMPLETED);
+      } finally {
+        setExchanging(false);
+      }
+    },
+    [client, session, sso, loadProjects],
+  );
+
+  // Once per page load. A returning fragment is completed. Otherwise, with no session in memory, a browser that keeps
+  // session storage, no sign-out in this tab and no failed attempt, an automatic (prompt=none) attempt runs on every load.
+  useEffect(() => {
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
+    const hash = sso.readHash();
+    if (hash !== '') {
+      sso.clearHash();
+      // The fragment is already gone; the completion (which updates state) runs as a separate task, after this effect.
+      queueMicrotask(() => void completeSignIn(hash));
+      return;
+    }
+    // Off the supported origin the automatic attempt never runs, and it reads and writes no storage.
+    if (!ssoSupported(sso)) return;
+    if (session.getToken() !== null || sso.storage === null) return;
+    if (signedOutThisTab(sso.storage) || silentAttemptFailed(sso.storage)) return;
+    // A pending pair with no fragment means an earlier attempt never came back (back button, closed tab, a page in between).
+    // Retrying it would not come back either, so it counts as a failure and nothing is redirected.
+    if (readPending(sso.storage) !== null) {
+      clearPending(sso.storage);
+      markSilentFailed(sso.storage);
+      return;
+    }
+    queueMicrotask(() => void redirectToPlotune('none'));
+  }, [sso, session, completeSignIn, redirectToPlotune]);
+
+  // A page restored from the back/forward cache may still show "signing in" from a redirect that was abandoned.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setRedirecting(false);
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
 
   const signOut = useCallback(() => {
     session.clear();
+    markSignedOutThisTab(sso.storage);
+    setUsername(null);
+    setSignInNotice(null);
     setProjectState({ items: [], loading: false, error: null });
     deviceRequest.current = null;
     setDeviceState({ items: [], loading: false, error: null, projectId: null, loaded: false });
-  }, [session]);
+  }, [session, sso]);
+
+  const dismissSignInNotice = useCallback(() => setSignInNotice(null), []);
 
   const refreshDevices = useCallback(async () => {
     const projectId = selectedRef.current;
@@ -171,11 +319,14 @@ export function CloudProvider({ children, client = defaultClient, session = clou
 
   const selectProject = useCallback((projectId: string) => chooseProject(projectId), [chooseProject]);
 
-  const status: CloudStatus = signingIn ? 'signing-in' : signedIn ? 'signed-in' : 'signed-out';
+  const status: CloudStatus = redirecting || exchanging ? 'signing-in' : signedIn ? 'signed-in' : 'signed-out';
   const value = useMemo<CloudContextValue>(
     () => ({
       status,
-      signIn,
+      username: signedIn ? username : null,
+      signInNotice,
+      dismissSignInNotice,
+      startSignIn,
       signOut,
       projects: signedIn ? projectState.items : [],
       projectsLoading: signedIn && projectState.loading,
@@ -189,7 +340,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       refreshDevices,
       createPairingCode,
     }),
-    [status, signIn, signOut, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
+    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
   );
 
   return <CloudContext.Provider value={value}>{children}</CloudContext.Provider>;

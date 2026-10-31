@@ -1,6 +1,6 @@
-// The default add-device pane: sign in with a Plotune account, choose a project, see its devices, connect to one through
-// the cloud, or pair a new device with a one-time code. The LAN address form stays available behind "Advanced".
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+// The default add-device pane: sign in with a Plotune account (on plotune.net), choose a project, see its devices, connect
+// to one through the cloud, or pair a new device with a one-time code. The LAN address form stays behind "Advanced".
+import { useEffect, useState, type ReactNode } from 'react';
 import { CloudError } from '../cloud/client';
 import { useCloud } from '../cloud/context';
 import { useStore } from '../state/context';
@@ -11,22 +11,6 @@ const PAIRING_LIFETIME_NOTE = 'Enter this code on your Bridge device within 2 mi
 const POLL_INTERVAL_MS = 3000;
 const TICK_INTERVAL_MS = 1000;
 const COPIED_MS = 1500;
-
-function signInMessage(error: unknown): string {
-  if (!(error instanceof CloudError)) return 'Sign-in failed. Try again.';
-  switch (error.code) {
-    case 'bad-credentials':
-      return 'The username or password is not correct.';
-    case 'service-unavailable':
-      return 'Sign-in is temporarily unavailable, try again shortly.';
-    case 'network':
-      return 'Could not reach Plotune. Check your connection and try again.';
-    case 'rate-limited':
-      return 'Too many attempts. Wait a few minutes and try again.';
-    default:
-      return 'Sign-in failed. Try again.';
-  }
-}
 
 function pairingMessage(error: unknown): string {
   if (!(error instanceof CloudError)) return 'Could not create a pairing code. Try again.';
@@ -70,93 +54,6 @@ function pairedAgo(iso: string, now: number): string {
 function countdown(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
-interface SignInFormProps {
-  busy: boolean;
-  onSignIn: (usernameOrEmail: string, password: string) => Promise<void>;
-}
-
-function SignInForm({ busy, onSignIn }: SignInFormProps) {
-  const [usernameOrEmail, setUsernameOrEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const name = usernameOrEmail.trim();
-    const nextUsernameError = name === '' ? 'Enter your username or email.' : null;
-    const nextPasswordError = password === '' ? 'Enter your password.' : null;
-    setUsernameError(nextUsernameError);
-    setPasswordError(nextPasswordError);
-    if (nextUsernameError || nextPasswordError) return;
-    // The password leaves the field as soon as it is submitted, whatever the outcome.
-    const secret = password;
-    setPassword('');
-    setError(null);
-    onSignIn(name, secret).catch((failure: unknown) => setError(signInMessage(failure)));
-  };
-
-  return (
-    <>
-      <form className="bw-form" onSubmit={submit} noValidate aria-describedby={error ? 'account-error' : undefined}>
-        <label htmlFor="account-user">Username or email</label>
-        <input
-          id="account-user"
-          name="username"
-          type="text"
-          autoComplete="username"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          value={usernameOrEmail}
-          onChange={(e) => setUsernameOrEmail(e.target.value)}
-          aria-invalid={usernameError !== null}
-          aria-describedby={usernameError ? 'account-user-error' : undefined}
-          disabled={busy}
-        />
-        {usernameError && (
-          <p id="account-user-error" className="bw-hint">
-            {usernameError}
-          </p>
-        )}
-        <label htmlFor="account-password">Password</label>
-        <input
-          id="account-password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={passwordError !== null}
-          aria-describedby={passwordError ? 'account-password-error' : undefined}
-          disabled={busy}
-        />
-        {passwordError && (
-          <p id="account-password-error" className="bw-hint">
-            {passwordError}
-          </p>
-        )}
-        <div className="bw-actions">
-          <button type="submit" className="bw-button bw-primary" disabled={busy} aria-busy={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-        </div>
-      </form>
-      <div role="status" aria-live="polite">
-        {error && (
-          <Alert tone="error" id="account-error">
-            {error}
-          </Alert>
-        )}
-      </div>
-      <p className="bw-fine">
-        No account yet? <a href="https://www.plotune.net" target="_blank" rel="noopener noreferrer">Create an account</a>
-      </p>
-    </>
-  );
 }
 
 interface PairingState {
@@ -389,7 +286,17 @@ export function AccountDevices({ onAdvanced }: { onAdvanced: () => void }) {
         <SignedInPanel onAdvanced={onAdvanced} />
       ) : (
         <>
-          <SignInForm busy={cloud.status === 'signing-in'} onSignIn={cloud.signIn} />
+          <p className="bw-lead">
+            Sign in with your Plotune account. Plotune opens its own sign-in page, then brings you back here already signed in.
+          </p>
+          <div className="bw-actions">
+            <button type="button" className="bw-button bw-primary" onClick={() => void cloud.startSignIn()} disabled={cloud.status === 'signing-in'}>
+              Continue with Plotune
+            </button>
+          </div>
+          <p className="bw-fine">
+            No account yet? <a href="https://www.plotune.net/register" target="_blank" rel="noopener noreferrer">Create an account</a>
+          </p>
           <div className="bw-card-footer">
             <button type="button" className="bw-link-button" onClick={onAdvanced}>
               Advanced: connect on the local network instead
