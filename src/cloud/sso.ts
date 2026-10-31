@@ -4,6 +4,8 @@
 // the verifier are never written to localStorage. Nothing in this file touches the network.
 
 export const PLOTUNE_AUTHORIZE_URL = 'https://www.plotune.net/bridge/authorize';
+/** The only origin plotune.net returns to. Sign-in is offered on this origin alone. */
+export const SSO_RETURN_ORIGIN = 'https://bridge.plotune.net';
 export const PENDING_KEY = 'bw.sso.pending';
 /** Set when an automatic attempt failed (or a previous attempt never came back). Cleared by a successful sign-in or Sign in. */
 export const SILENT_FAILED_KEY = 'bw.sso.silentFailed';
@@ -33,6 +35,8 @@ export type SsoStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 /** Everything that touches the browser, so the provider can be driven without a real navigation. */
 export interface SsoBrowser {
+  /** The origin this page is served from. Sign-in only works when it is SSO_RETURN_ORIGIN. */
+  origin: string;
   /** sessionStorage, or null when the browser blocks it. Without it there can be no sign-in round trip. */
   storage: SsoStorage | null;
   /** The raw fragment, including the leading '#' when there is one. */
@@ -194,6 +198,11 @@ export function clearSignedOutThisTab(storage: SsoStorage | null): void {
   clearFlag(storage, SIGNED_OUT_KEY);
 }
 
+/** True when this page is served from the one origin plotune.net returns to. Local and preview builds are not. */
+export function ssoSupported(browser: Pick<SsoBrowser, 'origin'>): boolean {
+  return browser.origin === SSO_RETURN_ORIGIN;
+}
+
 /** The real browser: sessionStorage (when not blocked), the address bar and location.assign. */
 export function createBrowserSso(): SsoBrowser {
   let storage: SsoStorage | null;
@@ -203,6 +212,7 @@ export function createBrowserSso(): SsoBrowser {
     storage = null;
   }
   return {
+    origin: window.location.origin,
     storage,
     readHash: () => window.location.hash,
     clearHash: () => {

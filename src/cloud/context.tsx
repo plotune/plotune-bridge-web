@@ -20,6 +20,7 @@ import {
   savePending,
   signedOutThisTab,
   silentAttemptFailed,
+  ssoSupported,
   type SignInPrompt,
   type SsoBrowser,
 } from './sso';
@@ -31,7 +32,8 @@ const MAX_ID_LENGTH = 128;
 export const SIGN_IN_NOT_COMPLETED = 'Sign-in could not be completed. Try again.';
 export const SIGN_IN_EXPIRED = 'Sign-in expired. Try again.';
 export const SIGN_IN_CANCELLED = 'Sign-in was cancelled. Try again when you are ready.';
-export const SIGN_IN_NEEDS_STORAGE = 'Sign-in needs this tab to keep a little browser storage. Allow site data for this page and try again.';
+export const SIGN_IN_UNSUPPORTED_ORIGIN = 'Sign-in with a Plotune account works on bridge.plotune.net. On this address you can still connect to a device on your local network.';
+export const SIGN_IN_NEEDS_STORAGE ='Sign-in needs this tab to keep a little browser storage. Allow site data for this page and try again.';
 
 export type CloudStatus = 'signed-out' | 'signing-in' | 'signed-in';
 
@@ -194,6 +196,12 @@ export function CloudProvider({ children, client = defaultClient, session = clou
 
   const startSignIn = useCallback(
     async (prompt?: 'login') => {
+      // plotune.net only returns to bridge.plotune.net. Elsewhere a redirect would strand the verifier on another origin,
+      // so nothing is redirected and nothing is stored.
+      if (!ssoSupported(sso)) {
+        setSignInNotice(SIGN_IN_UNSUPPORTED_ORIGIN);
+        return;
+      }
       // The user asked to sign in: both the sign-out and the failure flags stop applying to this tab.
       clearSignedOutThisTab(sso.storage);
       clearSilentFailed(sso.storage);
@@ -261,6 +269,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       queueMicrotask(() => void completeSignIn(hash));
       return;
     }
+    // Off the supported origin the automatic attempt never runs, and it reads and writes no storage.
+    if (!ssoSupported(sso)) return;
     if (session.getToken() !== null || sso.storage === null) return;
     if (signedOutThisTab(sso.storage) || silentAttemptFailed(sso.storage)) return;
     // A pending pair with no fragment means an earlier attempt never came back (back button, closed tab, a page in between).

@@ -1,7 +1,7 @@
 // A fake browser sign-in hook: in-memory sessionStorage stand-in, a fragment that tests set, and a redirect that only
 // records the URL (no navigation happens in jsdom).
 import { vi } from 'vitest';
-import { SILENT_FAILED_KEY, type SsoBrowser, type SsoStorage } from '../../src/cloud/sso';
+import { SILENT_FAILED_KEY, SSO_RETURN_ORIGIN, type SsoBrowser, type SsoStorage } from '../../src/cloud/sso';
 
 export class MemoryStorage implements SsoStorage {
   readonly data = new Map<string, string>();
@@ -36,12 +36,14 @@ export interface FakeSso extends SsoBrowser {
  * By default the automatic attempt counts as failed, so an App render does not redirect on its own. A test that wants the
  * automatic attempt on a load passes `silentFailed: false` (a fresh browser that has not failed yet).
  */
-export function fakeSso(options: { hash?: string; silentFailed?: boolean } = {}): FakeSso {
+export function fakeSso(options: { hash?: string; silentFailed?: boolean; origin?: string } = {}): FakeSso {
   const storage = new MemoryStorage();
   if (options.silentFailed !== false) storage.setItem(SILENT_FAILED_KEY, '1');
   const state = { hash: options.hash ?? '' };
   const events: string[] = [];
   return {
+    // The production origin unless a test says otherwise: that is where sign-in is supported.
+    origin: options.origin ?? SSO_RETURN_ORIGIN,
     storage,
     state,
     events,

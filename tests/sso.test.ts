@@ -17,6 +17,8 @@ import {
   savePending,
   signedOutThisTab,
   silentAttemptFailed,
+  SSO_RETURN_ORIGIN,
+  ssoSupported,
   type SsoStorage,
 } from '../src/cloud/sso';
 import { MemoryStorage } from './helpers/sso';
@@ -141,6 +143,16 @@ describe('pending sign-in storage', () => {
       const storage = new MemoryStorage();
       storage.setItem(PENDING_KEY, raw);
       expect(readPending(storage)).toBeNull();
+    }
+  });
+});
+
+describe('ssoSupported', () => {
+  it('is true only for the one origin plotune.net returns to', () => {
+    expect(SSO_RETURN_ORIGIN).toBe('https://bridge.plotune.net');
+    expect(ssoSupported({ origin: 'https://bridge.plotune.net' })).toBe(true);
+    for (const origin of ['http://localhost:4173', 'http://127.0.0.1:4173', 'http://bridge.plotune.net', 'https://bridge.plotune.net.evil.test', 'https://preview.bridge.example.test', 'https://bridge.plotune.net:8443']) {
+      expect(ssoSupported({ origin })).toBe(false);
     }
   });
 });

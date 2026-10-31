@@ -90,7 +90,7 @@ Bridge has no password form. plotune.net is the only login page: **Continue with
 - The automatic attempt runs on a page load when there is no token in memory, the browser keeps session storage, you have not signed out in this tab, and no earlier attempt failed.
 - The automatic attempt stops for the tab after a failure: a `login_required`, `access_denied` or other error return, a state mismatch, a failed exchange, or an earlier attempt that never came back (for example after the back button). The page then shows **Sign in** and does not retry on its own. A successful sign-in clears the failure, and so does **Sign in** or **Switch account**.
 - **Sign out** in the account menu forgets the account in this page and stops automatic sign-in for this tab until you choose **Sign in**. It does not touch plotune.net. **Switch account** asks plotune.net for its login form.
-- Local development cannot complete sign-in: plotune.net always returns to `https://bridge.plotune.net/`, so a `localhost` copy never receives the code. Check sign-in on the deployed page.
+- Sign-in is only active on `https://bridge.plotune.net`, the one address plotune.net returns to. On any other origin (a local build such as `http://localhost:4173` or `http://127.0.0.1:4173`, or a preview) the page makes no automatic attempt and does not redirect. **Sign in** and **Continue with Plotune** show a notice that sign-in works on bridge.plotune.net, and the local-network workspace (**Advanced: connect on the local network instead**) keeps working as before.
 
 ### Remote mode
 

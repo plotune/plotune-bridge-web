@@ -27,8 +27,8 @@ interface Rig {
 }
 
 /** The fake fetch and the browser storage outlive a page load; the in-memory session does not. */
-function makeRig(options: { silentFailed?: boolean; client?: Partial<CloudClient> } = {}): Rig {
-  const sso = fakeSso({ silentFailed: options.silentFailed });
+function makeRig(options: { silentFailed?: boolean; client?: Partial<CloudClient>; origin?: string } = {}): Rig {
+  const sso = fakeSso({ silentFailed: options.silentFailed, origin: options.origin });
   const client: CloudClient = {
     exchangeBridgeCode: vi.fn(async () => {
       sso.events.push(sso.state.hash === '' ? 'exchange' : 'exchange-with-fragment');
@@ -412,6 +412,60 @@ describe('the token and the code stay out of storage', () => {
       expect(value).not.toContain(CODE);
     }
     expect(document.body.innerHTML).not.toContain(TOKEN);
+  });
+});
+
+describe('origins other than bridge.plotune.net', () => {
+  const LOCAL_ORIGINS = ['http://localhost:4173', 'http://127.0.0.1:4173', 'https://preview.bridge.example.test'];
+
+  it.each(LOCAL_ORIGINS)('the automatic attempt does nothing on %s: no redirect, no storage writes, no reads of the flags', async (origin) => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const rig = makeRig({ silentFailed: false, origin });
+    load(rig);
+    await act(async () => undefined);
+    expect(rig.sso.redirect).not.toHaveBeenCalled();
+    expect(rig.sso.storage.writtenKeys).toEqual([]);
+    expect(rig.sso.storage.data.size).toBe(0);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(screen.queryByText('Signing you in…')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+  });
+
+  it.each(LOCAL_ORIGINS)('explicit Sign in on %s shows the local-network notice and does not redirect or store anything', async (origin) => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const rig = makeRig({ silentFailed: false, origin });
+    load(rig);
+    fireEvent.click(topbarSignIn());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sign-in with a Plotune account works on bridge.plotune.net. On this address you can still connect to a device on your local network.',
+    );
+    expect(rig.sso.redirect).not.toHaveBeenCalled();
+    expect(rig.sso.storage.writtenKeys).toEqual([]);
+    expect(setItem).not.toHaveBeenCalled();
+    // The button is not left stuck on "Signing in…".
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+    expect(screen.queryByText('Signing you in…')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('Continue with Plotune on the local-network pane shows the same notice and does not redirect', async () => {
+    const rig = makeRig({ silentFailed: false, origin: 'http://localhost:4173' });
+    load(rig);
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Plotune' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in with a Plotune account works on bridge.plotune.net.');
+    expect(rig.sso.redirect).not.toHaveBeenCalled();
+    expect(rig.sso.storage.writtenKeys).toEqual([]);
+  });
+
+  it('the production origin still redirects with the automatic attempt and an explicit Sign in', async () => {
+    const rig = makeRig({ silentFailed: false, origin: 'https://bridge.plotune.net' });
+    load(rig);
+    await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalledTimes(1));
+    expect(new URL(rig.sso.redirect.mock.calls[0][0]).searchParams.get('prompt')).toBe('none');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
