@@ -1,4 +1,9 @@
+import { useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
+import { CloudProvider } from './cloud/context';
+import type { CloudClient } from './cloud/client';
+import type { CloudSession } from './cloud/session';
+import { AccountDevices } from './components/AccountDevices';
 import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
@@ -6,6 +11,7 @@ import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnosti
 import { SetupPane } from './components/SetupPane';
 import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
 import type { DeviceHub } from './state/hub';
+import { isRemoteTarget } from './transport/remote';
 import logo from './assets/plotune-logo.png';
 
 const NAV: { id: PageId; label: string; icon: typeof IconTrace }[] = [
@@ -61,14 +67,41 @@ function ConnectionBanner() {
   const store = useStore();
   const hub = useHub();
   const state = useWorkspace();
+  const remote = isRemoteTarget(state.target);
   if (state.phase === 'connecting') {
     return (
       <div className="bw-banner" role="status" data-testid="reconnecting">
-        <span className="bw-spinner" aria-hidden="true" /> Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}
+        <span className="bw-spinner" aria-hidden="true" />{' '}
+        {remote ? 'Reconnecting through the Plotune cloud…' : <>Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}</>}
       </div>
     );
   }
   if (state.phase === 'closed' && state.notice) {
+    if (remote) {
+      // A remote device reconnects with the account session; without one the only useful step is signing in.
+      const signedOut = state.notice.kind === 'signed-out';
+      return (
+        <NoticeCard
+          notice={state.notice}
+          actions={
+            <>
+              {signedOut ? (
+                <button type="button" className="bw-button bw-primary" onClick={() => hub.editDevice(hub.active.id)}>
+                  Sign in
+                </button>
+              ) : (
+                <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
+                  Reconnect
+                </button>
+              )}
+              <button type="button" className="bw-button" onClick={() => hub.editDevice(hub.active.id)}>
+                Choose a device
+              </button>
+            </>
+          }
+        />
+      );
+    }
     return (
       <NoticeCard
         notice={state.notice}
@@ -107,17 +140,77 @@ function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId
   );
 }
 
+/** The add-device pane. The Plotune account is the default; the local-network address form stays behind "Advanced". */
 function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
   const hub = useHub();
-  const { phase } = useWorkspace();
+  const store = useStore();
+  const state = useWorkspace();
+  const [mode, setMode] = useState<'account' | 'local'>('account');
+  const connecting = state.phase === 'connecting';
+  const cancel = (
+    <div className="bw-actions">
+      <button type="button" className="bw-button" onClick={() => hub.cancelEdit()}>
+        Cancel
+      </button>
+    </div>
+  );
+
+  if (mode === 'account' && !connecting) {
+    // A failed remote connection is explained above the device list; a local-network failure is shown in the local form.
+    const remoteNotice = state.notice && isRemoteTarget(state.target) ? state.notice : null;
+    const retry = remoteNotice !== null && remoteNotice.kind !== 'signed-out' && remoteNotice.kind !== 'ended';
+    return (
+      <div className="bw-add-device">
+        {remoteNotice && (
+          <NoticeCard
+            notice={remoteNotice}
+            actions={
+              <>
+                {retry && (
+                  <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
+                    Try again
+                  </button>
+                )}
+                <button type="button" className="bw-button" onClick={() => store.reset()}>
+                  Dismiss
+                </button>
+              </>
+            }
+          />
+        )}
+        <AccountDevices onAdvanced={() => setMode('local')} />
+        {cancel}
+      </div>
+    );
+  }
+
   return (
     <div className="bw-add-device">
       <ConnectView browser={browser} pageOrigin={pageOrigin} />
-      {phase !== 'connecting' && <div className="bw-actions">
-        <button type="button" className="bw-button" onClick={() => hub.cancelEdit()}>
-          Cancel
+      {!connecting && (
+        <>
+          <button type="button" className="bw-link-button" onClick={() => setMode('account')}>
+            Use my Plotune account
+          </button>
+          {cancel}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** First visit: say what to do and give one obvious way to start. The sidebar "+" is easy to miss. */
+function EmptyIntro() {
+  const hub = useHub();
+  return (
+    <div className="bw-offline-intro" data-testid="empty-intro">
+      <h1>Your workspace</h1>
+      <p>Sign in with your Plotune account to pair a Bridge device and connect to it from anywhere. You can also explore the panels offline, or connect on your local network.</p>
+      <div className="bw-actions">
+        <button type="button" className="bw-button bw-primary" onClick={() => hub.addDevice()}>
+          Sign in and add a device
         </button>
-      </div>}
+      </div>
     </div>
   );
 }
@@ -134,7 +227,7 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; on
         <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} /></>
       ) : (
         <>
-          {slots.length === 0 && <div className="bw-offline-intro"><h1>Your workspace</h1><p>Explore the panels and settings offline. Add a device when you’re ready to capture.</p></div>}
+          {slots.length === 0 && <EmptyIntro />}
           <ConnectionBanner />
           {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}
           {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} head={bar} />}
@@ -174,12 +267,23 @@ function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: stri
   );
 }
 
-export function App({ hub, browser, pageOrigin = location.origin }: { hub: DeviceHub; browser: BrowserInfo; pageOrigin?: string }) {
+export interface AppProps {
+  hub: DeviceHub;
+  browser: BrowserInfo;
+  pageOrigin?: string;
+  /** Tests inject a fake cloud client and their own session. The app uses the defaults. */
+  cloudClient?: CloudClient;
+  cloudSession?: CloudSession;
+}
+
+export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession }: AppProps) {
   return (
-    <HubProvider hub={hub}>
-      <div className="bw-app">
-        <Shell browser={browser} pageOrigin={pageOrigin} />
-      </div>
-    </HubProvider>
+    <CloudProvider client={cloudClient} session={cloudSession}>
+      <HubProvider hub={hub}>
+        <div className="bw-app">
+          <Shell browser={browser} pageOrigin={pageOrigin} />
+        </div>
+      </HubProvider>
+    </CloudProvider>
   );
 }

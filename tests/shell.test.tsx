@@ -5,6 +5,7 @@ import { DeviceHub } from '../src/state/hub';
 import { defaultEnv, WorkspaceStore } from '../src/state/store';
 
 const browser = { family: 'chromium', name: 'Chrome', supported: true } as const;
+const ADVANCED = 'Advanced: connect on the local network instead';
 afterEach(cleanup);
 
 it('opens the main workspace and settings without a device or permission request', () => {
@@ -24,6 +25,7 @@ it('opens the main workspace and settings without a device or permission request
   expect(transportFactory).not.toHaveBeenCalled();
   expect(queryPermission).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
+  fireEvent.click(screen.getByRole('button', { name: ADVANCED }));
   expect(screen.getByTestId('permission-explainer')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
   expect(hub.getState().slots).toHaveLength(0);
@@ -37,11 +39,14 @@ it('reopens an unfinished device connection form after adding and selecting anot
   })), (fn) => fn());
   render(<App hub={hub} browser={browser} />);
   fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
+  fireEvent.click(screen.getByRole('button', { name: ADVANCED }));
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
   fireEvent.click(screen.getByRole('button', { name: 'Select Bridge 1' }));
+  fireEvent.click(screen.getByRole('button', { name: ADVANCED }));
   expect(screen.getByLabelText('Device address')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
   expect(hub.getState().slots).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: ADVANCED }));
   expect(screen.getByLabelText('Device address')).toBeVisible();
 });

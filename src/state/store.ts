@@ -3,11 +3,12 @@
 // generation it belongs to; anything from an older connection (a replaced or abandoned session) is ignored.
 import { bytesToHex } from '../lib/bytes';
 import { connectPolicy, type BrowserInfo } from '../lib/browser';
-import { parseTarget } from '../lib/target';
+import { parseTarget, type ParsedTarget } from '../lib/target';
 import { ContractError, describeErrorCode } from '../protocol/errors';
 import type { CanFrame, ChannelStatistics, ChannelStatus, DeviceDescriptor, FrameBatch, TxFrame } from '../protocol/types';
 import { DeviceSession } from '../device/session';
-import { explainClose, explainOpenFailure, type Notice, type PermissionState } from '../transport/notices';
+import { explainClose, explainOpenFailure, signInToReconnectNotice, type Notice, type PermissionState } from '../transport/notices';
+import { isRemoteTarget } from '../transport/remote';
 import { TransportOpenError, type CloseInfo, type TransportFactory } from '../transport/types';
 import { TraceBuffer } from './trace';
 import type { DevicePreferences } from './persistence';
@@ -115,8 +116,12 @@ export class WorkspaceStore {
 
   restorePreferences(preferences: DevicePreferences): void {
     // Called only while constructing a disconnected hub, never to configure hardware.
+    // A page starts with no account session, so a remembered remote device can only be reconnected after signing in.
+    const notice: Notice = isRemoteTarget(preferences.target)
+      ? signInToReconnectNotice()
+      : { kind: 'ended', severity: 'info', title: 'Ready to reconnect', summary: 'Reconnect to read the device’s current channel settings.', steps: [], technical: '' };
     this.set({ target: preferences.target, captureChannels: [...preferences.captureChannels], transmitChannel: preferences.transmitChannel,
-      phase: 'closed', notice: { kind: 'ended', severity: 'info', title: 'Ready to reconnect', summary: 'Reconnect to read the device’s current channel settings.', steps: [], technical: '' } });
+      phase: 'closed', notice });
   }
 
   setTransmitChannel(channel: number): void {
@@ -162,7 +167,8 @@ export class WorkspaceStore {
 
   async connect(input: string): Promise<void> {
     const target = parseTarget(input);
-    const policy = connectPolicy(this.env.browser, target, this.env.pageIsSecure);
+    // Remote targets go through the cloud relay, so the direct-connection browser rules and the local-network prompt do not apply.
+    const policy = target.remote ? { allowed: true } : connectPolicy(this.env.browser, target, this.env.pageIsSecure);
     if (!policy.allowed) {
       this.set({
         phase: 'closed',
@@ -180,9 +186,12 @@ export class WorkspaceStore {
 
     const generation = this.beginGeneration();
     this.set({ phase: 'connecting', target: target.url, notice: null, slowConnect: false, actionError: null, descriptor: null, channels: [], statistics: [], capturing: false });
-    this.slowTimer = setTimeout(() => {
-      if (generation === this.generation && this.state.phase === 'connecting') this.set({ slowConnect: true });
-    }, this.env.slowConnectMs);
+    // The slow-connect hint is about the browser's local-network prompt, which a remote connection never shows.
+    if (!target.remote) {
+      this.slowTimer = setTimeout(() => {
+        if (generation === this.generation && this.state.phase === 'connecting') this.set({ slowConnect: true });
+      }, this.env.slowConnectMs);
+    }
 
     const transport = this.env.transportFactory(target.url);
     const session = new DeviceSession(transport, {
@@ -197,7 +206,7 @@ export class WorkspaceStore {
       const descriptor = await session.connect();
       if (generation !== this.generation) return;
       this.clearSlowTimer();
-      const permission = await this.env.queryPermission(target.loopback);
+      const permission = await this.permissionFor(target);
       if (generation !== this.generation) return;
       // A different device starts a clean trace: frames and counters of two devices must never be read as one.
       const differentDevice = this.knownDeviceId !== null && this.knownDeviceId !== descriptor.deviceId;
@@ -228,7 +237,7 @@ export class WorkspaceStore {
     } catch (error) {
       if (generation !== this.generation) return;
       this.clearSlowTimer();
-      const permission = await this.env.queryPermission(target.loopback);
+      const permission = await this.permissionFor(target);
       if (generation !== this.generation) return;
       if (error instanceof TransportOpenError) {
         this.set({ phase: 'closed', permission, notice: explainOpenFailure(error.info, { pageOrigin: this.env.pageOrigin, targetUrl: target.url, permission }) });
@@ -251,6 +260,10 @@ export class WorkspaceStore {
         });
       }
     }
+  }
+
+  private permissionFor(target: ParsedTarget): Promise<PermissionState> {
+    return target.remote ? Promise.resolve('unknown') : this.env.queryPermission(target.loopback);
   }
 
   disconnect(): void {

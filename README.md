@@ -81,6 +81,17 @@ service worker/offline installation is added. The shell leaves panels available 
 future standalone tools; DBC/A2L viewers and an offline calibration setter are not
 implemented. Native browser local-network prompts and hardware remain unverified.
 
+### Remote mode
+
+The add-device pane signs in with a Plotune account by default. The account token is kept in memory only, so a reload signs you out.
+
+1. Sign in with your Plotune username or email.
+2. Choose the project. Its devices are listed. The page remembers the chosen project and the remote devices you connected to, as IDs only; a remembered device needs a sign-in before it reconnects.
+3. To add a device, choose **Add a device** and enter the one-time `plt_pair_…` code on the Bridge device within 2 minutes.
+4. Choose **Connect** next to a device. The connection goes through the Plotune cloud relay (WebRTC).
+
+The local-network address form is still available behind **Advanced: connect on the local network instead**, and it works as before.
+
 ### Looking at the interface while developing
 
 `node scripts/dev-shots.mjs <label> [baseUrl] [addr1,addr2,...]` drives a running preview or dev server (default `http://127.0.0.1:4173`) with two devices and saves screenshots of the Capture, Diagnostics and Device windows, and a phone-width Capture view, into `.dev-shots/<label>/` (ignored by git). Take one before and one after a change to compare them.
@@ -117,7 +128,7 @@ To add a transport, implement `DeviceTransport` (`src/transport/types.ts`): open
 
 `.github/workflows/deploy.yml` builds the static site and publishes `dist/` with GitHub Pages on every push to `main`. Set **Settings → Pages → Source: GitHub Actions** and the custom domain `bridge.plotune.net` in the repository settings; DNS is configured outside this repository. The build uses relative asset paths, so it also works from a sub-path.
 
-The page sets its own Content-Security-Policy through a `<meta>` tag because GitHub Pages cannot set headers. `connect-src` has to allow `ws:` and `wss:` to any host because a device's address is not known in advance. Nothing is loaded from third parties; fonts are bundled.
+The page sets its own Content-Security-Policy through a `<meta>` tag because GitHub Pages cannot set headers. `connect-src` has to allow `ws:` and `wss:` to any host because a device's address is not known in advance. It also allows `https://api.plotune.net` (account sign-in) and `https://stream.plotune.net` (projects, devices, pairing codes and the remote relay). Nothing is loaded from third parties; fonts are bundled.
 
 ## Scope
 

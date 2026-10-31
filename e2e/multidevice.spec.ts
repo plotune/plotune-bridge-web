@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { connected } from './helpers';
+import { connected, openLocalAddressForm } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 const BASE = 1_000_000_000n;
@@ -10,7 +10,7 @@ test.describe('several devices at once', () => {
     const second = await new MockDeviceServer({ deviceId: 'mock-bridge-can-0002' }).ready();
     await connected(page, first.url);
 
-    await page.getByRole('button', { name: 'Add a device' }).click();
+    await openLocalAddressForm(page);
     await expect(page.getByLabel('Device address')).toBeVisible();
     await page.getByLabel('Device address').fill(second.url);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -58,7 +58,7 @@ test.describe('several devices at once', () => {
   test('a device that cannot be reached does not disturb the connected one', async ({ page }) => {
     const first = await new MockDeviceServer().ready();
     await connected(page, first.url);
-    await page.getByRole('button', { name: 'Add a device' }).click();
+    await openLocalAddressForm(page);
     await page.getByLabel('Device address').fill('ws://127.0.0.1:9');
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page.locator('[data-notice]').first()).toBeVisible();

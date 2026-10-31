@@ -4,6 +4,15 @@ import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 
+/** The Advanced link on the account pane. The local-network address form is behind it. */
+export const LOCAL_ADVANCED = 'Advanced: connect on the local network instead';
+
+/** Opens the local-network address form from the add-device pane (the account pane is the default). */
+export async function openLocalAddressForm(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Add a device' }).click();
+  await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
+}
+
 /** Answers the first-visit explainer and connects. `address` may be a full ws:// or wss:// URL. */
 export async function connect(page: Page, address: string): Promise<void> {
   await page.goto('/');
@@ -14,7 +23,7 @@ export async function connect(page: Page, address: string): Promise<void> {
     await page.locator('main').getByRole('button', { name: 'Reconnect', exact: true }).click();
     return;
   }
-  await page.getByRole('button', { name: 'Add a device' }).click();
+  await openLocalAddressForm(page);
   await expect(page.locator('[data-testid=permission-explainer], #device-address')).toBeVisible();
   const explainer = page.getByTestId('permission-explainer');
   if (await explainer.isVisible()) await page.getByRole('button', { name: 'Continue' }).click();

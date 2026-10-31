@@ -1,10 +1,14 @@
+import { parseRemoteTarget } from '../transport/remote';
+
 export interface ParsedTarget {
   ok: boolean;
-  /** Normalised ws:// or wss:// URL; empty when not ok. */
+  /** Normalised ws:// or wss:// URL; empty when not ok. For a remote target, the `remote:<project>/<device>` string itself. */
   url: string;
   scheme: 'ws' | 'wss' | null;
   host: string;
   loopback: boolean;
+  /** True for `remote:<projectId>/<deviceUuid>` targets, reached through the Plotune cloud. Absent for direct addresses. */
+  remote?: boolean;
   error?: string;
 }
 
@@ -19,6 +23,8 @@ export function parseTarget(input: string): ParsedTarget {
   const text = input.trim();
   const bad = (error: string): ParsedTarget => ({ ok: false, url: '', scheme: null, host: '', loopback: false, error });
   if (!text) return bad('Enter the device address, for example 192.168.1.50:9101.');
+  // Only a well-formed remote target is recognised; any other text keeps its direct-address meaning.
+  if (parseRemoteTarget(text)) return { ok: true, url: text, scheme: null, host: '', loopback: false, remote: true };
   const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text);
   if (hasScheme && !/^wss?:\/\//i.test(text)) return bad('Use a ws:// or wss:// address.');
   let url: URL;

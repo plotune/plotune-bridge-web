@@ -14,3 +14,11 @@ export function writeStored(key: string, value: string): void {
     // storage unavailable: the page keeps working without remembering
   }
 }
+
+export function removeStored(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // storage unavailable: nothing was remembered
+  }
+}
