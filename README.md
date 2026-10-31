@@ -71,7 +71,7 @@ BRIDGE_BENCH_ORIGIN_URL=ws://127.0.0.1:9302   # a second bench started with --ws
 
 [Persistence details](docs/persistence.md) describe the versioned localStorage schema,
 legacy preference migration, validation and storage-failure fallback. After a reload,
-the last view and remembered device list return **disconnected**. Choose Reconnect;
+the last view and remembered device list return **disconnected**. Choose Reconnect (a remembered remote device reconnects by itself once you have signed in);
 hello/status reads the device's current bit rate, termination and armed state. The
 browser never reapplies a saved hardware configuration or automatically takes over
 a device. Capture inclusion and send-channel choices are browser preferences only.
@@ -86,7 +86,7 @@ implemented. Native browser local-network prompts and hardware remain unverified
 Bridge has no password form. plotune.net is the only login page: **Continue with Plotune** (or **Sign in** in the top bar) sends the browser to `https://www.plotune.net/bridge/authorize` with a random PKCE (S256) challenge and state. After signing in there, plotune.net returns the browser to this page with a one-time code in the URL fragment. The page clears the fragment at once, checks the state, and exchanges the code and its verifier for an account token.
 
 - The PKCE verifier and the state are kept in `sessionStorage` only until the return trip uses them. The code, the token and the verifier are never written to `localStorage`.
-- The token is kept in memory only, so a reload drops it. Reloading costs one quick bounce through plotune.net: the page asks plotune.net again (`prompt=none`) on every load, and a signed-in browser comes straight back with a new code.
+- The token is never stored. A page load signs in again through plotune.net (`prompt=none`), a quick bounce while the page shows **Signing you in with your Plotune account…**. A signed-in browser comes straight back with a new code, and the remembered remote devices then reconnect once.
 - The automatic attempt runs on a page load when there is no token in memory, the browser keeps session storage, you have not signed out in this tab, and no earlier attempt failed.
 - The automatic attempt stops for the tab after a failure: a `login_required`, `access_denied` or other error return, a state mismatch, a failed exchange, or an earlier attempt that never came back (for example after the back button). The page then shows **Sign in** and does not retry on its own. A successful sign-in clears the failure, and so does **Sign in** or **Switch account**.
 - **Sign out** in the account menu forgets the account in this page and stops automatic sign-in for this tab until you choose **Sign in**. It does not touch plotune.net. **Switch account** asks plotune.net for its login form.
@@ -96,7 +96,7 @@ Bridge has no password form. plotune.net is the only login page: **Continue with
 
 Remote mode needs a signed-in account (see **Sign-in** above).
 
-1. Choose the project. Its devices are listed. The page remembers the chosen project and the remote devices you connected to, as IDs only; a remembered device needs a sign-in before it reconnects.
+1. Choose the project. Its devices are listed. The page remembers the chosen project and the remote devices you connected to, as IDs only. A remembered remote device is reconnected automatically after each sign-in; until then it shows an informational **Sign in to connect to your device** card with **Sign in with Plotune** and **Use the local network instead**.
 2. To add a device, choose **Add a device** and enter the one-time `plt_pair_…` code on the Bridge device within 2 minutes.
 3. Choose **Connect** next to a device. The connection goes through the Plotune cloud relay (WebRTC).
 

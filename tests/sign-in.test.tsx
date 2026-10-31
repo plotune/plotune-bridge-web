@@ -227,7 +227,7 @@ describe('the automatic attempt', () => {
     load(rig);
     await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalledTimes(1));
     expect(new URL(rig.sso.redirect.mock.calls[0][0]).searchParams.get('prompt')).toBe('none');
-    expect(screen.getByText('Signing you in…')).toBeVisible();
+    expect(screen.getByText('Signing you in with your Plotune account…')).toBeVisible();
     // Nothing is marked before the redirect: only the pending pair is written.
     expect(rig.sso.storage.writtenKeys).toEqual([PENDING_KEY]);
   });
@@ -250,7 +250,7 @@ describe('the automatic attempt', () => {
     returnWith(rig, { error: 'login_required', state: stateFromRedirect(rig.sso) });
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeVisible();
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.queryByText('Signing you in…')).toBeNull();
+    expect(screen.queryByText('Signing you in with your Plotune account…')).toBeNull();
     expect(rig.sso.storage.data.get(SILENT_FAILED_KEY)).toBe('1');
     load(rig);
     await act(async () => undefined);
@@ -427,7 +427,7 @@ describe('origins other than bridge.plotune.net', () => {
     expect(rig.sso.storage.writtenKeys).toEqual([]);
     expect(rig.sso.storage.data.size).toBe(0);
     expect(setItem).not.toHaveBeenCalled();
-    expect(screen.queryByText('Signing you in…')).toBeNull();
+    expect(screen.queryByText('Signing you in with your Plotune account…')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
   });
@@ -445,7 +445,7 @@ describe('origins other than bridge.plotune.net', () => {
     expect(setItem).not.toHaveBeenCalled();
     // The button is not left stuck on "Signing in…".
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
-    expect(screen.queryByText('Signing you in…')).toBeNull();
+    expect(screen.queryByText('Signing you in with your Plotune account…')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('alert')).toBeNull();
   });

@@ -1,4 +1,5 @@
 import { formatBitrate } from './ChannelsPanel';
+import { useCloud } from '../cloud/context';
 import { useHub, useHubState } from '../state/context';
 import type { Slot } from '../state/hub';
 import { MAX_DEVICES } from '../state/hub';
@@ -10,9 +11,13 @@ function phaseText(phase: string): string {
 
 function DeviceNode({ slot, active }: { slot: Slot; active: boolean }) {
   const hub = useHub();
+  const cloud = useCloud();
+  const { queueSettledFor } = useHubState();
   const state = slot.store.getState();
   const connected = state.phase === 'connected';
   const started = slot.remembered || state.sessionNumber > 0;
+  // Queued behind the automatic reconnect of this sign-in: it is already scheduled, so no button offers to start it.
+  const queued = cloud.status === 'signed-in' && hub.isAwaitingSignIn(slot) && queueSettledFor !== cloud.readSessionGeneration();
   return (
     <li className={`bw-setup-device ${active ? 'is-active' : ''}`} aria-current={active ? 'true' : undefined} data-testid={started ? 'device-chip' : `setup-${slot.id}`} data-phase={state.phase}>
       <div className="bw-setup-row">
@@ -54,8 +59,9 @@ function DeviceNode({ slot, active }: { slot: Slot; active: boolean }) {
             </button>
           ) : (
             // The active device's notice already offers Reconnect; one entry point per action.
-            !active && state.target && (
-              <button type="button" className="bw-button bw-small" onClick={() => void slot.store.connect(state.target)} disabled={state.phase === 'connecting'}>
+            // While connecting, the button would only be disabled, so it is not shown.
+            !active && !queued && state.phase !== 'connecting' && state.target && (
+              <button type="button" className="bw-button bw-small" onClick={() => void slot.store.connect(state.target)}>
                 Reconnect
               </button>
             )

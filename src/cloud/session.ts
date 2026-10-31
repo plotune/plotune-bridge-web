@@ -1,5 +1,5 @@
 // In-memory account session. The token lives only in this closure: it is never written to localStorage,
-// sessionStorage, IndexedDB, cookies or the URL, so a page reload signs the user out by design.
+// sessionStorage, IndexedDB, cookies or the URL, so a page reload starts a new sign-in round trip.
 // The JWT exp claim is read without verification, only to know when to forget the token. The server still
 // decides whether a token is valid.
 
