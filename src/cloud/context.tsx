@@ -23,6 +23,8 @@ export interface CloudContextValue {
   /** Devices of the selected project only. Empty while none is selected. */
   devices: CloudDevice[];
   devicesLoading: boolean;
+  /** True once the list for the selected project has loaded successfully; pairing needs this as its baseline. */
+  devicesLoaded: boolean;
   devicesError: CloudError | null;
   refreshDevices(): Promise<void>;
   /** Rejects with CloudError. The code is returned to the caller only; it is never stored. */
@@ -65,25 +67,40 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   const [signingIn, setSigningIn] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(readSelectedProject);
   const [projectState, setProjectState] = useState<ListState<CloudProject>>({ items: [], loading: false, error: null });
-  const [deviceState, setDeviceState] = useState<ListState<CloudDevice> & { projectId: string | null }>({ items: [], loading: false, error: null, projectId: null });
+  const [deviceState, setDeviceState] = useState<ListState<CloudDevice> & { projectId: string | null; loaded: boolean }>({ items: [], loading: false, error: null, projectId: null, loaded: false });
   // Read by the async loaders when a response arrives, so a late answer for an old project or session is dropped.
   const selectedRef = useRef<string | null>(selectedProjectId);
   const deviceEpoch = useRef(0);
+  // One device-list request per project and session at a time. A caller that asks while one is running (the pairing poll
+  // on a slow connection) shares it, instead of starting another that would make the running response look stale.
+  const deviceRequest = useRef<{ projectId: string; token: string; promise: Promise<void> } | null>(null);
 
   const loadDevices = useCallback(
-    async (projectId: string) => {
+    (projectId: string): Promise<void> => {
       const token = session.getToken();
-      if (token === null) return;
+      if (token === null) return Promise.resolve();
+      const running = deviceRequest.current;
+      if (running !== null && running.projectId === projectId && running.token === token) return running.promise;
       const epoch = ++deviceEpoch.current;
-      setDeviceState((prev) => ({ projectId, items: prev.projectId === projectId ? prev.items : [], loading: true, error: null }));
-      try {
-        const items = await client.listDevices(token, projectId);
-        if (epoch !== deviceEpoch.current || session.getToken() !== token) return;
-        setDeviceState({ projectId, items, loading: false, error: null });
-      } catch (error) {
-        if (epoch !== deviceEpoch.current || session.getToken() !== token) return;
-        setDeviceState({ projectId, items: [], loading: false, error: asCloudError(error) });
-      }
+      setDeviceState((prev) => {
+        const same = prev.projectId === projectId;
+        return { projectId, items: same ? prev.items : [], loading: true, error: null, loaded: same && prev.loaded };
+      });
+      const entry = { projectId, token, promise: Promise.resolve() };
+      deviceRequest.current = entry;
+      entry.promise = (async () => {
+        try {
+          const items = await client.listDevices(token, projectId);
+          if (epoch !== deviceEpoch.current || session.getToken() !== token) return;
+          setDeviceState({ projectId, items, loading: false, error: null, loaded: true });
+        } catch (error) {
+          if (epoch !== deviceEpoch.current || session.getToken() !== token) return;
+          setDeviceState({ projectId, items: [], loading: false, error: asCloudError(error), loaded: false });
+        } finally {
+          if (deviceRequest.current === entry) deviceRequest.current = null;
+        }
+      })();
+      return entry.promise;
     },
     [client, session],
   );
@@ -135,7 +152,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   const signOut = useCallback(() => {
     session.clear();
     setProjectState({ items: [], loading: false, error: null });
-    setDeviceState({ items: [], loading: false, error: null, projectId: null });
+    deviceRequest.current = null;
+    setDeviceState({ items: [], loading: false, error: null, projectId: null, loaded: false });
   }, [session]);
 
   const refreshDevices = useCallback(async () => {
@@ -166,6 +184,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       selectProject,
       devices: signedIn && deviceState.projectId === selectedProjectId ? deviceState.items : [],
       devicesLoading: signedIn && deviceState.projectId === selectedProjectId && deviceState.loading,
+      devicesLoaded: signedIn && deviceState.projectId === selectedProjectId && deviceState.loaded,
       devicesError: signedIn && deviceState.projectId === selectedProjectId ? deviceState.error : null,
       refreshDevices,
       createPairingCode,
