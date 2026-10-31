@@ -350,9 +350,10 @@ describe('the local-network address stays available', () => {
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
   });
 
-  it('the first empty workspace points at Add a device', () => {
+  it('the first empty workspace offers one obvious way to sign in and add a device', async () => {
     setup();
     expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeVisible();
-    expect(screen.getByText(/choose Add a device in the Devices list/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    expect(await screen.findByRole('heading', { name: /sign in to connect your bridge/i })).toBeVisible();
   });
 });

@@ -199,6 +199,22 @@ function AddDevicePane({ browser, pageOrigin }: { browser: BrowserInfo; pageOrig
   );
 }
 
+/** First visit: say what to do and give one obvious way to start. The sidebar "+" is easy to miss. */
+function EmptyIntro() {
+  const hub = useHub();
+  return (
+    <div className="bw-offline-intro" data-testid="empty-intro">
+      <h1>Your workspace</h1>
+      <p>Sign in with your Plotune account to pair a Bridge device and connect to it from anywhere. You can also explore the panels offline, or connect on your local network.</p>
+      <div className="bw-actions">
+        <button type="button" className="bw-button bw-primary" onClick={() => hub.addDevice()}>
+          Sign in and add a device
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; onPage: (page: PageId) => void; browser: BrowserInfo; pageOrigin: string }) {
   const diag = useDiagnostics();
   const diagPanels = diagnosticsPanels(diag);
@@ -211,7 +227,7 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin }: { page: PageId; on
         <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} /></>
       ) : (
         <>
-          {slots.length === 0 && <div className="bw-offline-intro"><h1>Your workspace</h1><p>Explore the panels and settings offline. To capture, choose Add a device in the Devices list: sign in with your Plotune account, or connect on the local network.</p></div>}
+          {slots.length === 0 && <EmptyIntro />}
           <ConnectionBanner />
           {page === 'capture' && <Dashboard page="capture" panels={capturePanels} head={bar} />}
           {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} head={bar} />}
