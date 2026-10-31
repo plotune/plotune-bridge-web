@@ -4,6 +4,7 @@ import { TraceBuffer, type TraceRow } from './trace';
 import type { WorkspaceStore } from './store';
 import { emptyWorkspace, PANEL_IDS, rememberableTarget, type PageId, type SavedDevice, type SavedWorkspace, type WorkspacePersistence } from './persistence';
 import type { DiagSettings } from '../diagnostics/settings';
+import { isRemoteTarget } from '../transport/remote';
 
 export interface Slot {
   id: string;
@@ -25,6 +26,8 @@ export interface HubState {
   hidden: SavedWorkspace['hidden'];
   diagnostics: DiagSettings;
   permissionExplained: boolean;
+  /** The account session generation whose automatic reconnect queue has settled. Null until one has. */
+  queueSettledFor: number | null;
 }
 
 export const MAX_DEVICES = 8;
@@ -49,7 +52,7 @@ export class DeviceHub {
     const saved = persistence?.load() ?? emptyWorkspace();
     this.empty = { id: '', label: '', store: makeStore(), remembered: false }; // offline panel context, never a listed device
     this.state = { slots: [], activeId: saved.activeId, traceView: saved.traceView, rev: 0, editingId: null,
-      page: saved.page, hidden: saved.hidden, diagnostics: saved.diagnostics, permissionExplained: saved.permissionExplained };
+      page: saved.page, hidden: saved.hidden, diagnostics: saved.diagnostics, permissionExplained: saved.permissionExplained, queueSettledFor: null };
     this.state.slots = saved.devices.map((d) => this.create(d));
     this.counter = Math.max(0, ...this.state.slots.map((s) => Number(s.id.slice(1))));
   }
@@ -176,6 +179,26 @@ export class DeviceHub {
   select(id: string): void {
     const slot = this.slot(id);
     if (slot) this.set({ activeId: id, ...(!slot.remembered || slot.store.getState().phase === 'idle' ? { editingId: id } : {}) });
+  }
+
+  /**
+   * Remembered remote devices restored in the needs-sign-in state. Only these reconnect automatically after a sign-in:
+   * a device the user added in this page, or any direct address, is never started by the sign-in.
+   */
+  /** Records that the automatic reconnect queue for this account session has finished, failed, been cancelled or had nothing to do. */
+  setQueueSettled(generation: number): void {
+    if (this.state.queueSettledFor !== generation) this.set({ queueSettledFor: generation });
+  }
+
+  remoteAwaitingSignIn(): Slot[] {
+    return this.state.slots.filter((slot) => this.isAwaitingSignIn(slot));
+  }
+
+  /** True while this device is still in the hub, remembered, closed and waiting for a sign-in. Rechecked before each reconnect. */
+  isAwaitingSignIn(slot: Slot): boolean {
+    if (this.slot(slot.id) !== slot) return false;
+    const state = slot.store.getState();
+    return slot.remembered && isRemoteTarget(state.target) && state.phase === 'closed' && state.notice?.kind === 'signed-out';
   }
 
   setTraceView(view: 'all' | string): void {

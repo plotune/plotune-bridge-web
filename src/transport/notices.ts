@@ -108,7 +108,7 @@ export function signInToReconnectNotice(technicalDetails = ''): Notice {
     kind: 'signed-out',
     severity: 'info',
     title: 'Sign in to reconnect to this device',
-    summary: 'Remote devices are reached through your Plotune account. This page keeps your sign-in in memory only, so a reload signs you out.',
+    summary: 'Remote devices are reached through your Plotune account.',
     steps: ['Sign in with your Plotune account, then choose Connect next to the device.'],
     technical: technicalDetails,
   };
