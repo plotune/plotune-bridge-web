@@ -83,14 +83,14 @@ implemented. Native browser local-network prompts and hardware remain unverified
 
 ### Sign-in
 
-Bridge has no password form. plotune.net is the only login page: **Continue with Plotune** (or **Sign in** in the top bar) sends the browser to `https://www.plotune.net/bridge/authorize` with a random PKCE (S256) challenge and state. After signing in there, plotune.net returns the browser to this page with a one-time code in the URL fragment. The page clears the fragment at once, checks the state, and exchanges the code and its verifier for an account token.
+Bridge has no password form. plotune.net is the only login page: **Sign in with Plotune** (or **Sign in** in the top bar) sends the browser to `https://www.plotune.net/bridge/authorize` with a random PKCE (S256) challenge and state. After signing in there, plotune.net returns the browser to this page with a one-time code in the URL fragment. The page clears the fragment at once, checks the state, and exchanges the code and its verifier for an account token.
 
 - The PKCE verifier and the state are kept in `sessionStorage` only until the return trip uses them. The code, the token and the verifier are never written to `localStorage`.
 - The token is never stored. A page load signs in again through plotune.net (`prompt=none`), a quick bounce while the page shows **Signing you in with your Plotune account…**. A signed-in browser comes straight back with a new code, and the remembered remote devices then reconnect once.
 - The automatic attempt runs on a page load when there is no token in memory, the browser keeps session storage, you have not signed out in this tab, and no earlier attempt failed.
 - The automatic attempt stops for the tab after a failure: a `login_required`, `access_denied` or other error return, a state mismatch, a failed exchange, or an earlier attempt that never came back (for example after the back button). The page then shows **Sign in** and does not retry on its own. A successful sign-in clears the failure, and so does **Sign in** or **Switch account**.
 - **Sign out** in the account menu forgets the account in this page and stops automatic sign-in for this tab until you choose **Sign in**. It does not touch plotune.net. **Switch account** asks plotune.net for its login form.
-- Sign-in is only active on `https://bridge.plotune.net`, the one address plotune.net returns to. On any other origin (a local build such as `http://localhost:4173` or `http://127.0.0.1:4173`, or a preview) the page makes no automatic attempt and does not redirect. **Sign in** and **Continue with Plotune** show a notice that sign-in works on bridge.plotune.net, and the local-network workspace (**Advanced: connect on the local network instead**) keeps working as before.
+- Sign-in is only active on `https://bridge.plotune.net`, the one address plotune.net returns to. On any other origin (a local build such as `http://localhost:4173` or `http://127.0.0.1:4173`, or a preview) the page makes no automatic attempt and does not redirect. **Sign in** and **Sign in with Plotune** show a notice that sign-in works on bridge.plotune.net, and the local-network workspace (**Advanced: connect on the local network instead**) keeps working as before.
 
 ### Remote mode
 

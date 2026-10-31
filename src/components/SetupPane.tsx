@@ -3,6 +3,7 @@ import { useCloud } from '../cloud/context';
 import { useHub, useHubState } from '../state/context';
 import type { Slot } from '../state/hub';
 import { MAX_DEVICES } from '../state/hub';
+import { parseRemoteTarget } from '../transport/remote';
 import { IconClose, IconPlus } from './icons';
 
 function phaseText(phase: string): string {
@@ -14,6 +15,10 @@ function DeviceNode({ slot, active }: { slot: Slot; active: boolean }) {
   const cloud = useCloud();
   const { queueSettledFor } = useHubState();
   const state = slot.store.getState();
+  // A remote device is named by the cloud, never by its remote:<project>/<device> address, which stays in the Device panel.
+  const remote = parseRemoteTarget(state.target);
+  const cloudName = remote ? cloud.devices.find((d) => d.deviceUuid === remote.deviceUuid)?.deviceId : undefined;
+  const meta = state.descriptor?.deviceId ?? (remote ? cloudName || 'Plotune cloud device' : state.target);
   const connected = state.phase === 'connected';
   const started = slot.remembered || state.sessionNumber > 0;
   // Queued behind the automatic reconnect of this sign-in: it is already scheduled, so no button offers to start it.
@@ -35,8 +40,8 @@ function DeviceNode({ slot, active }: { slot: Slot; active: boolean }) {
         )}
       </div>
       {started && (
-        <p className="bw-setup-meta bw-mono" title={state.target}>
-          {state.descriptor?.deviceId ?? state.target}
+        <p className={remote ? 'bw-setup-meta' : 'bw-setup-meta bw-mono'} title={remote ? undefined : state.target}>
+          {meta}
         </p>
       )}
       {connected && (

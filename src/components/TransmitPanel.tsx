@@ -36,7 +36,7 @@ export function TransmitPanel() {
           </label>
           <label className="bw-field">
             <span>ID (hex)</span>
-            <input value={form.id} onChange={(e) => set({ id: e.target.value })} className="bw-mono" aria-invalid={touched && !!errors.id} aria-describedby="tx-id-error" spellCheck={false} autoComplete="off" />
+            <input value={form.id} onChange={(e) => set({ id: e.target.value })} className="bw-mono" aria-invalid={touched && !!errors.id} aria-describedby={touched && errors.id ? 'tx-id-error' : undefined} spellCheck={false} autoComplete="off" />
             {touched && errors.id && <small id="tx-id-error" className="bw-error-text">{errors.id}</small>}
           </label>
           <label className="bw-field">
@@ -63,7 +63,7 @@ export function TransmitPanel() {
         ) : (
           <label className="bw-field">
             <span>Data (hex bytes)</span>
-            <input value={form.data} onChange={(e) => set({ data: e.target.value })} className="bw-mono" aria-invalid={touched && !!errors.data} aria-describedby="tx-data-error" spellCheck={false} autoComplete="off" />
+            <input value={form.data} onChange={(e) => set({ data: e.target.value })} className="bw-mono" aria-invalid={touched && !!errors.data} aria-describedby={touched && errors.data ? 'tx-data-error' : undefined} spellCheck={false} autoComplete="off" />
             {touched && errors.data ? <small id="tx-data-error" className="bw-error-text">{errors.data}</small> : <small>{frame ? `${frame.dlc} ${frame.dlc === 1 ? 'byte' : 'bytes'}` : ''}</small>}
           </label>
         )}

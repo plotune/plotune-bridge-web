@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { unsupportedNotice, type BrowserInfo } from '../lib/browser';
 import { isRemoteTarget } from '../transport/remote';
 import { useHub, useHubState, useStore, useWorkspace } from '../state/context';
@@ -76,6 +76,51 @@ function CopyOrigin({ origin }: { origin: string }) {
   );
 }
 
+/**
+ * The attempt in progress. A remote attempt has its own status region (ConnectStatus), so the card itself is not live there:
+ * two nested live regions would announce every stage twice. When the Connect button that started the attempt is removed,
+ * focus would fall to the page top, so it moves to Cancel, the one control left here, unless the user has moved elsewhere.
+ */
+function Connecting({ target, remote }: { target: string; remote: boolean }) {
+  const hub = useHub();
+  const state = useWorkspace();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active === null || active === document.body) cancelRef.current?.focus();
+  }, []);
+  return (
+    <section className="bw-card bw-connecting" aria-live={remote ? undefined : 'polite'} data-testid="connecting">
+      {remote ? (
+        <>
+          <h1 className="bw-eyebrow">Connecting</h1>
+          <ConnectStatus stage={state.connectStage} />
+        </>
+      ) : (
+        <>
+          <p className="bw-eyebrow">Connecting</p>
+          <h1>
+            <span className="bw-spinner" aria-hidden="true" /> <>Connecting to {target}</>
+          </h1>
+          {state.slowConnect ? (
+            <p className="bw-lead" data-testid="prompt-reminder">
+              Still waiting. If your browser is asking about access to devices on your local network, choose <strong>Allow</strong>. Otherwise the device may not be reachable.
+            </p>
+          ) : (
+            <p className="bw-lead">Opening a direct connection to your device.</p>
+          )}
+        </>
+      )}
+      <div className="bw-actions">
+        {/* A remote attempt ends and returns to the device list; a direct one keeps the address form as before. */}
+        <button ref={cancelRef} type="button" className="bw-button" onClick={() => (remote ? hub.cancelConnect(hub.active.id) : hub.cancelEdit())}>
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
   const store = useStore();
   const state = useWorkspace();
@@ -92,34 +137,7 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
   };
 
   if (state.phase === 'connecting') {
-    const remote = isRemoteTarget(state.target);
-    return (
-      <section className="bw-card bw-connecting" aria-live="polite" data-testid="connecting">
-        <p className="bw-eyebrow">Connecting</p>
-        {remote ? (
-          <ConnectStatus stage={state.connectStage} />
-        ) : (
-          <>
-            <h1>
-              <span className="bw-spinner" aria-hidden="true" /> <>Connecting to {state.target}</>
-            </h1>
-            {state.slowConnect ? (
-              <p className="bw-lead" data-testid="prompt-reminder">
-                Still waiting. If your browser is asking about access to devices on your local network, choose <strong>Allow</strong>. Otherwise the device may not be reachable.
-              </p>
-            ) : (
-              <p className="bw-lead">Opening a direct connection to your device.</p>
-            )}
-          </>
-        )}
-        <div className="bw-actions">
-          {/* A remote attempt ends and returns to the device list; a direct one keeps the address form as before. */}
-          <button type="button" className="bw-button" onClick={() => (remote ? hub.cancelConnect(hub.active.id) : hub.cancelEdit())}>
-            Cancel
-          </button>
-        </div>
-      </section>
-    );
+    return <Connecting target={state.target} remote={isRemoteTarget(state.target)} />;
   }
 
   if (!explained && browser.supported && !state.notice) {
@@ -136,6 +154,8 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
   return (
     <div className="bw-connect">
       {!browser.supported && <UnsupportedBanner browser={browser} />}
+      {/* A notice without the form has no title of its own, so the pane gets a hidden one. */}
+      {!showForm && <h1 className="bw-sr-only">Connect a Bridge device</h1>}
       {state.notice && (
         <NoticeCard
           notice={state.notice}

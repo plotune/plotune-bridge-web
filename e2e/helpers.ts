@@ -9,7 +9,7 @@ export const LOCAL_ADVANCED = 'Advanced: connect on the local network instead';
 
 /** Opens the local-network address form from the add-device pane (the account pane is the default). */
 export async function openLocalAddressForm(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Add a device' }).click();
+  await page.locator('.bw-setup').getByRole('button', { name: 'Add a device' }).click();
   await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
 }
 

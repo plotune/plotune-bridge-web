@@ -202,7 +202,7 @@ describe('the informational sign-in card', () => {
     load(rig);
     fireEvent.click(await screen.findByRole('button', { name: 'Use the local network instead' }));
     expect(await screen.findByLabelText('Device address')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Continue with Plotune' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in with Plotune' })).toBeNull();
   });
 
   it('on an unsupported origin the card explains the local network and offers no redirect', async () => {

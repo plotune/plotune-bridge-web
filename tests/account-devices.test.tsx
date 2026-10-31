@@ -83,7 +83,7 @@ function openAccountPane(): void {
  */
 async function signIn(rig: Rig): Promise<void> {
   const before = rig.sso.redirect.mock.calls.length;
-  fireEvent.click(screen.getByRole('button', { name: 'Continue with Plotune' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
   await waitFor(() => expect(rig.sso.redirect.mock.calls.length).toBeGreaterThan(before));
   rig.sso.state.hash = `#code=${CODE}&state=${stateFromRedirect(rig.sso, rig.sso.redirect.mock.calls.length - 1)}`;
   mount(rig);
@@ -118,7 +118,7 @@ describe('signed-out view', () => {
     openAccountPane();
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
     expect(screen.getByText(/Sign in with your Plotune account/)).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Continue with Plotune' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Sign in with Plotune' })).toBeEnabled();
     expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', 'https://www.plotune.net/register');
     expect(rig.sso.redirect).not.toHaveBeenCalled();
   });
@@ -132,20 +132,20 @@ describe('signed-out view', () => {
     expect(within(screen.getByRole('main')).queryByRole('button', { name: 'Sign in' })).toBeNull();
   });
 
-  it('Continue with Plotune sends the browser to plotune.net with no prompt', async () => {
+  it('Sign in with Plotune sends the browser to plotune.net with no prompt', async () => {
     const rig = setup();
     openAccountPane();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with Plotune' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
     await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalledTimes(1));
     expect(new URL(rig.sso.redirect.mock.calls[0][0]).searchParams.has('prompt')).toBe(false);
   });
 
-  it('the first-visit button "Sign in and add a device" opens the same pane with the Continue button', () => {
+  it('the first-visit button "Sign in and add a device" opens the same pane with the Sign in with Plotune button', () => {
     setup();
     expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
     expect(screen.getByRole('heading', { name: /sign in to connect your bridge/i })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Continue with Plotune' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Sign in with Plotune' })).toBeVisible();
   });
 });
 
@@ -226,7 +226,7 @@ describe('signed-in account pane', () => {
     await screen.findByText('Bridge-A');
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Continue with Plotune' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Sign in with Plotune' })).toBeVisible();
     expect(screen.queryByText('Bridge-A')).toBeNull();
     expect(rig.session.getToken()).toBeNull();
     expect(rig.sso.redirect).toHaveBeenCalledTimes(1);

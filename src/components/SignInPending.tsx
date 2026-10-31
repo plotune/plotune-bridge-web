@@ -32,7 +32,7 @@ export function SignInPending({ onContinueWithout, timers = browserTimers }: { o
   }, [timers]);
 
   return (
-    <section className="bw-signing-in" aria-labelledby="signing-in-title">
+    <main className="bw-signing-in" aria-labelledby="signing-in-title">
       <img className="bw-signing-in-logo" src={logo} alt="" />
       <h1 id="signing-in-title">Plotune Bridge</h1>
       <p role="status" aria-live="polite">
@@ -46,6 +46,6 @@ export function SignInPending({ onContinueWithout, timers = browserTimers }: { o
           </button>
         </div>
       )}
-    </section>
+    </main>
   );
 }
