@@ -86,6 +86,18 @@ describe('DevicePanel connection row', () => {
     expect(connectionRow()).toHaveTextContent('Unknown · session 1');
   });
 
+  it('says disconnected, not checking, after the session has ended', async () => {
+    const current = await connectedPanel('pending');
+    expect(connectionRow()).toHaveTextContent('Checking the connection…');
+    await act(async () => {
+      current.disconnect();
+    });
+    expect(screen.getByText('Not connected', { selector: 'span' })).toBeInTheDocument();
+    expect(connectionRow()).toHaveTextContent('Disconnected · session 1');
+    expect(connectionRow()).not.toHaveTextContent('Checking');
+    expect(screen.queryByText(/connection path:/)).toBeNull();
+  });
+
   it('has no connection row before a device is connected', () => {
     store = new WorkspaceStore(defaultEnv({
       transportFactory: (target) => new FakeTransport(target, new MockDeviceCore()),

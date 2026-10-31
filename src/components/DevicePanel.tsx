@@ -52,7 +52,7 @@ export function DevicePanel() {
           <div>
             <dt>Connection</dt>
             <dd>
-              {pathLabel(state.connectionPath)} · session {state.sessionNumber}
+              {connected ? pathLabel(state.connectionPath) : 'Disconnected'} · session {state.sessionNumber}
               {relayed && <><br /><span className="bw-muted">Slower than a direct link; relay traffic is metered</span></>}
             </dd>
           </div>
