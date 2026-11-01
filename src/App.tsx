@@ -10,6 +10,7 @@ import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
+import { NoticeDock } from './components/NoticeDock';
 import { canSourceDescriptor } from './core/can-source';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
 import { SetupPane } from './components/SetupPane';
@@ -98,7 +99,7 @@ function Topbar({ showControls }: { showControls: boolean }) {
   );
 }
 
-function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
+function ConnectionNotice({ onLocal, dock }: { onLocal: () => void; dock: (label: string, node: React.ReactNode) => React.ReactElement }) {
   const store = useStore();
   const hub = useHub();
   const cloud = useCloud();
@@ -108,7 +109,7 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   if (state.phase === 'connecting') {
     if (remote) {
       // The staged connect, with Cancel always visible. Cancel returns to the device list of the add-device pane.
-      return (
+      return dock('Connecting', (
         <section className="bw-card bw-connecting" data-testid="reconnecting">
           <h1 className="bw-eyebrow">Connecting</h1>
           <ConnectStatus stage={state.connectStage} />
@@ -118,30 +119,30 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
             </button>
           </div>
         </section>
-      );
+      ));
     }
-    return (
+    return dock('Reconnecting', (
       <div className="bw-banner" role="status" data-testid="reconnecting">
         <span className="bw-spinner" aria-hidden="true" />{' '}
         <>Reconnecting to {state.target}…{state.slowConnect ? ' If your browser asks about local network access, choose Allow.' : ''}</>
       </div>
-    );
+    ));
   }
   if (state.phase === 'closed' && state.notice) {
     if (remote && state.notice.kind === 'signed-out') {
       // A remembered remote device waiting for sign-in: an informational card, never an error.
-      if (cloud.status === 'signed-out') return <SignInCard signInAvailable={cloud.signInAvailable} onSignIn={() => void cloud.startSignIn()} onLocal={onLocal} />;
+      if (cloud.status === 'signed-out') return dock('Sign in to reconnect', <SignInCard signInAvailable={cloud.signInAvailable} onSignIn={() => void cloud.startSignIn()} onLocal={onLocal} />);
       if (cloud.status === 'signed-in') {
         // The automatic reconnect for this sign-in has not settled yet: the device is queued or about to start. No action is offered.
         if (queueSettledFor !== cloud.readSessionGeneration()) {
-          return (
+          return dock('Waiting to connect', (
             <div className="bw-banner" role="status" data-testid="queued-reconnect">
               <span className="bw-spinner" aria-hidden="true" /> Waiting to connect…
             </div>
-          );
+          ));
         }
         // Settled: the device is closed and nothing will reconnect it automatically, so the user gets the action.
-        return (
+        return dock('Device disconnected', (
           <NoticeCard
             notice={{ kind: 'ended', severity: 'info', title: 'This device is disconnected', summary: 'Reconnect to use it through your Plotune account.', steps: [], technical: '' }}
             actions={
@@ -150,14 +151,14 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
               </button>
             }
           />
-        );
+        ));
       }
       return null;
     }
     if (remote) {
       // The causes that can be acted on (device, cloud, link) offer Try again; anything else keeps Reconnect.
       const retry = RETRY_NOTICE_KINDS.includes(state.notice.kind);
-      return (
+      return dock(state.notice.title, (
         <NoticeCard
           notice={state.notice}
           actions={
@@ -171,9 +172,9 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
             </>
           }
         />
-      );
+      ));
     }
-    return (
+    return dock(state.notice.title, (
       <NoticeCard
         notice={state.notice}
         actions={
@@ -187,9 +188,14 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
           </>
         }
       />
-    );
+    ));
   }
   return null;
+}
+
+/** Connection messages float over the workspace; see NoticeDock. A new kind of message mounts a fresh, open dock. */
+function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
+  return <ConnectionNotice onLocal={onLocal} dock={(label, node) => <NoticeDock key={label} label={label}>{node}</NoticeDock>} />;
 }
 
 function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId) => void; menu?: React.ReactNode }) {
@@ -279,6 +285,7 @@ function SignInBanner() {
   const cloud = useCloud();
   if (cloud.signInNotice !== null) {
     return (
+      <NoticeDock label="Sign-in problem">
       <div className="bw-notice bw-notice-error" role="alert">
         <div className="bw-notice-body">
           <p>{cloud.signInNotice}</p>
@@ -289,6 +296,7 @@ function SignInBanner() {
           </div>
         </div>
       </div>
+      </NoticeDock>
     );
   }
   return null;
