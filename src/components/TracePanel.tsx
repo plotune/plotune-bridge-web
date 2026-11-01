@@ -1,5 +1,8 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeNs } from '../lib/bytes';
+import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
+import type { DbcMessage, DecodedSignal } from '../dbc/types';
+import type { CanFrame } from '../protocol/types';
 import { NO_FILTER, filterActive, formatTraceData, formatTraceId, rowMatches, type Radix, type TraceFilter } from '../lib/traceFilter';
 import { useHub, useHubState } from '../state/context';
 import type { TraceRow } from '../state/trace';
@@ -10,8 +13,38 @@ import { Panel } from './Panel';
 const ROW_HEIGHT = 26;
 const OVERSCAN = 12;
 
-const Row = memo(function Row({ row, originNs, top, showDevice, radix }: { row: TraceRow; originNs: bigint | null; top: number; showDevice: boolean; radix: Radix }) {
+/** A decoded value as people read it: up to 7 significant digits, its unit, and the label the database gives it. */
+export function formatSignalValue(signal: DecodedSignal): string {
+  const value = Number.isInteger(signal.value) ? String(signal.value) : String(Number(signal.value.toPrecision(7)));
+  return `${value}${signal.unit ? ` ${signal.unit}` : ''}${signal.label ? ` (${signal.label})` : ''}`;
+}
+
+interface RowExtras {
+  /** True when a database is loaded for any channel, so every row reserves the Name column. */
+  named: boolean;
+  message?: DbcMessage;
+  expanded: boolean;
+  onToggle(key: number): void;
+  signal?: DecodedSignal;
+}
+
+const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, message, expanded, onToggle, signal }: { row: TraceRow; originNs: bigint | null; top: number; showDevice: boolean; radix: Radix } & RowExtras) {
   const style = { top };
+  if (row.kind === 'frame' && signal) {
+    return (
+      <div className="bw-trace-row bw-trace-signal" style={style} role="row" data-signal={signal.name}>
+        <span role="cell" className="bw-c-time" />
+        {showDevice && <span role="cell" className="bw-c-dev" />}
+        <span role="cell" className="bw-c-ch" />
+        <span role="cell" className="bw-c-id" />
+        {named && <span role="cell" className="bw-c-name bw-signal-name">{signal.name}</span>}
+        <span role="cell" className="bw-c-type" />
+        <span role="cell" className="bw-c-dir" />
+        <span role="cell" className="bw-c-dlc" />
+        <span role="cell" className="bw-mono bw-c-data">{formatSignalValue(signal)}</span>
+      </div>
+    );
+  }
   if (row.kind === 'frame') {
     const f = row.frame;
     return (
@@ -20,6 +53,15 @@ const Row = memo(function Row({ row, originNs, top, showDevice, radix }: { row: 
         {showDevice && <span role="cell" className="bw-c-dev">{row.device}</span>}
         <span role="cell" className="bw-c-ch"><span className="bw-chip">CAN{f.channel}</span></span>
         <span role="cell" className="bw-mono bw-c-id">{formatTraceId(f.id, f.extended, radix)}</span>
+        {named && (
+          <span role="cell" className="bw-c-name">
+            {message ? (
+              <button type="button" className="bw-expander" aria-expanded={expanded} aria-label={`${expanded ? 'Hide' : 'Show'} the signals of ${message.name}`} onClick={() => onToggle(row.key)} disabled={f.rtr || message.signals.length === 0}>
+                <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {message.name}
+              </button>
+            ) : null}
+          </span>
+        )}
         <span role="cell" className="bw-c-type">{f.extended ? 'Ext' : 'Std'} {f.rtr ? 'Remote' : 'Data'}</span>
         <span role="cell" className="bw-c-dir">{f.direction === 'rx' ? 'Rx' : 'Tx'}</span>
         <span role="cell" className="bw-mono bw-c-dlc">{f.dlc}</span>
@@ -91,25 +133,67 @@ export function TracePanel() {
   }, [state.traceVersion, follow]);
 
   const active = filterActive(filter);
-  // Indexes of the rows that pass the filter. Recomputed when rows arrive or the filter changes.
-  const view = useMemo(() => {
-    if (!active) return null;
-    const out: number[] = [];
-    for (let i = 0; i < trace.length; i += 1) if (rowMatches(trace.at(i), filter)) out.push(i);
+  const registry = useDbcRegistry();
+  const assignments = useDbcAssignments();
+  const named = assignments.length > 0;
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+  const toggle = (key: number) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  // Names for the filter come from the loaded databases; the registry caches them per message.
+  const namesOf = useMemo(
+    () => (frame: CanFrame): string => registry.searchText(frame.channel, frame.id, frame.extended),
+    // A new assignment changes what a frame's names are.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [registry, assignments],
+  );
+  // The rows to show: those that pass the filter, each followed by its decoded signals when expanded.
+  // With no filter and nothing expanded the buffer is shown as it is.
+  const entries = useMemo(() => {
+    if (!active && expanded.size === 0) return null;
+    const out: { index: number; signal?: DecodedSignal }[] = [];
+    for (let i = 0; i < trace.length; i += 1) {
+      const row = trace.at(i);
+      if (!rowMatches(row, filter, namesOf)) continue;
+      out.push({ index: i });
+      if (row.kind === 'frame' && expanded.has(row.key) && !row.frame.rtr) {
+        const decoded = registry.decode(row.frame.channel, row.frame.id, row.frame.extended, row.frame.data);
+        for (const signal of decoded?.signals ?? []) out.push({ index: i, signal });
+      }
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, filter, state.traceVersion, trace]);
-  const total = view ? view.length : trace.length;
+  }, [active, filter, expanded, namesOf, state.traceVersion, trace]);
+  const total = entries ? entries.length : trace.length;
   const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const last = Math.min(total, Math.ceil((scrollTop + viewport) / ROW_HEIGHT) + OVERSCAN);
   const rows: React.ReactNode[] = [];
   for (let i = first; i < last; i += 1) {
-    const row = trace.at(view ? view[i] : i);
-    rows.push(<Row key={row.key} row={row} originNs={trace.originNs} top={i * ROW_HEIGHT} showDevice={showDevice} radix={radix} />);
+    const entry = entries ? entries[i] : { index: i };
+    const row = trace.at(entry.index);
+    const message = row.kind === 'frame' ? registry.message(row.frame.channel, row.frame.id, row.frame.extended) : undefined;
+    rows.push(
+      <Row
+        key={entry.signal ? `${row.key}-${entry.signal.name}` : row.key}
+        row={row}
+        originNs={trace.originNs}
+        top={i * ROW_HEIGHT}
+        showDevice={showDevice}
+        radix={radix}
+        named={named}
+        message={message}
+        expanded={row.kind === 'frame' && expanded.has(row.key)}
+        onToggle={toggle}
+        signal={entry.signal}
+      />,
+    );
   }
 
   const frames = trace.frameCount;
-  const shownFrames = view ? view.filter((i) => trace.at(i).kind === 'frame').length : frames;
+  const shownFrames = entries ? entries.filter((e) => !e.signal && trace.at(e.index).kind === 'frame').length : frames;
   const droppedTotal = Object.values(state.droppedReported).reduce((a, b) => a + b, 0);
   return (
     <Panel
@@ -163,8 +247,8 @@ export function TracePanel() {
           type="search"
           value={filter.text}
           onChange={(e) => setFilter({ ...filter, text: e.target.value })}
-          placeholder="Filter by ID or data (e.g. 7E8, 22 F1)"
-          aria-label="Filter by ID or data"
+          placeholder={named ? 'Filter by ID, data or name (e.g. 7E8, EngineSpeed)' : 'Filter by ID or data (e.g. 7E8, 22 F1)'}
+          aria-label={named ? 'Filter by ID, data or name' : 'Filter by ID or data'}
         />
         <select value={filter.channel ?? ''} onChange={(e) => setFilter({ ...filter, channel: e.target.value === '' ? null : Number(e.target.value) })} aria-label="Filter by channel">
           <option value="">All channels</option>
@@ -188,13 +272,14 @@ export function TracePanel() {
           Rows are in the order they arrived here. Each device's time is relative to its own first frame; device clocks are not synchronised.
         </p>
       )}
-      <div className={`bw-trace ${showDevice ? 'has-device' : ''}`} role="table" aria-label="Captured frames" aria-rowcount={total}>
+      <div className={`bw-trace ${showDevice ? 'has-device' : ''} ${named ? 'has-name' : ''}`} role="table" aria-label="Captured frames" aria-rowcount={total}>
         <div role="rowgroup">
           <div className="bw-trace-head" role="row">
             <span role="columnheader" className="bw-c-time">Time (s)</span>
             {showDevice && <span role="columnheader" className="bw-c-dev">Device</span>}
             <span role="columnheader" className="bw-c-ch">Channel</span>
             <span role="columnheader" className="bw-c-id">ID ({radix})</span>
+            {named && <span role="columnheader" className="bw-c-name">Name</span>}
             <span role="columnheader" className="bw-c-type">Type</span>
             <span role="columnheader" className="bw-c-dir">Dir</span>
             <span role="columnheader" className="bw-c-dlc">Len</span>

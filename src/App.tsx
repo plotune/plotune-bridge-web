@@ -10,6 +10,7 @@ import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
+import { DatabaseMenu } from './components/DatabaseMenu';
 import { NoticeDock } from './components/NoticeDock';
 import { canSourceDescriptor } from './core/can-source';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
@@ -18,6 +19,8 @@ import { SignInCard } from './components/SignInCard';
 import { SignInPending } from './components/SignInPending';
 import { ConnectStatus } from './components/ConnectStatus';
 import { RETRY_NOTICE_KINDS } from './transport/notices';
+import { DbcProvider } from './dbc/context';
+import { DbcRegistry, browserDbcStorage } from './dbc/registry';
 import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
 import type { DeviceHub } from './state/hub';
 import { isRemoteTarget } from './transport/remote';
@@ -212,7 +215,10 @@ function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId
         ))}
       </nav>
       {slots.length > 1 && <span className="bw-device-tag" data-testid="active-device">{hub.active.label}{state.descriptor ? ` · ${state.descriptor.deviceId}` : ''}</span>}
-      <div className="bw-windowbar-end">{menu}</div>
+      <div className="bw-windowbar-end">
+        {page === 'capture' && <DatabaseMenu />}
+        {menu}
+      </div>
     </div>
   );
 }
@@ -478,15 +484,20 @@ export interface AppProps {
   cloudClient?: CloudClient;
   cloudSession?: CloudSession;
   cloudSso?: SsoBrowser;
+  /** Tests inject a registry without storage. The app remembers loaded databases in this browser. */
+  dbc?: DbcRegistry;
 }
 
-export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso }: AppProps) {
+export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso, dbc }: AppProps) {
+  const [registry] = useState(() => dbc ?? new DbcRegistry(browserDbcStorage()));
   return (
     <CloudProvider client={cloudClient} session={cloudSession} sso={cloudSso}>
       <HubProvider hub={hub}>
-        <div className="bw-app">
-          <Shell browser={browser} pageOrigin={pageOrigin} />
-        </div>
+        <DbcProvider registry={registry}>
+          <div className="bw-app">
+            <Shell browser={browser} pageOrigin={pageOrigin} />
+          </div>
+        </DbcProvider>
       </HubProvider>
     </CloudProvider>
   );
