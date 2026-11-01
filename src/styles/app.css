@@ -1687,3 +1687,20 @@ h1[tabindex='-1']:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.bw-link-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 4px;
+}
+.bw-link-summary p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bw-diag-settings[hidden] {
+  display: none;
+}

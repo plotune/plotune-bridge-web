@@ -11,8 +11,19 @@ import { Panel } from './Panel';
 
 const hex = (b: Uint8Array) => bytesToHex(b, ' ').toUpperCase();
 
+/** One line that says where requests and calibration commands go, so the form can stay out of the way. */
+export function describeLink(settings: DiagSettings, channelName: string): string {
+  const id = (value: string) => value.trim().toUpperCase() || '?';
+  const format = settings.extended ? ' · 29-bit' : '';
+  return `${channelName} · requests ${id(settings.udsRequestId)} → answers ${id(settings.udsResponseId)} · calibration ${id(settings.xcpRequestId)} → ${id(settings.xcpResponseId)}${format}`;
+}
+
 export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettings; onChange: (patch: Partial<DiagSettings>) => void; errors: string[] }) {
   const state = useWorkspace();
+  const [editing, setEditing] = useState(false);
+  // Invalid settings always show the form, so the problem is never hidden behind a closed section.
+  const open = editing || errors.length > 0;
+  const channelName = state.channels.find((c) => c.channel === settings.channel)?.name ?? `CAN${settings.channel}`;
   const text = (key: keyof DiagSettings, label: string, hint?: string) => (
     <label className="bw-field">
       <span>{label}</span>
@@ -22,7 +33,13 @@ export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettin
   );
   return (
     <Panel id="link" title="Diagnostic link" status={errors.length ? 'Check settings' : 'Ready'}>
-      <div className="bw-diag-settings">
+      <div className="bw-link-summary">
+        <p className="bw-mono" data-testid="link-summary">{describeLink(settings, channelName)}</p>
+        <button type="button" className="bw-button bw-small" aria-expanded={open} aria-controls="diag-link-settings" disabled={errors.length > 0} onClick={() => setEditing(!editing)}>
+          {open ? 'Hide settings' : 'Edit settings'}
+        </button>
+      </div>
+      <div className="bw-diag-settings" id="diag-link-settings" hidden={!open}>
         <label className="bw-field">
           <span>Channel</span>
           <select disabled={!state.channels.length} value={settings.channel} onChange={(e) => onChange({ channel: Number(e.target.value) })}>
@@ -62,7 +79,7 @@ export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettin
       {errors.map((e) => (
         <p key={e} className="bw-inline-error" role="alert">{e}</p>
       ))}
-      <p className="bw-fine">These identifiers are examples. Use the ones your target uses.</p>
+      {open && <p className="bw-fine">These identifiers are examples. Use the ones your target uses.</p>}
     </Panel>
   );
 }
