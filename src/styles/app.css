@@ -300,6 +300,24 @@ button:disabled {
 .bw-grid[data-page='capture'] > .bw-tile-trace {
   grid-column: 1 / -1;
 }
+/* With a Plot the window scrolls: the trace, then the plot at full width, then the working panels. */
+.bw-grid[data-page='capture'][data-plot] {
+  grid-template-rows: minmax(260px, 38vh) max-content minmax(320px, auto);
+  overflow: auto;
+}
+.bw-grid[data-page='capture'][data-plot] > .bw-tile-plot {
+  grid-column: 1 / -1;
+  /* The generic tile rule allows shrinking to nothing; the plot must keep its content height or it spills over the next row. */
+  min-height: max-content;
+}
+.bw-grid[data-page='capture'][data-plot] > .bw-tile-plot > .bw-panel {
+  min-height: max-content;
+}
+.bw-grid[data-page='capture'][data-plot] > .bw-tile-plot .bw-panel-body {
+  overflow: visible;
+  /* Not a zero-basis flex item: the grid row must see the content height. */
+  flex: none;
+}
 .bw-grid[data-page='capture'] .bw-panel-body {
   overflow: auto;
 }
@@ -970,6 +988,8 @@ input[aria-invalid='true'] {
 }
 .bw-table-wrap {
   overflow: auto;
+  /* Visually hidden text inside is absolutely positioned: keep it clipped with the table instead of widening the page. */
+  position: relative;
 }
 .bw-table {
   border-collapse: collapse;
@@ -1237,7 +1257,8 @@ input[aria-invalid='true'] {
     padding-right: 16px;
   }
   .bw-grid,
-  .bw-grid[data-page='capture'] {
+  .bw-grid[data-page='capture'],
+  .bw-grid[data-page='capture'][data-plot] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     overflow: visible;
@@ -1272,7 +1293,11 @@ input[aria-invalid='true'] {
   .bw-trace-head,
   .bw-trace-row,
   .bw-trace.has-device .bw-trace-head,
-  .bw-trace.has-device .bw-trace-row {
+  .bw-trace.has-device .bw-trace-row,
+  .bw-trace.has-name .bw-trace-head,
+  .bw-trace.has-name .bw-trace-row,
+  .bw-trace.has-name.has-device .bw-trace-head,
+  .bw-trace.has-name.has-device .bw-trace-row {
     grid-template-columns: 84px 64px 84px 38px 32px minmax(0, 1fr);
     padding: 0 10px;
     column-gap: 8px;
@@ -1712,4 +1737,53 @@ h1[tabindex='-1']:focus {
   border-radius: 2px;
   padding: 0 1px;
   font-weight: 700;
+}
+
+.bw-plot-holder {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.bw-plot-holder canvas {
+  display: block;
+  max-width: 100%;
+}
+.bw-plot-holder canvas:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.bw-plot-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--color-row-rule);
+}
+.bw-plot-picker input[type='search'] {
+  min-height: 36px;
+}
+.bw-plot-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2px 16px;
+}
+.bw-plot-results label {
+  display: block;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.bw-plot-table {
+  margin-top: 8px;
+}
+.bw-plot-table th[scope='row'] {
+  font-weight: 500;
+  text-align: left;
+}
+.bw-panel-plot .bw-fine {
+  padding: 0 18px;
 }

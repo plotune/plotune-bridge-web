@@ -8,6 +8,7 @@ import { ChannelsPanel } from './ChannelsPanel';
 import { DevicePanel } from './DevicePanel';
 import type { LogEntry } from './diagnostics';
 import { LinkPanel, UdsPanel, XcpPanel } from './DiagnosticsPanels';
+import { PlotPanel } from './PlotPanel';
 import { StatsPanel } from './StatsPanel';
 import { TracePanel } from './TracePanel';
 import { TransmitPanel } from './TransmitPanel';
@@ -60,7 +61,7 @@ export function Dashboard({ page, panels: all, head, provides = null }: { page: 
   return (
     <>
       {head(<PanelsMenu panels={panels} hidden={hidden} onToggle={toggle} />)}
-      <div className="bw-grid" data-page={page}>
+      <div className="bw-grid" data-page={page} data-plot={panels.some((p) => p.id === 'plot' && !hidden.has('plot')) ? 'yes' : undefined}>
         {panels.filter((p) => !hidden.has(p.id)).map((p) => (
           <div key={p.id} className={`bw-tile-${p.id} ${p.wide ? 'bw-span-2' : ''}`}>{p.render()}</div>
         ))}
@@ -72,6 +73,7 @@ export function Dashboard({ page, panels: all, head, provides = null }: { page: 
 
 export const capturePanels: PanelDef[] = [
   { id: 'trace', accepts: ['frames'], label: 'Trace', wide: true, render: () => <TracePanel /> },
+  { id: 'plot', accepts: ['signals'], label: 'Plot', wide: true, render: () => <PlotPanel /> },
   { id: 'channels', accepts: ['frames'], label: 'Channels', wide: true, render: () => <ChannelsPanel /> },
   { id: 'stats', accepts: ['frames'], label: 'Statistics', wide: true, render: () => <StatsPanel /> },
   { id: 'transmit', accepts: ['frames'], label: 'Send frame', wide: true, render: () => <TransmitPanel /> },

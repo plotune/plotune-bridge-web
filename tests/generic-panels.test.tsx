@@ -16,11 +16,15 @@ describe('panel acceptance', () => {
     expect(acceptsAny('any', [])).toBe(true);
   });
 
-  it('keeps every CAN panel for a CAN device and hides them for a DAQ source', () => {
-    const can = canSourceDescriptor({ descriptor: null, target: 'ws://x' });
-    expect(can.provides).toEqual(['frames']);
-    expect(panelsFor(capturePanels, can.provides)).toEqual(capturePanels);
-    expect(panelsFor(capturePanels, daq.provides)).toEqual([]);
+  it('shows the frame panels for a CAN device, the Plot only once a database provides signals, and no frame panel for a DAQ source', () => {
+    const noDatabase = canSourceDescriptor({ descriptor: null, target: 'ws://x' });
+    expect(noDatabase.provides).toEqual(['frames']);
+    expect(panelsFor(capturePanels, noDatabase.provides).map((p) => p.id)).toEqual(['trace', 'channels', 'stats', 'transmit']);
+    const withDatabase = canSourceDescriptor({ descriptor: null, target: 'ws://x' }, true);
+    expect(withDatabase.provides).toEqual(['frames', 'signals']);
+    expect(panelsFor(capturePanels, withDatabase.provides).map((p) => p.id)).toEqual(['trace', 'plot', 'channels', 'stats', 'transmit']);
+    // The Plot is fed from the CAN trace today; a DAQ source would need it connected to a SignalSource first.
+    expect(panelsFor(capturePanels, daq.provides).map((p) => p.id)).toEqual(['plot']);
     expect(panelsFor(devicePanels, daq.provides)).toEqual(devicePanels);
   });
 
@@ -31,7 +35,7 @@ describe('panel acceptance', () => {
   it('selects a generic signal panel for a DAQ source only', () => {
     const generic: PanelDef = { id: 'signals', label: 'Signals', accepts: ['signals'], render: () => null };
     const all = [...capturePanels, generic];
-    expect(panelsFor(all, daq.provides).map((p) => p.id)).toEqual(['signals']);
+    expect(panelsFor(all, daq.provides).map((p) => p.id)).toEqual(['plot', 'signals']);
     expect(panelsFor(all, ['frames']).map((p) => p.id)).not.toContain('signals');
   });
 });

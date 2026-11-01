@@ -19,7 +19,7 @@ import { SignInCard } from './components/SignInCard';
 import { SignInPending } from './components/SignInPending';
 import { ConnectStatus } from './components/ConnectStatus';
 import { RETRY_NOTICE_KINDS } from './transport/notices';
-import { DbcProvider } from './dbc/context';
+import { DbcProvider, useDbcAssignments } from './dbc/context';
 import { DbcRegistry, browserDbcStorage } from './dbc/registry';
 import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
 import type { DeviceHub } from './state/hub';
@@ -364,7 +364,8 @@ function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStart
   const state = useWorkspace();
   const cloud = useCloud();
   const editing = editingId !== null && editingId === activeId;
-  const provides = canSourceDescriptor(state).provides;
+  const hasDatabase = useDbcAssignments().length > 0;
+  const provides = canSourceDescriptor(state, hasDatabase).provides;
   const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
   // Each screen has exactly one h1: the intro, the banner title, or this hidden one for a workspace with only notices or panels.
   const titled = slots.length === 0 || bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
