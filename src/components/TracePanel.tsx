@@ -3,7 +3,8 @@ import { formatRelativeNs } from '../lib/bytes';
 import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import type { DbcMessage, DecodedSignal } from '../dbc/types';
 import type { CanFrame } from '../protocol/types';
-import { NO_FILTER, filterActive, formatTraceData, formatTraceId, rowMatches, type Radix, type TraceFilter } from '../lib/traceFilter';
+import { IncrementalFilter } from '../lib/incrementalFilter';
+import { NO_FILTER, filterActive, formatTraceData, formatTraceId, type Radix, type TraceFilter } from '../lib/traceFilter';
 import { useHub, useHubState } from '../state/context';
 import type { TraceRow } from '../state/trace';
 import { IconClear } from './icons';
@@ -152,12 +153,15 @@ export function TracePanel() {
   );
   // The rows to show: those that pass the filter, each followed by its decoded signals when expanded.
   // With no filter and nothing expanded the buffer is shown as it is.
+  const [incremental] = useState(() => new IncrementalFilter());
   const entries = useMemo(() => {
     if (!active && expanded.size === 0) return null;
     const out: { index: number; signal?: DecodedSignal }[] = [];
-    for (let i = 0; i < trace.length; i += 1) {
+    const indexes = active ? incremental.update(trace, filter, namesOf, namesOf) : null;
+    const count = indexes ? indexes.length : trace.length;
+    for (let n = 0; n < count; n += 1) {
+      const i = indexes ? indexes[n] : n;
       const row = trace.at(i);
-      if (!rowMatches(row, filter, namesOf)) continue;
       out.push({ index: i });
       if (row.kind === 'frame' && expanded.has(row.key) && !row.frame.rtr) {
         const decoded = registry.decode(row.frame.channel, row.frame.id, row.frame.extended, row.frame.data);
