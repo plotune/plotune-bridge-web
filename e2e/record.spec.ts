@@ -113,3 +113,27 @@ test('on a phone the recording controls wrap inside the page width', async ({ pa
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await device.close();
 });
+
+test('BLF: a downloaded binary file with the Vector header and zlib containers', async ({ page }, info) => {
+  const device = await new MockDeviceServer().ready();
+  device.generate(1, 100, 0x7e8);
+  await connected(page, device.url);
+  await configureBothChannels(page);
+  await startCapture(page);
+  await page.getByLabel('Recording format').selectOption({ label: 'BLF (Vector binary)' });
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  await expect(page.getByTestId('record-status')).toContainText(/Recording · [1-9]\d* frames/);
+  await page.waitForTimeout(800);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Stop and save' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^bridge-\d{8}-\d{6}\.blf$/);
+  const path = info.outputPath('rec.blf');
+  await download.saveAs(path);
+  const bytes = await readFile(path);
+  expect(bytes.subarray(0, 4).toString('latin1')).toBe('LOGG');
+  expect(bytes.readUInt32LE(4)).toBe(144);
+  expect(bytes.subarray(144, 148).toString('latin1')).toBe('LOBJ'); // the first container
+  expect(Number(bytes.readBigUInt64LE(16))).toBe(bytes.length); // the header's file size is the real size
+  expect(bytes.readUInt32LE(32)).toBeGreaterThan(50); // object count
+  await expect(page.getByTestId('record-status')).toContainText(/Saved bridge-\d{8}-\d{6}\.blf/);
+  await device.close();
+});

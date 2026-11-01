@@ -1,6 +1,7 @@
 import { formatRelativeNs } from '../lib/bytes';
 import type { CanFrame } from '../protocol/types';
 import type { StreamTap, WorkspaceStore } from '../state/store';
+import { BLF_OBJECT_SIZE, blfCanMessage, buildBlf, buildBlfBytes } from './blf';
 import { formatSpec, type FormatSpec, type RecordFormat } from './formats';
 
 /** Browsers without streaming to disk keep the recording in memory, so it is bounded. */
@@ -22,10 +23,11 @@ export class Recorder implements StreamTap {
   private origin: bigint | null = null;
   private lastNs: bigint | null = null;
   private readonly chunks: string[] = [];
+  private readonly objects: Uint8Array[] = [];
 
   constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES) {
     this.spec = formatSpec(format);
-    this.write(this.spec.header(startedAt));
+    if (!this.spec.binary) this.write(this.spec.header(startedAt));
   }
 
   /** Seconds of device time between the first and the last recorded frame. */
@@ -37,7 +39,10 @@ export class Recorder implements StreamTap {
     if (!this.running) return;
     this.origin ??= frame.timestampNs;
     this.lastNs = frame.timestampNs;
-    if (!this.write(this.spec.line(frame, formatRelativeNs(frame.timestampNs, this.origin)))) return;
+    if (this.spec.binary) {
+      if (!this.reserve(BLF_OBJECT_SIZE)) return;
+      this.objects.push(blfCanMessage(frame, frame.timestampNs - this.origin));
+    } else if (!this.write(this.spec.line(frame, formatRelativeNs(frame.timestampNs, this.origin)))) return;
     this.frames += 1;
   }
 
@@ -48,22 +53,34 @@ export class Recorder implements StreamTap {
     this.write(this.spec.dropLine(channel, count, time));
   }
 
-  /** Appends text unless it would pass the cap; at the cap the recording stops and says so. */
-  private write(text: string): boolean {
-    if (text === '') return true;
-    if (this.bytes + text.length > this.capBytes) {
+  /** Counts `size` bytes unless they would pass the cap; at the cap the recording stops and says so. */
+  private reserve(size: number): boolean {
+    if (this.bytes + size > this.capBytes) {
       this.capped = true;
       this.running = false;
       return false;
     }
-    this.chunks.push(text);
-    this.bytes += text.length;
+    this.bytes += size;
     return true;
   }
 
-  stop(): Blob {
+  private write(text: string): boolean {
+    if (text === '') return true;
+    if (!this.reserve(text.length)) return false;
+    this.chunks.push(text);
+    return true;
+  }
+
+  /** Ends the recording and returns the file. (Binary formats are compressed here, so this is asynchronous.) */
+  async stop(): Promise<Blob> {
     this.running = false;
+    if (this.spec.binary) return buildBlf(this.objects, this.startedAt, new Date());
     return new Blob(this.chunks, { type: `${this.spec.mime};charset=utf-8` });
+  }
+
+  /** The BLF file as bytes (BLF recordings only), for tests. */
+  blfBytes(): Promise<Uint8Array> {
+    return buildBlfBytes(this.objects, this.startedAt, new Date());
   }
 
   /** The file as text, for tests. */
@@ -102,7 +119,7 @@ export class RecordingService {
   getVersion = (): number => this.version;
 
   start(store: WorkspaceStore, format: RecordFormat, now = new Date()): void {
-    this.finish();
+    void this.finish();
     const recorder = new Recorder(format, now);
     store.taps.add(recorder);
     this.store = store;
@@ -112,17 +129,17 @@ export class RecordingService {
   }
 
   /** Ends the recording and returns the file to save. */
-  stop(now = new Date()): { blob: Blob; summary: RecordingSummary } | null {
+  async stop(now = new Date()): Promise<{ blob: Blob; summary: RecordingSummary } | null> {
     const recorder = this.current;
     if (!recorder) return null;
-    const blob = this.finish();
+    const blob = await this.finish();
     const summary: RecordingSummary = { fileName: recordingFileName(now, recorder.spec.extension), frames: recorder.frames, bytes: recorder.bytes, dropped: recorder.dropped, capped: recorder.capped, carriesDrops: recorder.spec.carriesDrops };
     this.last = summary;
     this.changed();
     return blob ? { blob, summary } : null;
   }
 
-  private finish(): Blob | null {
+  private async finish(): Promise<Blob | null> {
     const recorder = this.current;
     if (!recorder) return null;
     this.store?.taps.delete(recorder);
