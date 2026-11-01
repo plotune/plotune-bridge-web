@@ -77,7 +77,7 @@ export const capturePanels: PanelDef[] = [
   { id: 'transmit', accepts: ['frames'], label: 'Send frame', wide: true, render: () => <TransmitPanel /> },
 ];
 
-export const devicePanels: PanelDef[] = [{ id: 'device', accepts: 'any', label: 'Device', render: () => <DevicePanel /> }];
+export const devicePanels: PanelDef[] = [{ id: 'device', accepts: 'any', label: 'Device', wide: true, render: () => <DevicePanel /> }];
 
 export function useDiagnostics() {
   const store = useStore();
