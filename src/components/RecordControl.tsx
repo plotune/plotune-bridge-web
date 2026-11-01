@@ -3,6 +3,9 @@ import { FORMATS, type RecordFormat } from '../record/formats';
 import { useRecording } from '../record/context';
 import { useHub } from '../state/context';
 
+/** BLF needs the browser's built-in compression; where it is missing the option is not offered, so a recording can never be lost at the end. */
+const AVAILABLE_FORMATS = FORMATS.filter((f) => !f.binary || typeof CompressionStream !== 'undefined');
+
 const formatBytes = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
 
 /** Record the active device's frames to a file. The file is built in this browser and saved with a download; nothing is uploaded. */
@@ -32,7 +35,7 @@ export function RecordControl() {
         <label className="bw-inline-check">
           Record as
           <select value={format} onChange={(e) => setFormat(e.target.value as RecordFormat)} aria-label="Recording format">
-            {FORMATS.map((f) => (
+            {AVAILABLE_FORMATS.map((f) => (
               <option key={f.id} value={f.id}>{f.label}</option>
             ))}
           </select>
