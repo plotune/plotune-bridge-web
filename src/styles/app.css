@@ -294,7 +294,8 @@ button:disabled {
 /* Capture: the trace takes the top of the window, the working panels tile underneath. */
 .bw-grid[data-page='capture'] {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
-  grid-template-rows: minmax(200px, 1fr) minmax(220px, 40%);
+  /* --row1 and --row2 appear only after the user moves the splitter; without them this is the original layout. */
+  grid-template-rows: minmax(200px, var(--row1, 1fr)) minmax(220px, var(--row2, 40%));
   overflow: hidden;
 }
 .bw-grid[data-page='capture'] > .bw-span-2 {
@@ -305,7 +306,8 @@ button:disabled {
 }
 /* With a Plot the window scrolls: the trace, then the plot at full width, then the working panels. */
 .bw-grid[data-page='capture'][data-plot] {
-  grid-template-rows: minmax(260px, 38vh) max-content minmax(320px, auto);
+  /* A real height (never below 260px), so the splitter can change it; the track was never growing past its minimum before. */
+  grid-template-rows: max(260px, var(--trace-h, 0px)) max-content minmax(320px, auto);
   overflow: auto;
 }
 .bw-grid[data-page='capture'][data-plot] > .bw-tile-plot {
@@ -1811,4 +1813,40 @@ h1[tabindex='-1']:focus {
 }
 .bw-record-status {
   max-width: 340px;
+}
+
+/* The edge between the Trace and what is under it. */
+.bw-tile-trace {
+  position: relative;
+}
+.bw-splitter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -9px;
+  height: 14px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  cursor: row-resize;
+  touch-action: none;
+}
+.bw-splitter-grip {
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+.bw-splitter:hover .bw-splitter-grip,
+.bw-splitter:focus-visible .bw-splitter-grip {
+  background: var(--color-teal);
+}
+.bw-splitter:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+@media (max-width: 600px) {
+  .bw-splitter {
+    display: none;
+  }
 }
