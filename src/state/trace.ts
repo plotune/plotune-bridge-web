@@ -24,6 +24,8 @@ export class TraceBuffer {
   /** Real frames currently held; markers are not counted. */
   frameCount = 0;
   version = 0;
+  /** Changes when the buffer is cleared, so a reader that remembers positions knows to start over. */
+  generation = 0;
   originNs: bigint | null = null;
   /** Called for every pushed row, so a merged view can follow this buffer. */
   onPush: ((row: TraceRow) => void) | null = null;
@@ -56,6 +58,7 @@ export class TraceBuffer {
   clear(): void {
     this.rows = [];
     this.frameCount = 0;
+    this.generation += 1;
     this.evicted = 0;
     this.originNs = null;
     this.version += 1;
