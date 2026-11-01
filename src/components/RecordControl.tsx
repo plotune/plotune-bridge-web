@@ -14,8 +14,8 @@ export function RecordControl() {
   const store = hub.active.store;
   const connected = store.getState().phase === 'connected';
 
-  const save = () => {
-    const done = service.stop();
+  const save = async () => {
+    const done = await service.stop();
     if (!done) return;
     const url = URL.createObjectURL(done.blob);
     const link = document.createElement('a');
@@ -39,7 +39,7 @@ export function RecordControl() {
         </label>
       )}
       {recorder ? (
-        <button type="button" className="bw-button bw-small" onClick={save} title="Stop recording and save the file">
+        <button type="button" className="bw-button bw-small" onClick={() => void save()} title="Stop recording and save the file">
           Stop and save
         </button>
       ) : (

@@ -1,7 +1,7 @@
 import { bytesToHex } from '../lib/bytes';
 import type { CanFrame } from '../protocol/types';
 
-export type RecordFormat = 'asc' | 'candump' | 'csv';
+export type RecordFormat = 'asc' | 'blf' | 'candump' | 'csv';
 
 export interface FormatSpec {
   id: RecordFormat;
@@ -10,6 +10,8 @@ export interface FormatSpec {
   mime: string;
   /** Whether the file can say that the device reported lost frames. */
   carriesDrops: boolean;
+  /** Binary formats are built by their own writer (see blf.ts); `header` and `line` are not used. */
+  binary?: boolean;
   header(startedAt: Date): string;
   /** `time` is the device clock in seconds since the first recorded frame, as "s.uuuuuu". */
   line(frame: CanFrame, time: string): string;
@@ -61,6 +63,19 @@ const candump: FormatSpec = {
   dropLine: () => '',
 };
 
+/** Vector binary log. The writer is in blf.ts. */
+const blf: FormatSpec = {
+  id: 'blf',
+  label: 'BLF (Vector binary)',
+  extension: 'blf',
+  mime: 'application/octet-stream',
+  carriesDrops: false,
+  binary: true,
+  header: () => '',
+  line: () => '',
+  dropLine: () => '',
+};
+
 const csv: FormatSpec = {
   id: 'csv',
   label: 'CSV (spreadsheet)',
@@ -74,5 +89,5 @@ const csv: FormatSpec = {
   dropLine: () => '',
 };
 
-export const FORMATS: readonly FormatSpec[] = [asc, candump, csv];
+export const FORMATS: readonly FormatSpec[] = [asc, blf, candump, csv];
 export const formatSpec = (id: RecordFormat): FormatSpec => FORMATS.find((f) => f.id === id)!;

@@ -52,7 +52,7 @@ describe('formats (byte exact; ASC and candump were also read back with python-c
   });
 
   it('says which formats can carry a note about lost frames', () => {
-    expect(FORMATS.map((x) => [x.id, x.carriesDrops])).toEqual([['asc', true], ['candump', false], ['csv', false]]);
+    expect(FORMATS.map((x) => [x.id, x.carriesDrops])).toEqual([['asc', true], ['blf', false], ['candump', false], ['csv', false]]);
     expect(formatSpec('asc').extension).toBe('asc');
   });
 });
@@ -82,7 +82,7 @@ describe('Recorder', () => {
   it('writes nothing after stop', async () => {
     const r = new Recorder('asc', START);
     r.frame(f());
-    const blob = r.stop();
+    const blob = await r.stop();
     r.frame(f());
     expect(r.frames).toBe(1);
     expect(await blob.text()).toBe(r.text());
@@ -101,7 +101,7 @@ describe('Recorder', () => {
 describe('RecordingService', () => {
   const fakeStore = () => ({ taps: new Set<unknown>() }) as unknown as WorkspaceStore & { taps: Set<unknown> };
 
-  it('taps the store while recording, and lets go when it stops', () => {
+  it('taps the store while recording, and lets go when it stops', async () => {
     const service = new RecordingService();
     const store = fakeStore();
     let changes = 0;
@@ -109,13 +109,13 @@ describe('RecordingService', () => {
     service.start(store, 'asc', START);
     expect(store.taps.size).toBe(1);
     service.current!.frame(f());
-    const done = service.stop(new Date(2026, 10, 1, 9, 8, 7))!;
+    const done = (await service.stop(new Date(2026, 10, 1, 9, 8, 7)))!;
     expect(store.taps.size).toBe(0);
     expect(service.current).toBeNull();
     expect(done.summary).toMatchObject({ fileName: 'bridge-20261101-090807.asc', frames: 1, dropped: 0, carriesDrops: true });
     expect(service.last).toEqual(done.summary);
     expect(changes).toBe(2);
-    expect(service.stop()).toBeNull();
+    expect(await service.stop()).toBeNull();
   });
 
   it('a new recording replaces a running one without leaving a tap behind', () => {
