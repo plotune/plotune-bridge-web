@@ -73,4 +73,15 @@ test.describe('notices float over the workspace', () => {
     expect(await geometry(page)).toEqual(open);
     await device.close();
   });
+
+  test('Change address on a local device opens the address field directly, not the sign-in card', async ({ page }) => {
+    const device = await new MockDeviceServer().ready();
+    await connected(page, device.url);
+    device.drop(1006);
+    const dock = page.getByTestId('notice-dock');
+    await dock.getByRole('button', { name: 'Change address' }).click();
+    await expect(page.getByLabel('Device address')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toHaveCount(0);
+    await device.close();
+  });
 });

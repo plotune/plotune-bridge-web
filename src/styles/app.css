@@ -944,7 +944,8 @@ input[aria-invalid='true'] {
 }
 .bw-channel {
   padding: 14px 16px;
-  border: 1px solid var(--color-row-rule);
+  /* A fill, not a second border: the panel already has one. */
+  background: var(--color-chrome);
   border-radius: var(--radius-control);
   display: flex;
   flex-direction: column;

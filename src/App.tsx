@@ -185,7 +185,7 @@ function ConnectionNotice({ onLocal, dock }: { onLocal: () => void; dock: (label
             <button type="button" className="bw-button bw-primary" onClick={() => void store.connect(state.target)}>
               Reconnect
             </button>
-            <button type="button" className="bw-button" onClick={() => hub.editDevice(hub.active.id)}>
+            <button type="button" className="bw-button" onClick={onLocal}>
               Change address
             </button>
           </>
