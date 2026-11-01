@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodeMessage, decodeSelected } from '../src/dbc/decode';
 import { DbcRegistry } from '../src/dbc/registry';
-import { buildPath, formatTick, niceTicks, valueRange } from '../src/plot/geometry';
+import { MAX_SPAN_S, MIN_SPAN_S, buildPath, formatTick, niceTicks, valueRange, zoomedRange } from '../src/plot/geometry';
 import { Series, SeriesStore, type SignalKey } from '../src/plot/series';
 import { TraceBuffer } from '../src/state/trace';
 import type { CanFrame } from '../src/protocol/types';
@@ -192,5 +192,25 @@ describe('axes', () => {
     expect(r.min).toBeLessThan(5);
     expect(r.max).toBeGreaterThan(7);
     expect(valueRange([], 0, 1)).toBeNull();
+  });
+});
+
+describe('zoomedRange', () => {
+  it('halves or doubles the span around a point and keeps that point at the same place in the window', () => {
+    expect(zoomedRange(0, 10, 5, 0.5)).toEqual({ t0: 2.5, t1: 7.5 });
+    expect(zoomedRange(10, 20, 12, 0.5)).toEqual({ t0: 11, t1: 16 }); // 12 sits at 20% of the window before and after
+    expect(zoomedRange(10, 20, 15, 2)).toEqual({ t0: 5, t1: 25 });
+  });
+  it('never goes below 50 ms or above an hour, and never starts before time zero', () => {
+    const tiny = zoomedRange(1, 1.06, 1.03, 0.1);
+    expect(tiny.t1 - tiny.t0).toBeCloseTo(MIN_SPAN_S, 9);
+    const huge = zoomedRange(0, 3000, 1500, 10);
+    expect(huge.t1 - huge.t0).toBe(MAX_SPAN_S);
+    expect(zoomedRange(1, 3, 2, 2).t0).toBe(0);
+    expect(zoomedRange(1, 3, 1, 2)).toEqual({ t0: 1, t1: 5 }); // centred on the left edge: the start stays
+    expect(zoomedRange(0, 0, 0, 0.5).t1).toBeGreaterThan(0);
+  });
+  it('keeps a dragged range as chosen', () => {
+    expect(zoomedRange(4, 6, 5, 1)).toEqual({ t0: 4, t1: 6 });
   });
 });

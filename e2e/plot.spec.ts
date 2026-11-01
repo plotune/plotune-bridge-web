@@ -121,3 +121,56 @@ test('on a phone the plot and its table stay inside the page width', async ({ pa
   expect(canvas.x + canvas.width).toBeLessThanOrEqual(390);
   await device.close();
 });
+
+test('zoom: drag a range, buttons and keys, the CSV follows, and Reset follows live data again', async ({ page }) => {
+  const device = await new MockDeviceServer().ready();
+  device.generate(1, 100, 0x7e8);
+  await openPlot(page, device);
+  await choose(page, 'counter');
+  const plot = page.getByRole('region', { name: 'Plot' });
+  const canvas = page.getByTestId('plot-canvas');
+  await expect(canvas).toBeVisible();
+  await page.waitForTimeout(3500); // a few seconds of data
+  await plot.getByLabel('Time window').selectOption('10');
+  const rows = async () => {
+    const [download] = await Promise.all([page.waitForEvent('download'), plot.getByRole('button', { name: 'Download CSV' }).click()]);
+    const text = await (await import('node:fs/promises')).readFile((await download.path())!, 'utf8');
+    return text.trim().split('\r\n').length - 1;
+  };
+  const all = await rows();
+  expect(all).toBeGreaterThan(150);
+  await expect(plot.getByRole('button', { name: 'Reset zoom' })).toHaveCount(0);
+
+  // Drag across a part of the plot to zoom into it.
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.3, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.45, box.y + 40, { steps: 5 });
+  await page.mouse.up();
+  await expect(plot.getByText(/zoomed to [\d.]+ s/)).toBeVisible();
+  await expect(plot.getByRole('button', { name: 'Reset zoom' })).toBeVisible();
+  const zoomed = await rows();
+  // The drag covered about 15% of a 10 s window at 100 frames/s (about 150 rows): the export is the zoomed range, not everything.
+  expect(zoomed).toBeGreaterThan(60);
+  expect(zoomed).toBeLessThan(all * 0.6);
+
+  // Buttons and keys change the range further; the status says how far.
+  const status = plot.locator('.bw-panel-status');
+  const span = async () => Number(((await status.innerText()).match(/zoomed to ([\d.]+) s/) ?? [])[1]);
+  const first = await span();
+  await plot.getByRole('button', { name: 'Zoom in' }).click();
+  expect(await span()).toBeLessThan(first);
+  await plot.getByRole('button', { name: 'Zoom out' }).click();
+  await plot.getByRole('button', { name: 'Zoom out' }).click();
+  expect(await span()).toBeGreaterThan(first);
+  await canvas.focus();
+  const before = await span();
+  await page.keyboard.press('+');
+  expect(await span()).toBeLessThan(before);
+
+  // Reset (button, or 0 / Esc on the plot) follows the newest data again.
+  await page.keyboard.press('0');
+  await expect(plot.getByRole('button', { name: 'Reset zoom' })).toHaveCount(0);
+  await expect(status).toContainText('last 10 s');
+  await device.close();
+});
