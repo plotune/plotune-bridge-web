@@ -174,3 +174,22 @@ test('zoom: drag a range, buttons and keys, the CSV follows, and Reset follows l
   await expect(status).toContainText('last 10 s');
   await device.close();
 });
+
+test('the Trace splitter also works in the Plot layout', async ({ page }) => {
+  const device = await new MockDeviceServer().ready();
+  device.generate(1, 50, 0x7e8);
+  await openPlot(page, device);
+  await choose(page, 'counter');
+  await expect(page.getByTestId('plot-canvas')).toBeVisible();
+  const h = async () => Math.round((await page.locator('#panel-trace').boundingBox())!.height);
+  const before = await h();
+  const splitter = page.getByTestId('trace-splitter');
+  await splitter.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await expect(splitter).toHaveAttribute('aria-valuenow', '70');
+  expect(await h()).toBeGreaterThan(before + 20);
+  await page.keyboard.press('Enter');
+  await expect.poll(h).toBe(before);
+  await device.close();
+});

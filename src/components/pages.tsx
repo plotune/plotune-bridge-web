@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { toIsoTpConfig, toXcpConfig, type DiagSettings } from '../diagnostics/settings';
 import { IsoTpLink } from '../diagnostics/isotp';
 import { UdsClient } from '../diagnostics/uds';
@@ -9,6 +9,9 @@ import { DevicePanel } from './DevicePanel';
 import type { LogEntry } from './diagnostics';
 import { LinkPanel, UdsPanel, XcpPanel } from './DiagnosticsPanels';
 import { PlotPanel } from './PlotPanel';
+import { TraceSplitter } from './TraceSplitter';
+import { SPLIT_KEY, parseRatio, splitVars } from '../layout/split';
+import { readStored, removeStored, writeStored } from '../lib/storage';
 import { StatsPanel } from './StatsPanel';
 import { TracePanel } from './TracePanel';
 import { TransmitPanel } from './TransmitPanel';
@@ -58,12 +61,27 @@ export function PanelsMenu({ panels, hidden, onToggle }: { panels: PanelDef[]; h
 export function Dashboard({ page, panels: all, head, provides = null }: { page: PageId; panels: PanelDef[]; head: (menu: ReactNode) => ReactNode; provides?: readonly DataKind[] | null }) {
   const [hidden, toggle] = useHidden(page);
   const panels = panelsFor(all, provides);
+  // How much of the Capture window the Trace takes. Null (nothing saved) keeps the default layout exactly.
+  const [ratio, setRatio] = useState<number | null>(() => (page === 'capture' ? parseRatio(readStored(SPLIT_KEY)) : null));
+  const grid = useRef<HTMLDivElement>(null);
+  const plotShown = panels.some((p) => p.id === 'plot' && !hidden.has('plot'));
+  // null puts the original layout back and forgets the saved value.
+  const change = (next: number | null) => {
+    setRatio(next);
+    if (next === null) removeStored(SPLIT_KEY);
+    else writeStored(SPLIT_KEY, String(next));
+  };
+  // A drag is a share of the grid's height, or of the viewport when the page scrolls (Plot shown).
+  const reference = () => (plotShown ? window.innerHeight * 0.63 : (grid.current?.clientHeight ?? 600));
   return (
     <>
       {head(<PanelsMenu panels={panels} hidden={hidden} onToggle={toggle} />)}
-      <div className="bw-grid" data-page={page} data-plot={panels.some((p) => p.id === 'plot' && !hidden.has('plot')) ? 'yes' : undefined}>
+      <div ref={grid} className="bw-grid" data-page={page} data-plot={plotShown ? 'yes' : undefined} style={page === 'capture' ? splitVars(ratio) : undefined}>
         {panels.filter((p) => !hidden.has(p.id)).map((p) => (
-          <div key={p.id} className={`bw-tile-${p.id} ${p.wide ? 'bw-span-2' : ''}`}>{p.render()}</div>
+          <div key={p.id} className={`bw-tile-${p.id} ${p.wide ? 'bw-span-2' : ''}`}>
+            {p.render()}
+            {page === 'capture' && p.id === 'trace' && <TraceSplitter ratio={ratio} onChange={change} reference={reference} />}
+          </div>
         ))}
         {panels.every((p) => hidden.has(p.id)) && <p className="bw-empty">All panels are hidden. Use Panels to show them again.</p>}
       </div>
