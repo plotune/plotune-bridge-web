@@ -44,3 +44,24 @@ export function frameMatches(frame: CanFrame, f: TraceFilter, names?: (frame: Ca
 export function rowMatches(row: TraceRow, f: TraceFilter, names?: (frame: CanFrame) => string): boolean {
   return row.kind === 'frame' ? frameMatches(row.frame, f, names) : true;
 }
+
+/** The query as it appears in the table: trimmed, without a 0x prefix. Empty means nothing to highlight. */
+export function highlightQuery(text: string): string {
+  return text.trim().replace(/^0x/i, '');
+}
+
+/** Splits `text` around every case-insensitive occurrence of `query`, so the parts can be marked. */
+export function splitMatches(text: string, query: string): { text: string; match: boolean }[] {
+  if (query === '') return [{ text, match: false }];
+  const lower = text.toLowerCase();
+  const needle = query.toLowerCase();
+  const parts: { text: string; match: boolean }[] = [];
+  let from = 0;
+  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, from)) {
+    if (at > from) parts.push({ text: text.slice(from, at), match: false });
+    parts.push({ text: text.slice(at, at + needle.length), match: true });
+    from = at + needle.length;
+  }
+  if (from < text.length) parts.push({ text: text.slice(from), match: false });
+  return parts.length > 0 ? parts : [{ text, match: false }];
+}

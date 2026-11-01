@@ -1705,3 +1705,11 @@ h1[tabindex='-1']:focus {
 .bw-diag-settings[hidden] {
   display: none;
 }
+
+.bw-trace mark {
+  background: var(--color-teal-tint);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 700;
+}

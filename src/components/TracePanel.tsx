@@ -4,15 +4,25 @@ import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import type { DbcMessage, DecodedSignal } from '../dbc/types';
 import type { CanFrame } from '../protocol/types';
 import { IncrementalFilter } from '../lib/incrementalFilter';
-import { NO_FILTER, filterActive, formatTraceData, formatTraceId, type Radix, type TraceFilter } from '../lib/traceFilter';
+import { NO_FILTER, filterActive, formatTraceData, formatTraceId, highlightQuery, splitMatches, type Radix, type TraceFilter } from '../lib/traceFilter';
 import { useHub, useHubState } from '../state/context';
-import type { TraceRow } from '../state/trace';
+import type { TraceBuffer, TraceRow } from '../state/trace';
 import { IconClear } from './icons';
 import { Badge } from './Badge';
 import { Panel } from './Panel';
 
 const ROW_HEIGHT = 26;
 const OVERSCAN = 12;
+
+/** Text with the parts that match the filter marked. */
+function Marked({ text, query }: { text: string; query: string }) {
+  if (query === '') return <>{text}</>;
+  return (
+    <>
+      {splitMatches(text, query).map((part, i) => (part.match ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>))}
+    </>
+  );
+}
 
 /** A decoded value as people read it: up to 7 significant digits, its unit, and the label the database gives it. */
 export function formatSignalValue(signal: DecodedSignal): string {
@@ -27,9 +37,11 @@ interface RowExtras {
   expanded: boolean;
   onToggle(key: number): void;
   signal?: DecodedSignal;
+  /** What the filter is looking for, to mark it in the cells. */
+  query: string;
 }
 
-const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, message, expanded, onToggle, signal }: { row: TraceRow; originNs: bigint | null; top: number; showDevice: boolean; radix: Radix } & RowExtras) {
+const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, message, expanded, onToggle, signal, query }: { row: TraceRow; originNs: bigint | null; top: number; showDevice: boolean; radix: Radix } & RowExtras) {
   const style = { top };
   if (row.kind === 'frame' && signal) {
     return (
@@ -38,7 +50,7 @@ const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, me
         {showDevice && <span role="cell" className="bw-c-dev" />}
         <span role="cell" className="bw-c-ch" />
         <span role="cell" className="bw-c-id" />
-        {named && <span role="cell" className="bw-c-name bw-signal-name">{signal.name}</span>}
+        {named && <span role="cell" className="bw-c-name bw-signal-name"><Marked text={signal.name} query={query} /></span>}
         <span role="cell" className="bw-c-type" />
         <span role="cell" className="bw-c-dir" />
         <span role="cell" className="bw-c-dlc" />
@@ -53,12 +65,12 @@ const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, me
         <span role="cell" className="bw-mono bw-c-time">{formatRelativeNs(f.timestampNs, row.originNs ?? originNs ?? f.timestampNs)}</span>
         {showDevice && <span role="cell" className="bw-c-dev">{row.device}</span>}
         <span role="cell" className="bw-c-ch"><span className="bw-chip">CAN{f.channel}</span></span>
-        <span role="cell" className="bw-mono bw-c-id">{formatTraceId(f.id, f.extended, radix)}</span>
+        <span role="cell" className="bw-mono bw-c-id"><Marked text={formatTraceId(f.id, f.extended, radix)} query={query} /></span>
         {named && (
           <span role="cell" className="bw-c-name">
             {message ? (
               <button type="button" className="bw-expander" aria-expanded={expanded} aria-label={`${expanded ? 'Hide' : 'Show'} the signals of ${message.name}`} onClick={() => onToggle(row.key)} disabled={f.rtr || message.signals.length === 0}>
-                <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {message.name}
+                <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> <Marked text={message.name} query={query} />
               </button>
             ) : null}
           </span>
@@ -66,7 +78,7 @@ const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, me
         <span role="cell" className="bw-c-type">{f.extended ? 'Ext' : 'Std'} {f.rtr ? 'Remote' : 'Data'}</span>
         <span role="cell" className="bw-c-dir">{f.direction === 'rx' ? 'Rx' : 'Tx'}</span>
         <span role="cell" className="bw-mono bw-c-dlc">{f.dlc}</span>
-        <span role="cell" className="bw-mono bw-c-data">{f.rtr ? `remote request for ${f.dlc} bytes` : formatTraceData(f.data, radix)}</span>
+        <span role="cell" className="bw-mono bw-c-data">{f.rtr ? `remote request for ${f.dlc} bytes` : <Marked text={formatTraceData(f.data, radix)} query={query} />}</span>
       </div>
     );
   }
@@ -114,6 +126,15 @@ export function TracePanel() {
   const [follow, setFollow] = useState(true);
   const [filter, setFilter] = useState<TraceFilter>(NO_FILTER);
   const [radix, setRadix] = useState<Radix>('hex');
+  // Pause freezes what is shown at a position in the buffer; capture goes on, and what arrives meanwhile is counted.
+  const [pause, setPause] = useState<{ source: TraceBuffer; end: number; generation: number } | null>(null);
+  // A pause belongs to the buffer it was taken on: another source, or a cleared buffer, is live again.
+  const paused = pause !== null && pause.source === trace && pause.generation === trace.generation;
+  const liveEnd = trace.evicted + trace.length;
+  const limit = paused ? Math.min(pause.end, liveEnd) : liveEnd;
+  const visibleLength = Math.max(0, limit - trace.evicted);
+  const waiting = paused ? liveEnd - limit : 0;
+  const query = highlightQuery(filter.text);
   const programmatic = useRef(false);
 
   useEffect(() => {
@@ -126,12 +147,12 @@ export function TracePanel() {
 
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (follow && el) {
+    if (follow && !paused && el) {
       programmatic.current = true;
       el.scrollTop = el.scrollHeight;
       setScrollTop(el.scrollTop);
     }
-  }, [state.traceVersion, follow]);
+  }, [state.traceVersion, follow, paused]);
 
   const active = filterActive(filter);
   const registry = useDbcRegistry();
@@ -155,10 +176,10 @@ export function TracePanel() {
   // With no filter and nothing expanded the buffer is shown as it is.
   const [incremental] = useState(() => new IncrementalFilter());
   const entries = useMemo(() => {
-    if (!active && expanded.size === 0) return null;
+    if (!active && expanded.size === 0 && !paused) return null;
     const out: { index: number; signal?: DecodedSignal }[] = [];
-    const indexes = active ? incremental.update(trace, filter, namesOf, namesOf) : null;
-    const count = indexes ? indexes.length : trace.length;
+    const indexes = active ? incremental.update(trace, filter, namesOf, namesOf, limit) : null;
+    const count = indexes ? indexes.length : visibleLength;
     for (let n = 0; n < count; n += 1) {
       const i = indexes ? indexes[n] : n;
       const row = trace.at(i);
@@ -170,7 +191,7 @@ export function TracePanel() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, filter, expanded, namesOf, state.traceVersion, trace]);
+  }, [active, filter, expanded, namesOf, state.traceVersion, trace, paused, limit, visibleLength]);
   const total = entries ? entries.length : trace.length;
   const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const last = Math.min(total, Math.ceil((scrollTop + viewport) / ROW_HEIGHT) + OVERSCAN);
@@ -192,6 +213,7 @@ export function TracePanel() {
         expanded={row.kind === 'frame' && expanded.has(row.key)}
         onToggle={toggle}
         signal={entry.signal}
+        query={query}
       />,
     );
   }
@@ -206,7 +228,7 @@ export function TracePanel() {
       className="bw-panel-trace"
       status={
         <>
-          <span data-testid="trace-count">{state.capturing ? 'Capturing · ' : 'Stopped · '}{frames.toLocaleString()} {frames === 1 ? 'frame' : 'frames'}{active ? ` · ${shownFrames.toLocaleString()} shown` : ''}{trace.evicted > 0 ? ` · ${trace.evicted.toLocaleString()} older rows scrolled out of this view` : ''}</span>
+          <span data-testid="trace-count">{paused ? 'Paused · ' : state.capturing ? 'Capturing · ' : 'Stopped · '}{frames.toLocaleString()} {frames === 1 ? 'frame' : 'frames'}{active ? ` · ${shownFrames.toLocaleString()} shown` : ''}{trace.evicted > 0 ? ` · ${trace.evicted.toLocaleString()} older rows scrolled out of this view` : ''}{paused ? ` · ${waiting.toLocaleString()} new ${waiting === 1 ? 'row' : 'rows'} waiting` : ''}</span>
           {(droppedTotal > 0 || state.lostBatches > 0) && (
             <>
               {' '}
@@ -230,6 +252,9 @@ export function TracePanel() {
               </select>
             </label>
           )}
+          <button type="button" className="bw-button bw-small" aria-pressed={paused} disabled={!paused && trace.length === 0} onClick={() => setPause(paused ? null : { source: trace, end: trace.evicted + trace.length, generation: trace.generation })} title={paused ? 'Show new rows again' : 'Freeze the view; capture goes on'}>
+            {paused ? 'Resume' : 'Pause'}
+          </button>
           <label className="bw-inline-check">
             Numbers
             <select value={radix} onChange={(e) => setRadix(e.target.value as Radix)} aria-label="Number format">
