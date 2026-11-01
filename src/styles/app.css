@@ -1293,11 +1293,7 @@ input[aria-invalid='true'] {
   .bw-trace-head,
   .bw-trace-row,
   .bw-trace.has-device .bw-trace-head,
-  .bw-trace.has-device .bw-trace-row,
-  .bw-trace.has-name .bw-trace-head,
-  .bw-trace.has-name .bw-trace-row,
-  .bw-trace.has-name.has-device .bw-trace-head,
-  .bw-trace.has-name.has-device .bw-trace-row {
+  .bw-trace.has-device .bw-trace-row {
     grid-template-columns: 84px 64px 84px 38px 32px minmax(0, 1fr);
     padding: 0 10px;
     column-gap: 8px;
@@ -1323,9 +1319,22 @@ input[aria-invalid='true'] {
     white-space: nowrap;
   }
   .bw-trace-head .bw-c-type,
-  .bw-trace-row .bw-c-type,
-  .bw-trace .bw-c-name {
+  .bw-trace-row .bw-c-type {
     display: none;
+  }
+  /* With a database the Name column stays; the table then scrolls sideways inside its panel, never the page. */
+  .bw-trace.has-name {
+    overflow-x: auto;
+  }
+  .bw-trace.has-name .bw-trace-head,
+  .bw-trace.has-name .bw-trace-scroll {
+    min-width: 640px;
+  }
+  .bw-trace.has-name .bw-trace-head,
+  .bw-trace.has-name .bw-trace-row,
+  .bw-trace.has-name.has-device .bw-trace-head,
+  .bw-trace.has-name.has-device .bw-trace-row {
+    grid-template-columns: 84px 64px 84px 150px 38px 32px minmax(0, 1fr);
   }
   .bw-form-row {
     flex-direction: column;

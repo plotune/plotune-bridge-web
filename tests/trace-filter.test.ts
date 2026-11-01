@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NO_FILTER, filterActive, formatTraceData, formatTraceId, frameMatches, highlightQuery, rowMatches, splitMatches } from '../src/lib/traceFilter';
+import { NO_FILTER, filterActive, formatTraceData, formatTraceId, frameMatches, highlightQuery, parseRecent, rememberRecent, rowMatches, splitMatches } from '../src/lib/traceFilter';
 import { TraceBuffer } from '../src/state/trace';
 import { formatElapsed } from '../src/App';
 import type { CanFrame } from '../src/protocol/types';
@@ -88,5 +88,25 @@ describe('highlighting', () => {
     expect(splitMatches('ab', 'abc')).toEqual([{ text: 'ab', match: false }]);
     expect(splitMatches('', 'a')).toEqual([{ text: '', match: false }]);
     expect(splitMatches('aaa', 'aa').map((p) => p.text).join('')).toBe('aaa');
+  });
+});
+
+describe('recent filters', () => {
+  it('keeps the newest first, drops repeats ignoring case, ignores blanks and over-long text, and keeps six', () => {
+    expect(rememberRecent([], '7E8')).toEqual(['7E8']);
+    expect(rememberRecent(['7E8', 'aa'], '  7e8 ')).toEqual(['7e8', 'aa']);
+    expect(rememberRecent(['7E8'], ' ')).toEqual(['7E8']);
+    expect(rememberRecent(['7E8'], 'a')).toEqual(['7E8']);
+    expect(rememberRecent(['7E8'], 'x'.repeat(41))).toEqual(['7E8']);
+    let list: string[] = [];
+    for (const t of ['aa', 'bb', 'cc', 'dd', 'ee', 'ff', 'gg']) list = rememberRecent(list, t);
+    expect(list).toEqual(['gg', 'ff', 'ee', 'dd', 'cc', 'bb']);
+  });
+  it('reads only a short list of short strings', () => {
+    expect(parseRecent(null)).toEqual([]);
+    expect(parseRecent('not json')).toEqual([]);
+    expect(parseRecent('{"a":1}')).toEqual([]);
+    expect(parseRecent(JSON.stringify(['7E8', 5, 'x', 'y'.repeat(60), 'aa', { a: 1 }]))).toEqual(['7E8', 'aa']);
+    expect(parseRecent(JSON.stringify(Array.from({ length: 20 }, (_, i) => `entry${i}`)))).toHaveLength(6);
   });
 });

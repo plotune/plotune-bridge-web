@@ -65,3 +65,26 @@ export function splitMatches(text: string, query: string): { text: string; match
   if (from < text.length) parts.push({ text: text.slice(from), match: false });
   return parts.length > 0 ? parts : [{ text, match: false }];
 }
+
+export const RECENT_FILTERS_KEY = 'bw.trace.recent';
+const MAX_RECENT = 6;
+const MAX_RECENT_LENGTH = 40;
+
+/** The most recent filter texts, newest first, without repeats (ignoring case) or blanks. */
+export function rememberRecent(list: readonly string[], text: string): string[] {
+  const value = text.trim();
+  if (value.length < 2 || value.length > MAX_RECENT_LENGTH) return [...list];
+  return [value, ...list.filter((entry) => entry.toLowerCase() !== value.toLowerCase())].slice(0, MAX_RECENT);
+}
+
+/** Reads the remembered filters, ignoring anything that is not a short list of short strings. */
+export function parseRecent(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.length >= 2 && entry.length <= MAX_RECENT_LENGTH).slice(0, MAX_RECENT);
+  } catch {
+    return [];
+  }
+}
