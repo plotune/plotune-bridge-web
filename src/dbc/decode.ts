@@ -75,3 +75,30 @@ export function decodeMessage(message: DbcMessage, data: Uint8Array): DecodedSig
   }
   return out;
 }
+
+/**
+ * Decodes only the named signals of one frame (a plot needs a few signals, not all of a large message). Multiplexing follows
+ * the same rule as decodeMessage: a multiplexed signal appears only when its switch matches. The result equals the
+ * matching entries of decodeMessage, in message order.
+ */
+export function decodeSelected(message: DbcMessage, data: Uint8Array, wanted: ReadonlySet<string>): DecodedSignal[] {
+  const out: DecodedSignal[] = [];
+  let switchValue: number | null | undefined;
+  for (const signal of message.signals) {
+    if (!wanted.has(signal.name)) continue;
+    if (signal.mux.kind === 'muxed') {
+      if (switchValue === undefined) {
+        const selector = message.signals.find((x) => x.mux.kind === 'switch');
+        const raw = selector ? extractRaw(selector, data) : null;
+        switchValue = raw === null ? null : Number(raw);
+      }
+      if (signal.mux.value !== switchValue) continue;
+    }
+    const raw = extractRaw(signal, data);
+    if (raw === null) continue;
+    const physical = toNumber(signal, raw);
+    const rawNumber = signal.float ? physical : Number(signal.signed ? BigInt.asIntN(signal.length, raw) : raw);
+    out.push({ name: signal.name, value: physical * signal.factor + signal.offset, raw, unit: signal.unit, label: signal.labels.get(rawNumber) });
+  }
+  return out;
+}

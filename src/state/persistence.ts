@@ -5,7 +5,7 @@ import { parseTarget } from '../lib/target';
 export const WORKSPACE_KEY = 'bw.workspace';
 export type PageId = 'capture' | 'diagnostics' | 'device';
 export const PANEL_IDS = {
-  capture: ['trace', 'channels', 'stats', 'transmit'],
+  capture: ['trace', 'plot', 'channels', 'stats', 'transmit'],
   diagnostics: ['link', 'uds', 'xcp'],
   device: ['device'],
 } as const;
