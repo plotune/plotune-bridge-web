@@ -4,6 +4,7 @@ import type { DbcRegistry } from '../dbc/registry';
 import { readStored, writeStored } from '../lib/storage';
 import { visibleCsv } from '../plot/csv';
 import { AXIS_HEIGHT, LANE_HEIGHT, LEFT_GUTTER, SERIES_STYLES, drawPlot, plotHeight, xToTime } from '../plot/draw';
+import { zoomedRange } from '../plot/geometry';
 import { SeriesStore, signalId, type Series, type SignalKey } from '../plot/series';
 import { useHub } from '../state/context';
 import { Panel } from './Panel';
@@ -110,6 +111,9 @@ export function PlotPanel() {
   const [seconds, setSeconds] = useState<number>(30);
   const [paused, setPaused] = useState<{ t1: number } | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
+  // A zoomed range stays where it is while data keeps arriving; Reset returns to following the newest data.
+  const [zoom, setZoom] = useState<{ t0: number; t1: number } | null>(null);
+  const [drag, setDrag] = useState<{ x0: number; x1: number } | null>(null);
   const [picking, setPicking] = useState(selection.length === 0);
   const [store] = useState(() => new SeriesStore());
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -136,8 +140,9 @@ export function PlotPanel() {
   }, [store, effective, paused, trace, trace.version, registry, assignments]);
 
   const latest = series.reduce((max, s) => (s.length > 0 ? Math.max(max, s.timeAt(s.length - 1)) : max), 0);
-  const t1 = paused ? paused.t1 : Math.max(latest, seconds);
-  const t0 = t1 - seconds;
+  const live1 = paused ? paused.t1 : Math.max(latest, seconds);
+  const t1 = zoom ? zoom.t1 : live1;
+  const t0 = zoom ? zoom.t0 : live1 - seconds;
   const height = plotHeight(series.length);
 
   // The holder only exists once a signal is chosen, so the observer is attached when it appears.
@@ -169,6 +174,7 @@ export function PlotPanel() {
       t0,
       t1,
       cursor,
+      selection: drag ? { from: xToTime(drag.x0, t0, t1, width), to: xToTime(drag.x1, t0, t1, width) } : null,
       colors: { grid: css.getPropertyValue('--color-row-rule').trim() || '#ddd', text: css.getPropertyValue('--color-text').trim() || '#333', muted: css.getPropertyValue('--color-muted').trim() || '#666', background: css.getPropertyValue('--color-panel').trim() || '#fff' },
     });
     // Measured on purpose: the target is that the plot's own drawing stays well inside a display frame.
@@ -176,16 +182,44 @@ export function PlotPanel() {
     el.dataset.drawnPoints = String(drawnPoints);
   });
 
+  const localX = (event: PointerEvent<HTMLCanvasElement>) => event.clientX - event.currentTarget.getBoundingClientRect().left;
   const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
-    const x = event.clientX - event.currentTarget.getBoundingClientRect().left;
+    const x = localX(event);
     setCursor(x >= LEFT_GUTTER ? Math.min(t1, Math.max(t0, xToTime(x, t0, t1, width))) : null);
+    if (drag) setDrag({ ...drag, x1: Math.max(LEFT_GUTTER, Math.min(width, x)) });
+  };
+  const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    const x = localX(event);
+    if (event.button !== 0 || x < LEFT_GUTTER) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setDrag({ x0: x, x1: x });
+  };
+  const onPointerUp = () => {
+    // Dragging out a range zooms into it; a click without a drag does nothing.
+    if (drag && Math.abs(drag.x1 - drag.x0) >= 8) {
+      const a = xToTime(Math.min(drag.x0, drag.x1), t0, t1, width);
+      const b = xToTime(Math.max(drag.x0, drag.x1), t0, t1, width);
+      setZoom(zoomedRange(a, b, (a + b) / 2, 1));
+    }
+    setDrag(null);
+  };
+  const zoomBy = (factor: number) => {
+    const center = cursor ?? (t0 + t1) / 2;
+    setZoom(zoomedRange(t0, t1, center, factor));
   };
   const onKeyDown = (event: KeyboardEvent<HTMLCanvasElement>) => {
-    const step = seconds / 40;
+    const step = (t1 - t0) / 40;
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
       setCursor((c) => Math.min(t1, Math.max(t0, (c ?? t1) + (event.key === 'ArrowLeft' ? -step : step))));
-    } else if (event.key === 'Escape') setCursor(null);
+    } else if (event.key === '+' || event.key === '=') zoomBy(0.5);
+    else if (event.key === '-') zoomBy(2);
+    else if (event.key === '0') setZoom(null);
+    else if (event.key === 'Escape') {
+      if (cursor !== null) setCursor(null);
+      else if (drag) setDrag(null);
+      else setZoom(null);
+    }
   };
   const download = () => {
     const url = URL.createObjectURL(new Blob([visibleCsv(series, t0, t1)], { type: 'text/csv;charset=utf-8' }));
@@ -202,7 +236,7 @@ export function PlotPanel() {
       id="plot"
       title="Plot"
       className="bw-panel-plot"
-      status={paused ? 'Paused' : series.length === 0 ? 'No signals chosen' : `${series.length} ${series.length === 1 ? 'signal' : 'signals'} · last ${windowLabel(seconds)}`}
+      status={series.length === 0 ? 'No signals chosen' : `${paused ? 'Paused · ' : ''}${series.length} ${series.length === 1 ? 'signal' : 'signals'} · ${zoom ? `zoomed to ${formatValue(Number((t1 - t0).toFixed(3)))} s` : `last ${windowLabel(seconds)}`}`}
       actions={
         <>
           <button type="button" className="bw-button bw-small" aria-expanded={picking} onClick={() => setPicking(!picking)}>
@@ -216,6 +250,17 @@ export function PlotPanel() {
               ))}
             </select>
           </label>
+          <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={() => zoomBy(0.5)} title="Zoom in around the cursor, or the middle (key +)">
+            Zoom in
+          </button>
+          <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={() => zoomBy(2)} title="Zoom out (key -)">
+            Zoom out
+          </button>
+          {zoom && (
+            <button type="button" className="bw-button bw-small" onClick={() => setZoom(null)} title="Follow the newest data again (key 0 or Esc)">
+              Reset zoom
+            </button>
+          )}
           <button type="button" className="bw-button bw-small" aria-pressed={paused !== null} disabled={!paused && !hasData} onClick={() => setPaused(paused ? null : { t1 })} title={paused ? 'Follow the newest data again' : 'Freeze the plot; capture goes on'}>
             {paused ? 'Resume' : 'Pause'}
           </button>
@@ -236,15 +281,18 @@ export function PlotPanel() {
               style={{ width, height }}
               tabIndex={0}
               role="img"
-              aria-label={`Plot of ${series.map((s) => s.key.signal).join(', ')} over the last ${windowLabel(seconds)}. The values are in the table below. Arrow keys move the cursor.`}
+              aria-label={`Plot of ${series.map((s) => s.key.signal).join(', ')} over the last ${windowLabel(seconds)}. The values are in the table below. Arrow keys move the cursor; plus and minus zoom; 0 resets the zoom.`}
               onPointerMove={onPointerMove}
+              onPointerDown={onPointerDown}
+              onPointerUp={onPointerUp}
+              onPointerCancel={() => setDrag(null)}
               onPointerLeave={() => setCursor(null)}
               onKeyDown={onKeyDown}
               data-testid="plot-canvas"
             />
           </div>
           <p className="bw-fine">
-            Time is the device’s own clock in seconds since its first frame, not wall-clock time. Each signal has its own scale; units come from the database.
+            Time is the device’s own clock in seconds since its first frame, not wall-clock time. Each signal has its own scale; units come from the database. Drag across the plot to zoom into a range.
             {store.missed > 0 ? ` ${store.missed.toLocaleString()} rows left the trace before they were read, so the plot has gaps.` : ''}
           </p>
           <div className="bw-table-wrap">

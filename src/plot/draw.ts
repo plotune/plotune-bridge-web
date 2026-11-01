@@ -27,6 +27,8 @@ export interface DrawInput {
   t1: number;
   /** The time under the pointer, when it is over the plot. */
   cursor: number | null;
+  /** A range being dragged out to zoom into, in device seconds. */
+  selection?: { from: number; to: number } | null;
   colors: { grid: string; text: string; muted: string; background: string };
 }
 
@@ -67,7 +69,7 @@ function drawMarker(ctx: CanvasRenderingContext2D, kind: (typeof SERIES_STYLES)[
 
 /** Draws one lane per series on a shared device-clock time axis. Each lane has its own value scale and unit. */
 export function drawPlot(ctx: CanvasRenderingContext2D, input: DrawInput): { drawnPoints: number } {
-  const { width, height, dpr, series, t0, t1, cursor, colors } = input;
+  const { width, height, dpr, series, t0, t1, cursor, selection, colors } = input;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = colors.background;
@@ -173,6 +175,14 @@ export function drawPlot(ctx: CanvasRenderingContext2D, input: DrawInput): { dra
     // Keep the label inside the canvas where a tick sits at an edge.
     const half = ctx.measureText(text).width / 2;
     ctx.fillText(text, Math.min(width - half - 1, Math.max(half + 1, x)), axisTop + 4);
+  }
+  if (selection) {
+    const xa = timeToX(Math.min(selection.from, selection.to), t0, t1, width);
+    const xb = timeToX(Math.max(selection.from, selection.to), t0, t1, width);
+    ctx.fillStyle = colors.text;
+    ctx.globalAlpha = 0.12;
+    ctx.fillRect(xa, 6, xb - xa, axisTop - 12);
+    ctx.globalAlpha = 1;
   }
   if (cursor !== null && cursor >= t0 && cursor <= t1) {
     const x = Math.round(timeToX(cursor, t0, t1, width)) + 0.5;

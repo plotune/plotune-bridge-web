@@ -110,3 +110,19 @@ export function valueRange(paths: Path[], t0: number, t1: number): { min: number
   const pad = (max - min) * 0.06;
   return { min: min - pad, max: max + pad };
 }
+
+export const MIN_SPAN_S = 0.05;
+export const MAX_SPAN_S = 3600;
+
+/**
+ * The range after zooming by `factor` (below 1 zooms in) around `center`, which keeps the same relative position in the window.
+ * The span stays between 50 ms and an hour; the range never starts before time zero.
+ */
+export function zoomedRange(t0: number, t1: number, center: number, factor: number): { t0: number; t1: number } {
+  const span = t1 - t0;
+  const next = Math.min(MAX_SPAN_S, Math.max(MIN_SPAN_S, span * factor));
+  const ratio = span > 0 ? Math.min(1, Math.max(0, (center - t0) / span)) : 0.5;
+  let from = center - next * ratio;
+  if (from < 0) from = 0;
+  return { t0: from, t1: from + next };
+}
