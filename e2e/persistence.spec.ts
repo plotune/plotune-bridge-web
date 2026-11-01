@@ -32,10 +32,14 @@ test('zero-device first load renders the workspace and offline settings without 
   await page.screenshot({ path: 'docs/screenshots/offline-workspace-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit settings' }).click();
   await page.getByRole('textbox', { name: /^Request ID/ }).fill('701');
   await expect(page.getByRole('button', { name: 'Start session' })).toBeDisabled();
   await page.reload();
   await expect(page.locator('main')).toHaveAttribute('data-page', 'diagnostics');
+  // The remembered value shows in the one-line summary, and in the form once it is opened.
+  await expect(page.getByTestId('link-summary')).toContainText('requests 701');
+  await page.getByRole('button', { name: 'Edit settings' }).click();
   await expect(page.getByRole('textbox', { name: /^Request ID/ })).toHaveValue('701');
   expect(await page.evaluate(() => (window as unknown as { __deviceAccess: unknown }).__deviceAccess)).toEqual({ sockets: 0, permissions: 0 });
   await openLocalAddressForm(page);

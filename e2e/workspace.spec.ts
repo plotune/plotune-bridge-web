@@ -282,6 +282,7 @@ test.describe('diagnostics against a synthetic ECU', () => {
     await expect(page.getByTestId('needs-capture')).toHaveCount(0);
 
     const fill = (name: string, value: string) => page.getByRole('textbox', { name, exact: true }).fill(value);
+    await page.getByRole('button', { name: 'Edit settings' }).click();
     await page.getByRole('textbox', { name: /^Request ID \(hex\)/ }).fill('700');
     await page.getByRole('textbox', { name: /^Response ID \(hex\)/ }).fill('708');
 

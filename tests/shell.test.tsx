@@ -19,6 +19,11 @@ it('opens the main workspace and settings without a device or permission request
   expect(screen.getByRole('region', { name: 'Trace' })).toBeVisible();
   expect(screen.queryByTestId('permission-explainer')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
+  // The link settings stay out of the way behind a one-line summary until asked for.
+  expect(screen.getByTestId('link-summary')).toHaveTextContent('CAN1 · requests 7E0 → answers 7E8 · calibration 600 → 601');
+  expect(screen.getByLabelText(/^Request ID \(hex\)/)).not.toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+  expect(screen.getByRole('button', { name: 'Hide settings' })).toHaveAttribute('aria-expanded', 'true');
   expect(screen.getByLabelText(/^Request ID \(hex\)/)).toBeEnabled();
   expect(screen.getByRole('button', { name: 'Start session' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: /^Device$/ }));
@@ -50,4 +55,21 @@ it('reopens an unfinished device connection form after adding and selecting anot
   expect(hub.getState().slots).toHaveLength(1);
   fireEvent.click(screen.getByRole('button', { name: ADVANCED }));
   expect(screen.getByLabelText('Device address')).toBeVisible();
+});
+
+it('shows the link form on its own, and keeps it open, while the settings are invalid', () => {
+  const transportFactory = vi.fn();
+  const queryPermission = vi.fn(async () => 'unknown' as const);
+  const hub = new DeviceHub(() => new WorkspaceStore(defaultEnv({ transportFactory, queryPermission, browser })), (fn) => fn());
+  render(<App hub={hub} browser={browser} cloudSso={fakeSso()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
+  expect(screen.getByLabelText(/^Request ID \(hex\)/)).not.toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }));
+  fireEvent.change(screen.getByLabelText(/^Request ID \(hex\)/), { target: { value: 'zz' } });
+  expect(screen.getByRole('alert')).toHaveTextContent(/use hex digits/);
+  expect(screen.getByRole('button', { name: 'Hide settings' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(/^Request ID \(hex\)/), { target: { value: '7E0' } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Hide settings' }));
+  expect(screen.getByLabelText(/^Request ID \(hex\)/)).not.toBeVisible();
 });
