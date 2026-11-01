@@ -265,8 +265,11 @@ button:disabled {
 .bw-windowbar-end {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
+  min-width: 0;
 }
 .bw-grid {
   display: grid;
@@ -1305,6 +1308,11 @@ input[aria-invalid='true'] {
   .bw-windowbar {
     flex-wrap: wrap;
   }
+  .bw-windowbar-end {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
   .bw-panel-head {
     flex-wrap: wrap;
     row-gap: 8px;
@@ -1795,4 +1803,12 @@ h1[tabindex='-1']:focus {
 }
 .bw-panel-plot .bw-fine {
   padding: 0 18px;
+}
+
+/* Recording lives in the window toolbar: keep its label on one line and let the status text wrap in its own space. */
+.bw-windowbar .bw-inline-check {
+  white-space: nowrap;
+}
+.bw-record-status {
+  max-width: 340px;
 }

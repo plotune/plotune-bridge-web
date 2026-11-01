@@ -11,6 +11,9 @@ import { ConnectView } from './components/ConnectView';
 import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
 import { NoticeCard } from './components/Notice';
 import { DatabaseMenu } from './components/DatabaseMenu';
+import { RecordControl } from './components/RecordControl';
+import { RecordingProvider } from './record/context';
+import { RecordingService } from './record/recorder';
 import { NoticeDock } from './components/NoticeDock';
 import { canSourceDescriptor } from './core/can-source';
 import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
@@ -216,6 +219,7 @@ function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId
       </nav>
       {slots.length > 1 && <span className="bw-device-tag" data-testid="active-device">{hub.active.label}{state.descriptor ? ` · ${state.descriptor.deviceId}` : ''}</span>}
       <div className="bw-windowbar-end">
+        {page === 'capture' && <RecordControl />}
         {page === 'capture' && <DatabaseMenu />}
         {menu}
       </div>
@@ -491,13 +495,16 @@ export interface AppProps {
 
 export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso, dbc }: AppProps) {
   const [registry] = useState(() => dbc ?? new DbcRegistry(browserDbcStorage()));
+  const [recording] = useState(() => new RecordingService());
   return (
     <CloudProvider client={cloudClient} session={cloudSession} sso={cloudSso}>
       <HubProvider hub={hub}>
         <DbcProvider registry={registry}>
-          <div className="bw-app">
-            <Shell browser={browser} pageOrigin={pageOrigin} />
-          </div>
+          <RecordingProvider service={recording}>
+            <div className="bw-app">
+              <Shell browser={browser} pageOrigin={pageOrigin} />
+            </div>
+          </RecordingProvider>
         </DbcProvider>
       </HubProvider>
     </CloudProvider>
