@@ -71,6 +71,13 @@ export interface WorkspaceEnv {
 
 export type FrameListener = (frame: CanFrame) => void;
 
+/** A reader of the whole frame stream, in order, with the device's drop reports. Unlike the trace it never evicts. */
+export interface StreamTap {
+  frame(frame: CanFrame): void;
+  /** The device reported `count` frames lost on this channel just before the frames that follow. */
+  drop(channel: number, count: number): void;
+}
+
 export interface FrameIo {
   transmit(frame: TxFrame): Promise<void>;
   subscribe(listener: FrameListener): () => void;
@@ -130,6 +137,8 @@ async function readTraffic(transport: DeviceTransport): Promise<LinkTraffic | nu
 
 export class WorkspaceStore {
   readonly trace = new TraceBuffer();
+  /** Readers that must see every frame (a recording), not what the bounded trace still holds. */
+  readonly taps = new Set<StreamTap>();
   private state: WorkspaceState = INITIAL;
   private readonly listeners = new Set<() => void>();
   private readonly frameListeners = new Set<FrameListener>();
@@ -343,12 +352,14 @@ export class WorkspaceStore {
 
   private onBatch(batch: FrameBatch): void {
     if (batch.dropped > 0) {
+      this.taps.forEach((tap) => tap.drop(batch.channel, batch.dropped));
       this.trace.push({ kind: 'drop', channel: batch.channel, count: batch.dropped });
       this.set({ droppedReported: { ...this.state.droppedReported, [batch.channel]: (this.state.droppedReported[batch.channel] ?? 0) + batch.dropped } });
     }
     for (const frame of batch.frames) {
       this.trace.push({ kind: 'frame', frame });
       this.frameListeners.forEach((l) => l(frame));
+      this.taps.forEach((tap) => tap.frame(frame));
     }
     this.set({ traceVersion: this.trace.version });
   }
