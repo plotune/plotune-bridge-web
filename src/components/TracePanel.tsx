@@ -4,7 +4,8 @@ import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import type { DbcMessage, DecodedSignal } from '../dbc/types';
 import type { CanFrame } from '../protocol/types';
 import { IncrementalFilter } from '../lib/incrementalFilter';
-import { NO_FILTER, filterActive, formatTraceData, formatTraceId, highlightQuery, splitMatches, type Radix, type TraceFilter } from '../lib/traceFilter';
+import { readStored, writeStored } from '../lib/storage';
+import { NO_FILTER, RECENT_FILTERS_KEY, filterActive, formatTraceData, formatTraceId, highlightQuery, parseRecent, rememberRecent, splitMatches, type Radix, type TraceFilter } from '../lib/traceFilter';
 import { useHub, useHubState } from '../state/context';
 import type { TraceBuffer, TraceRow } from '../state/trace';
 import { IconClear } from './icons';
@@ -126,6 +127,14 @@ export function TracePanel() {
   const [follow, setFollow] = useState(true);
   const [filter, setFilter] = useState<TraceFilter>(NO_FILTER);
   const [radix, setRadix] = useState<Radix>('hex');
+  // The last few searches, offered as suggestions in the filter box and remembered in this browser.
+  const [recent, setRecent] = useState<string[]>(() => parseRecent(readStored(RECENT_FILTERS_KEY)));
+  const commitRecent = () => {
+    const next = rememberRecent(recent, filter.text);
+    if (next.join('\u0000') === recent.join('\u0000')) return;
+    setRecent(next);
+    writeStored(RECENT_FILTERS_KEY, JSON.stringify(next));
+  };
   // Pause freezes what is shown at a position in the buffer; capture goes on, and what arrives meanwhile is counted.
   const [pause, setPause] = useState<{ source: TraceBuffer; end: number; generation: number } | null>(null);
   // A pause belongs to the buffer it was taken on: another source, or a cleared buffer, is live again.
@@ -276,9 +285,17 @@ export function TracePanel() {
           type="search"
           value={filter.text}
           onChange={(e) => setFilter({ ...filter, text: e.target.value })}
+          onBlur={commitRecent}
+          onKeyDown={(e) => e.key === 'Enter' && commitRecent()}
+          list="trace-recent-filters"
           placeholder={named ? 'Filter by ID, data or name (e.g. 7E8, EngineSpeed)' : 'Filter by ID or data (e.g. 7E8, 22 F1)'}
           aria-label={named ? 'Filter by ID, data or name' : 'Filter by ID or data'}
         />
+        <datalist id="trace-recent-filters">
+          {recent.map((entry) => (
+            <option key={entry} value={entry} />
+          ))}
+        </datalist>
         <select value={filter.channel ?? ''} onChange={(e) => setFilter({ ...filter, channel: e.target.value === '' ? null : Number(e.target.value) })} aria-label="Filter by channel">
           <option value="">All channels</option>
           {channelNumbers.map((n) => (

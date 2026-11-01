@@ -69,3 +69,20 @@ test('the text a filter looks for is marked in the table', async ({ page }) => {
   await expect(page.locator('.bw-trace mark')).toHaveCount(0);
   await device.close();
 });
+
+test('recent filters are offered as suggestions and remembered across a reload', async ({ page }) => {
+  const device = await new MockDeviceServer().ready();
+  await connected(page, device.url);
+  const box = page.getByLabel('Filter by ID or data');
+  await box.fill('7e8');
+  await box.press('Enter');
+  await box.fill('22 f1');
+  await page.getByRole('combobox', { name: 'Filter by channel' }).focus(); // leaving the box also remembers it
+  await page.getByRole('button', { name: 'Clear filter' }).click();
+  const options = () => page.locator('#trace-recent-filters option').evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value));
+  expect(await options()).toEqual(['22 f1', '7e8']);
+  await page.reload();
+  await connected(page, device.url);
+  expect(await options()).toEqual(['22 f1', '7e8']);
+  await device.close();
+});

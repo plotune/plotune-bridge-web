@@ -55,3 +55,23 @@ test('a database names messages and signals in the trace, is remembered, and can
   await expect(page.getByTestId('dbc-input-1')).toBeAttached();
   await device.close();
 });
+
+test('on a phone the Name column stays and the table scrolls sideways inside its panel, never the page', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const device = await new MockDeviceServer().ready();
+  await connected(page, device.url);
+  await configureBothChannels(page);
+  await startCapture(page);
+  device.generate(1, 20, 0x7e8);
+  await page.locator('summary', { hasText: 'Databases' }).click();
+  await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
+  await page.locator('summary', { hasText: 'Databases' }).click();
+  const trace = page.getByRole('table', { name: 'Captured frames' });
+  await expect(trace.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+  await expect(trace.getByRole('button', { name: 'Show the signals of Resp' }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  // The table is wider than its panel and scrolls on its own.
+  const scrolls = await trace.evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(scrolls).toBe(true);
+  await device.close();
+});
