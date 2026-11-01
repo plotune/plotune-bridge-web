@@ -62,4 +62,20 @@ describe('IncrementalFilter', () => {
     inc.update(trace, filter, counting, 'k');
     expect(calls - first).toBeLessThanOrEqual(10);
   });
+
+  it('freezes at an end position: nothing after it is shown, and resuming catches up to a full re-scan', () => {
+    const trace = new TraceBuffer(10);
+    const inc = new IncrementalFilter();
+    const filter = { ...NO_FILTER, text: 'even' };
+    for (let i = 0; i < 30; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
+    const end = trace.evicted + trace.length; // pause here
+    const atPause = inc.update(trace, filter, names, names, end);
+    expect(atPause).toEqual(naive(trace, filter));
+    for (let i = 30; i < 200; i += 1) trace.push({ kind: 'frame', frame: frame(i) }); // capture goes on; rows also scroll out
+    const frozen = inc.update(trace, filter, names, names, end);
+    // Only rows that are still in the buffer and were there at the pause.
+    const expected = naive(trace, filter).filter((i) => trace.evicted + i < end);
+    expect(frozen).toEqual(expected);
+    expect(inc.update(trace, filter, names, names)).toEqual(naive(trace, filter)); // resumed
+  });
 });

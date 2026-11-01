@@ -16,8 +16,11 @@ export class IncrementalFilter {
   private generation = -1;
   private namesKey: unknown = undefined;
 
-  /** Buffer indexes of the matching rows, oldest first. `namesKey` changes whenever `names` would answer differently. */
-  update(trace: TraceBuffer, filter: TraceFilter, names: ((frame: CanFrame) => string) | undefined, namesKey: unknown): number[] {
+  /**
+   * Buffer indexes of the matching rows, oldest first. `namesKey` changes whenever `names` would answer differently.
+   * `end` (an absolute position) freezes the view at an earlier point, for a paused trace; rows after it are not looked at.
+   */
+  update(trace: TraceBuffer, filter: TraceFilter, names: ((frame: CanFrame) => string) | undefined, namesKey: unknown, end?: number): number[] {
     const signature = `${filter.text.trim().toLowerCase()}\u0000${filter.channel ?? ''}\u0000${filter.direction ?? ''}`;
     const evicted = trace.evicted;
     if (this.generation !== trace.generation || this.signature !== signature || this.namesKey !== namesKey) {
@@ -30,11 +33,11 @@ export class IncrementalFilter {
     let drop = 0;
     while (drop < this.matched.length && this.matched[drop] < evicted) drop += 1;
     if (drop > 0) this.matched.splice(0, drop);
-    const end = evicted + trace.length;
-    for (let absolute = Math.max(this.scanned, evicted); absolute < end; absolute += 1) {
+    const limit = Math.min(end ?? Infinity, evicted + trace.length);
+    for (let absolute = Math.max(this.scanned, evicted); absolute < limit; absolute += 1) {
       if (rowMatches(trace.at(absolute - evicted), filter, names)) this.matched.push(absolute);
     }
-    this.scanned = end;
+    this.scanned = Math.max(this.scanned, limit);
     return this.matched.map((absolute) => absolute - evicted);
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NO_FILTER, filterActive, formatTraceData, formatTraceId, frameMatches, rowMatches } from '../src/lib/traceFilter';
+import { NO_FILTER, filterActive, formatTraceData, formatTraceId, frameMatches, highlightQuery, rowMatches, splitMatches } from '../src/lib/traceFilter';
 import { TraceBuffer } from '../src/state/trace';
 import { formatElapsed } from '../src/App';
 import type { CanFrame } from '../src/protocol/types';
@@ -67,5 +67,26 @@ describe('elapsed time', () => {
     expect(formatElapsed(65_900)).toBe('00:01:05');
     expect(formatElapsed(3_661_000)).toBe('01:01:01');
     expect(formatElapsed(-5)).toBe('00:00:00');
+  });
+});
+
+describe('highlighting', () => {
+  it('normalises the query like the filter does', () => {
+    expect(highlightQuery('  0x7e8 ')).toBe('7e8');
+    expect(highlightQuery('')).toBe('');
+  });
+
+  it('splits around every case-insensitive match and keeps the original text', () => {
+    expect(splitMatches('7E8', '7e8')).toEqual([{ text: '7E8', match: true }]);
+    expect(splitMatches('AA 7E AA', 'aa')).toEqual([
+      { text: 'AA', match: true },
+      { text: ' 7E ', match: false },
+      { text: 'AA', match: true },
+    ]);
+    expect(splitMatches('Resp', 'zz')).toEqual([{ text: 'Resp', match: false }]);
+    expect(splitMatches('Resp', '')).toEqual([{ text: 'Resp', match: false }]);
+    expect(splitMatches('ab', 'abc')).toEqual([{ text: 'ab', match: false }]);
+    expect(splitMatches('', 'a')).toEqual([{ text: '', match: false }]);
+    expect(splitMatches('aaa', 'aa').map((p) => p.text).join('')).toBe('aaa');
   });
 });
