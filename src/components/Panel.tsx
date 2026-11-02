@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { PanelDomIdContext, useDocked } from '../workspace/context';
 import { IconExitFullscreen, IconFullscreen, IconMaximize, IconRestore } from './icons';
 
 export interface PanelProps {
@@ -15,6 +16,8 @@ export interface PanelProps {
 /** A dashboard panel that can fill the workspace (maximize) or the whole screen (full screen). BR-CAN-WEB-004. */
 export function Panel({ id, title, status, actions, className = '', children }: PanelProps) {
   const ref = useRef<HTMLElement>(null);
+  const docked = useDocked();
+  const domId = useContext(PanelDomIdContext);
   const [maximized, setMaximized] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const canFullscreen = typeof document !== 'undefined' && typeof document.fullscreenEnabled === 'boolean' && document.fullscreenEnabled;
@@ -40,15 +43,15 @@ export function Panel({ id, title, status, actions, className = '', children }: 
   return (
     <>
       {maximized && <div className="bw-panel-backdrop" onClick={() => setMaximized(false)} />}
-      <section ref={ref} id={`panel-${id}`} className={`bw-panel ${maximized ? 'is-maximized' : ''} ${fullscreen ? 'is-fullscreen' : ''} ${className}`} aria-label={title}>
+      <section ref={ref} id={domId ?? `panel-${id}`} className={`bw-panel ${docked ? 'bw-panel-docked' : ''} ${maximized ? 'is-maximized' : ''} ${fullscreen ? 'is-fullscreen' : ''} ${className}`} aria-label={title}>
         <header className="bw-panel-head">
-          <h2>{title}</h2>
+          <h2 className={docked ? 'bw-sr-only' : undefined}>{title}</h2>
           {status && <span className="bw-panel-status">{status}</span>}
           <div className="bw-panel-tools">
             {actions}
-            <button type="button" className="bw-icon-button" onClick={() => setMaximized((m) => !m)} aria-pressed={maximized} aria-label={maximized ? `Restore ${title}` : `Maximize ${title}`} title={maximized ? 'Restore (Esc)' : 'Maximize'}>
+            {!docked && <button type="button" className="bw-icon-button" onClick={() => setMaximized((m) => !m)} aria-pressed={maximized} aria-label={maximized ? `Restore ${title}` : `Maximize ${title}`} title={maximized ? 'Restore (Esc)' : 'Maximize'}>
               {maximized ? <IconRestore /> : <IconMaximize />}
-            </button>
+            </button>}
             {canFullscreen && (
               <button type="button" className="bw-icon-button" onClick={toggleFullscreen} aria-pressed={fullscreen} aria-label={fullscreen ? `Exit full screen for ${title}` : `Show ${title} full screen`} title={fullscreen ? 'Exit full screen' : 'Full screen'}>
                 {fullscreen ? <IconExitFullscreen /> : <IconFullscreen />}

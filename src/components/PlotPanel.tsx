@@ -102,12 +102,12 @@ function Swatch({ index }: { index: number }) {
   );
 }
 
-export function PlotPanel() {
+export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: string } = {}) {
   const hub = useHub();
   const trace = hub.traceBuffer();
   const registry = useDbcRegistry();
   const assignments = useDbcAssignments();
-  const [selection, setSelection] = useState<SignalKey[]>(() => restoreSelection(readStored(PLOT_STORAGE_KEY), registry));
+  const [selection, setSelection] = useState<SignalKey[]>(() => restoreSelection(readStored(storageKey), registry));
   const [seconds, setSeconds] = useState<number>(30);
   const [paused, setPaused] = useState<{ t1: number } | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
@@ -127,7 +127,7 @@ export function PlotPanel() {
   const effective = valid.length === selection.length ? selection : valid;
   const change = (next: SignalKey[]) => {
     setSelection(next);
-    writeStored(PLOT_STORAGE_KEY, JSON.stringify({ version: 1, signals: next }));
+    writeStored(storageKey, JSON.stringify({ version: 1, signals: next }));
   };
 
   // Read the samples that arrived since the last render. A paused plot reads nothing, so what is on screen stays put.

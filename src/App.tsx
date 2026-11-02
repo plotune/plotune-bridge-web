@@ -8,32 +8,30 @@ import type { SsoBrowser } from './cloud/sso';
 import { AccountDevices } from './components/AccountDevices';
 import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
-import { IconDevice, IconDiagnose, IconStart, IconStop, IconTrace } from './components/icons';
+import { IconStart, IconStop } from './components/icons';
 import { NoticeCard } from './components/Notice';
 import { DatabaseMenu } from './components/DatabaseMenu';
 import { RecordControl } from './components/RecordControl';
 import { RecordingProvider } from './record/context';
 import { RecordingService } from './record/recorder';
 import { NoticeDock } from './components/NoticeDock';
-import { canSourceDescriptor } from './core/can-source';
-import { Dashboard, capturePanels, devicePanels, diagnosticsPanels, useDiagnostics, type PageId } from './components/pages';
+import { ProjectProvider } from './workspace/context';
+import { DiagnosticsProvider } from './workspace/diagnostics';
+import { ProjectMenu } from './workspace/ProjectMenu';
+import { ProjectStore } from './workspace/project';
+import { ToastProvider } from './workspace/ui';
+import { WorkspaceCanvas } from './workspace/WorkspaceCanvas';
 import { SetupPane } from './components/SetupPane';
 import { SignInCard } from './components/SignInCard';
 import { SignInPending } from './components/SignInPending';
 import { ConnectStatus } from './components/ConnectStatus';
 import { RETRY_NOTICE_KINDS } from './transport/notices';
-import { DbcProvider, useDbcAssignments } from './dbc/context';
+import { DbcProvider } from './dbc/context';
 import { DbcRegistry, browserDbcStorage } from './dbc/registry';
 import { HubProvider, StoreProvider, useHub, useHubState, useStore, useWorkspace } from './state/context';
 import type { DeviceHub } from './state/hub';
 import { isRemoteTarget } from './transport/remote';
 import logo from './assets/plotune-logo.png';
-
-const NAV: { id: PageId; label: string; icon: typeof IconTrace }[] = [
-  { id: 'capture', label: 'Capture', icon: IconTrace },
-  { id: 'diagnostics', label: 'Diagnostics', icon: IconDiagnose },
-  { id: 'device', label: 'Device', icon: IconDevice },
-];
 
 /** Start and stop for every connected device at once, as one measurement. */
 function MeasurementControls() {
@@ -88,6 +86,7 @@ function Topbar({ showControls }: { showControls: boolean }) {
           Plotune <span>Bridge</span>
         </strong>
       </a>
+      {showControls && <ProjectMenu />}
       {showControls && (
         <>
           <span className="bw-top-divider" />
@@ -204,26 +203,16 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   return <ConnectionNotice onLocal={onLocal} dock={(label, node) => <NoticeDock key={label} label={label}>{node}</NoticeDock>} />;
 }
 
-function WindowBar({ page, onPage, menu }: { page: PageId; onPage: (page: PageId) => void; menu?: React.ReactNode }) {
+/** The bar above the canvas: canvas tabs, then recording, databases, Add panel and Commands. */
+function WorkspaceBar({ canvas = true }: { canvas?: boolean }) {
   const state = useWorkspace();
   const { slots } = useHubState();
   const hub = useHub();
   return (
-    <div className="bw-windowbar">
-      <nav className="bw-tabs" aria-label="Workspace">
-        {NAV.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" className={page === id ? 'active' : ''} aria-current={page === id ? 'page' : undefined} onClick={() => onPage(id)}>
-            <Icon /> {label}
-          </button>
-        ))}
-      </nav>
+    <>
       {slots.length > 1 && <span className="bw-device-tag" data-testid="active-device">{hub.active.label}{state.descriptor ? ` · ${state.descriptor.deviceId}` : ''}</span>}
-      <div className="bw-windowbar-end">
-        {page === 'capture' && <RecordControl />}
-        {page === 'capture' && <DatabaseMenu />}
-        {menu}
-      </div>
-    </div>
+      <WorkspaceCanvas showCanvas={canvas} extras={<><RecordControl /><DatabaseMenu /></>} />
+    </>
   );
 }
 
@@ -361,31 +350,27 @@ interface AddModeProps {
   setStartLocal: (value: boolean) => void;
 }
 
-function WorkspaceBody({ page, onPage, browser, pageOrigin, startLocal, setStartLocal, onLocalNetwork }: { page: PageId; onPage: (page: PageId) => void; browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
-  const diag = useDiagnostics();
-  const diagPanels = diagnosticsPanels(diag);
+function WorkspaceBody({ browser, pageOrigin, startLocal, setStartLocal, onLocalNetwork }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
   const { slots, editingId, activeId } = useHubState();
   const state = useWorkspace();
   const cloud = useCloud();
   const editing = editingId !== null && editingId === activeId;
-  const hasDatabase = useDbcAssignments().length > 0;
-  const provides = canSourceDescriptor(state, hasDatabase).provides;
-  const bar = (menu?: React.ReactNode) => <WindowBar page={page} onPage={onPage} menu={menu} />;
   // Each screen has exactly one h1: the intro, the banner title, or this hidden one for a workspace with only notices or panels.
   const titled = slots.length === 0 || bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
   return (
-    <main className="bw-main" data-page={page}>
+    <main className="bw-main">
       <SignInBanner />
       {editing ? (
-        <>{bar()}<AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} /></>
+        <>
+          <WorkspaceBar canvas={false} />
+          <AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} />
+        </>
       ) : (
         <>
           {!titled && <h1 className="bw-sr-only">Plotune Bridge workspace</h1>}
           {slots.length === 0 && <EmptyIntro />}
           <ConnectionBanner onLocal={onLocalNetwork} />
-          {page === 'capture' && <Dashboard page="capture" panels={capturePanels} provides={provides} head={bar} />}
-          {page === 'diagnostics' && <Dashboard page="diagnostics" panels={diagPanels} provides={provides} head={bar} />}
-          {page === 'device' && <Dashboard page="device" panels={devicePanels} provides={provides} head={bar} />}
+          <WorkspaceBar />
         </>
       )}
     </main>
@@ -400,14 +385,15 @@ function ActiveStore({ children }: { children: React.ReactNode }) {
 }
 
 function Workspace({ browser, pageOrigin, onLocalNetwork, ...add }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
-  const { activeId, page } = useHubState();
-  const hub = useHub();
+  const { activeId } = useHubState();
   return (
     <ActiveStore>
-      <div className="bw-shell">
-        <SetupPane />
-        <WorkspaceBody key={activeId} page={page} onPage={(next) => hub.setPage(next)} browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} {...add} />
-      </div>
+      <DiagnosticsProvider>
+        <div className="bw-shell">
+          <SetupPane />
+          <WorkspaceBody key={activeId} browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} {...add} />
+        </div>
+      </DiagnosticsProvider>
     </ActiveStore>
   );
 }
@@ -491,9 +477,12 @@ export interface AppProps {
   cloudSso?: SsoBrowser;
   /** Tests inject a registry without storage. The app remembers loaded databases in this browser. */
   dbc?: DbcRegistry;
+  /** Tests inject a project store without storage. The app saves projects in this browser. */
+  project?: ProjectStore;
 }
 
-export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso, dbc }: AppProps) {
+export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso, dbc, project }: AppProps) {
+  const [projects] = useState(() => project ?? new ProjectStore());
   const [registry] = useState(() => dbc ?? new DbcRegistry(browserDbcStorage()));
   const [recording] = useState(() => new RecordingService());
   return (
@@ -501,9 +490,13 @@ export function App({ hub, browser, pageOrigin = location.origin, cloudClient, c
       <HubProvider hub={hub}>
         <DbcProvider registry={registry}>
           <RecordingProvider service={recording}>
-            <div className="bw-app">
-              <Shell browser={browser} pageOrigin={pageOrigin} />
-            </div>
+            <ProjectProvider store={projects}>
+              <ToastProvider>
+                <div className="bw-app">
+                  <Shell browser={browser} pageOrigin={pageOrigin} />
+                </div>
+              </ToastProvider>
+            </ProjectProvider>
           </RecordingProvider>
         </DbcProvider>
       </HubProvider>
