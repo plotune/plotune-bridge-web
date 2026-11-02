@@ -26,7 +26,15 @@ The connection layer sits behind an adapter interface so a WebRTC or helper tran
 3. Choose **Allow** when the browser asks about local network access.
 4. Set a bit rate on the channel(s) you want to use, then **Start capture**. Unconfigured channels stay idle and are excluded. Sending requires a bit rate only on the selected channel.
 
-The workspace works like a measurement window: a device list on the left, the trace filling the top of the screen, and Channels, Statistics and Send frame tiled underneath. **Several devices** (up to eight) can be connected at once; Start capture / Stop capture in the top bar acts on all of them, the selected device is the one the panels act on, and the Trace shows all devices merged in arrival order (each row names its device) or one device at a time. Capture shows each device's channels in one trace with the device's timestamps. Nothing is relabelled or discarded silently: every row keeps the channel, the 64-bit device timestamp and the direction; frames the device could not deliver are counted per channel and marked in the trace; frames lost in transit are counted separately; rows that scroll out of the bounded view are counted too.
+The workspace is a set of **canvases**: layouts of panels that you arrange, name and keep (see [docs/workspace-v2.md](docs/workspace-v2.md)). A first visit starts with Capture, Diagnostics and Device, as ordinary canvases you can rename, change or delete; add your own from the **+** tab, from a template or blank. Drag a panel's tab beside another panel to dock it, drag a divider to resize it, and choose **Add panel** to pick what a canvas shows. Ctrl K opens a command palette. On a phone one panel fills the screen with a switcher at the bottom. Workspaces are saved in this browser as you work, and can be exported and imported.
+
+| Canvases and docked panels (with a device) | Analyzer on a recording |
+|---|---|
+| ![A canvas of docked panels: Trace and Scope above Channels, Statistics and Send frame](docs/screenshots/workspace-canvases.png) | ![The Analyzer: strips with their own axes, a shared axis, cursors and statistics](docs/screenshots/analyzer.png) |
+
+The **Scope** is the live plot. **Analyze this window** keeps what is on screen as a recording and opens it in the **Analyzer**, which studies recorded data with strips, common or individual y axes, zoom, cursors, statistics and calculated signals; **Recordings** also imports a CSV file. The Analyzer is modelled on the oscilloscope of ETAS MDA (see the design document).
+
+**Several devices** (up to eight) can be connected at once; Start capture / Stop capture in the top bar acts on all of them, the selected device is the one the panels act on, and the Trace shows all devices merged in arrival order (each row names its device) or one device at a time. Capture shows each device's channels in one trace with the device's timestamps. Nothing is relabelled or discarded silently: every row keeps the channel, the 64-bit device timestamp and the direction; frames the device could not deliver are counted per channel and marked in the trace; frames lost in transit are counted separately; rows that scroll out of the bounded view are counted too.
 
 ## Develop
 

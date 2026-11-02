@@ -15,7 +15,7 @@ test('Pause freezes the view while capture goes on, counts what arrives, and Res
   // Wait for real frames: pausing before the first one would freeze an empty table.
   await expect(count).toContainText(/Capturing · ([1-9]\d) frames/);
 
-  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.locator('#panel-trace').getByRole('button', { name: 'Pause' }).click();
   await expect(count).toContainText('Paused');
   const frozenAt = await lastTime(page);
   const frozenRows = await page.locator('.bw-trace-row[data-channel]').count();
@@ -23,9 +23,9 @@ test('Pause freezes the view while capture goes on, counts what arrives, and Res
   await expect.poll(async () => Number(((await count.innerText()).match(/([\d,]+) new rows? waiting/) ?? [])[1]?.replace(/,/g, '') ?? 0), { timeout: 5000 }).toBeGreaterThan(20);
   expect(await lastTime(page)).toBe(frozenAt);
   expect(await page.locator('.bw-trace-row[data-channel]').count()).toBe(frozenRows);
-  await expect(page.getByRole('button', { name: 'Resume' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#panel-trace').getByRole('button', { name: 'Resume' })).toHaveAttribute('aria-pressed', 'true');
 
-  await page.getByRole('button', { name: 'Resume' }).click();
+  await page.locator('#panel-trace').getByRole('button', { name: 'Resume' }).click();
   await expect(count).not.toContainText('Paused');
   await expect(count).not.toContainText('waiting');
   await expect.poll(() => lastTime(page), { timeout: 5000 }).not.toBe(frozenAt);
@@ -42,13 +42,13 @@ test('a paused trace stays frozen with a filter on, and Clear ends the pause', a
   const count = page.getByTestId('trace-count');
   await expect(count).toContainText(/([1-9]\d) frames/);
   await page.getByLabel('Filter by ID or data').fill('7e8');
-  await page.getByRole('button', { name: 'Pause' }).click();
+  await page.locator('#panel-trace').getByRole('button', { name: 'Pause' }).click();
   const shown = async () => Number((await count.innerText()).match(/([\d,]+) shown/)![1].replace(/,/g, ''));
   const atPause = await shown();
   await page.waitForTimeout(800);
   expect(await shown()).toBe(atPause);
-  await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await page.locator('#panel-trace').getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(page.locator('#panel-trace').getByRole('button', { name: 'Pause' })).toBeVisible();
   await device.close();
 });
 

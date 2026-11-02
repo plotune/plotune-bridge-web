@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerE
 import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import type { DbcRegistry } from '../dbc/registry';
 import { readStored, writeStored } from '../lib/storage';
+import { recordingFromSeries } from '../analysis/csv';
+import { useAnalysisMaybe } from '../analysis/context';
 import { visibleCsv } from '../plot/csv';
+import { useToast } from '../workspace/ui';
 import { AXIS_HEIGHT, LANE_HEIGHT, LEFT_GUTTER, SERIES_STYLES, drawPlot, plotHeight, xToTime } from '../plot/draw';
 import { zoomedRange } from '../plot/geometry';
 import { SeriesStore, signalId, type Series, type SignalKey } from '../plot/series';
@@ -102,12 +105,14 @@ function Swatch({ index }: { index: number }) {
   );
 }
 
-export function PlotPanel() {
+export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: string } = {}) {
   const hub = useHub();
+  const analysis = useAnalysisMaybe();
+  const toast = useToast();
   const trace = hub.traceBuffer();
   const registry = useDbcRegistry();
   const assignments = useDbcAssignments();
-  const [selection, setSelection] = useState<SignalKey[]>(() => restoreSelection(readStored(PLOT_STORAGE_KEY), registry));
+  const [selection, setSelection] = useState<SignalKey[]>(() => restoreSelection(readStored(storageKey), registry));
   const [seconds, setSeconds] = useState<number>(30);
   const [paused, setPaused] = useState<{ t1: number } | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
@@ -127,7 +132,7 @@ export function PlotPanel() {
   const effective = valid.length === selection.length ? selection : valid;
   const change = (next: SignalKey[]) => {
     setSelection(next);
-    writeStored(PLOT_STORAGE_KEY, JSON.stringify({ version: 1, signals: next }));
+    writeStored(storageKey, JSON.stringify({ version: 1, signals: next }));
   };
 
   // Read the samples that arrived since the last render. A paused plot reads nothing, so what is on screen stays put.
@@ -230,11 +235,21 @@ export function PlotPanel() {
     URL.revokeObjectURL(url);
   };
 
+  const analyze = () => {
+    if (!analysis) return;
+    const name = `Scope capture ${new Date().toTimeString().slice(0, 8)}`;
+    const rec = recordingFromSeries(series, t0, t1, name);
+    if (!rec) { toast.show('There is nothing in this window yet.'); return; }
+    analysis.store.add(rec);
+    analysis.open(rec);
+    toast.show(`Opened “${name}” in the Analyzer`);
+  };
+
   const hasData = series.some((s) => s.length > 0);
   return (
     <Panel
       id="plot"
-      title="Plot"
+      title="Scope"
       className="bw-panel-plot"
       status={series.length === 0 ? 'No signals chosen' : `${paused ? 'Paused · ' : ''}${series.length} ${series.length === 1 ? 'signal' : 'signals'} · ${zoom ? `zoomed to ${formatValue(Number((t1 - t0).toFixed(3)))} s` : `last ${windowLabel(seconds)}`}`}
       actions={
@@ -264,6 +279,11 @@ export function PlotPanel() {
           <button type="button" className="bw-button bw-small" aria-pressed={paused !== null} disabled={!paused && !hasData} onClick={() => setPaused(paused ? null : { t1 })} title={paused ? 'Follow the newest data again' : 'Freeze the plot; capture goes on'}>
             {paused ? 'Resume' : 'Pause'}
           </button>
+          {analysis && (
+            <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={analyze} title="Keep the window on screen as a recording and open it in the Analyzer">
+              Analyze this window
+            </button>
+          )}
           <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={download} title="Save the samples in the visible window as a CSV file">
             Download CSV
           </button>

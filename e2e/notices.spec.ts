@@ -4,9 +4,12 @@ import { MockDeviceServer } from './mockServer';
 
 const SELECTORS = ['nav[aria-label=Workspace]', '#panel-trace', '#panel-channels', '#panel-stats'];
 
-async function geometry(page: Page): Promise<Record<string, { y: number; height: number; width: number }>> {
+// On a phone one panel fills the screen, so only the Trace is measured there.
+const PHONE_SELECTORS = ['nav[aria-label=Workspace]', '#panel-trace'];
+
+async function geometry(page: Page, selectors: string[] = SELECTORS): Promise<Record<string, { y: number; height: number; width: number }>> {
   const out: Record<string, { y: number; height: number; width: number }> = {};
-  for (const selector of SELECTORS) {
+  for (const selector of selectors) {
     const box = await page.locator(selector).first().boundingBox();
     expect(box, selector).not.toBeNull();
     out[selector] = { y: Math.round(box!.y), height: Math.round(box!.height), width: Math.round(box!.width) };
@@ -24,14 +27,15 @@ test.describe('notices float over the workspace', () => {
       await startCapture(page);
       device.generate(1, 20, 0x7e8);
       await page.waitForTimeout(800);
-      const before = await geometry(page);
+      const selectors = name === 'phone' ? PHONE_SELECTORS : SELECTORS;
+      const before = await geometry(page, selectors);
 
       device.drop(1006);
       const dock = page.getByTestId('notice-dock');
       await expect(dock).toBeVisible();
       await expect(dock.getByRole('button', { name: 'Reconnect' })).toBeVisible();
-      const after = await geometry(page);
-      for (const selector of SELECTORS) {
+      const after = await geometry(page, selectors);
+      for (const selector of selectors) {
         // Never squeezed, never pushed down. (On a phone the device card above the workspace drops its channel lines when the
         // device disconnects, so the panels may slide up; that is the device's state, not the notice.)
         expect(after[selector].height, selector).toBe(before[selector].height);

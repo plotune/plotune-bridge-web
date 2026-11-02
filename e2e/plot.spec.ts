@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { configureBothChannels, connected, startCapture } from './helpers';
+import { configureBothChannels, connected, showPanel, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 // The mock device sends id 0x7E8 on CAN1 with data [counter, 0xAA] and 0x123 on CAN2.
@@ -10,12 +10,16 @@ async function openPlot(page: Page, device: MockDeviceServer) {
   await connected(page, device.url);
   await configureBothChannels(page);
   await startCapture(page);
-  await expect(page.getByRole('region', { name: 'Plot' })).toHaveCount(0); // no database yet: no Plot panel
+  await expect(page.getByTestId('plot-canvas')).toHaveCount(0); // no database yet: the Scope has nothing to draw
   await page.locator('summary', { hasText: 'Databases' }).click();
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
   await page.getByTestId('dbc-input-2').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
   await page.locator('summary', { hasText: 'Databases' }).click();
-  await expect(page.getByRole('region', { name: 'Plot' })).toBeVisible();
+  // The Scope gets the whole workspace (a phone shows one panel at a time anyway), so its plot is in view and has room.
+  const phone = await page.getByRole('navigation', { name: 'Panels on this canvas' }).isVisible();
+  if (phone) await showPanel(page, 'Scope');
+  await expect(page.getByRole('region', { name: 'Scope' })).toBeVisible();
+  if (!phone) await page.locator('[data-dock-group]').filter({ has: page.getByRole('region', { name: 'Scope' }) }).getByRole('button', { name: 'Maximize this group' }).click();
 }
 
 const choose = async (page: Page, text: string) => {
@@ -44,7 +48,7 @@ test('plot a decoded signal: lanes, units, cursor, pause, CSV, remembered, acces
   const counterCell = table.locator('tr[data-signal=Counter] td').first();
   const before = await counterCell.innerText();
   await expect.poll(() => counterCell.innerText(), { timeout: 5000 }).not.toBe(before);
-  const plot = page.getByRole('region', { name: 'Plot' });
+  const plot = page.getByRole('region', { name: 'Scope' });
   await plot.getByRole('button', { name: 'Pause' }).click();
   const frozen = await counterCell.innerText();
   await page.waitForTimeout(600);
@@ -127,7 +131,7 @@ test('zoom: drag a range, buttons and keys, the CSV follows, and Reset follows l
   device.generate(1, 100, 0x7e8);
   await openPlot(page, device);
   await choose(page, 'counter');
-  const plot = page.getByRole('region', { name: 'Plot' });
+  const plot = page.getByRole('region', { name: 'Scope' });
   const canvas = page.getByTestId('plot-canvas');
   await expect(canvas).toBeVisible();
   await page.waitForTimeout(3500); // a few seconds of data
@@ -172,24 +176,5 @@ test('zoom: drag a range, buttons and keys, the CSV follows, and Reset follows l
   await page.keyboard.press('0');
   await expect(plot.getByRole('button', { name: 'Reset zoom' })).toHaveCount(0);
   await expect(status).toContainText('last 10 s');
-  await device.close();
-});
-
-test('the Trace splitter also works in the Plot layout', async ({ page }) => {
-  const device = await new MockDeviceServer().ready();
-  device.generate(1, 50, 0x7e8);
-  await openPlot(page, device);
-  await choose(page, 'counter');
-  await expect(page.getByTestId('plot-canvas')).toBeVisible();
-  const h = async () => Math.round((await page.locator('#panel-trace').boundingBox())!.height);
-  const before = await h();
-  const splitter = page.getByTestId('trace-splitter');
-  await splitter.focus();
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
-  await expect(splitter).toHaveAttribute('aria-valuenow', '70');
-  expect(await h()).toBeGreaterThan(before + 20);
-  await page.keyboard.press('Enter');
-  await expect.poll(h).toBe(before);
   await device.close();
 });

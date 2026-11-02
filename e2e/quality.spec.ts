@@ -40,8 +40,12 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     device.generate(2, 25, 0x200);
     await expect(page.locator('[role=row][data-channel]').first()).toBeVisible();
     await expectNoAxeViolations(page, 'capture page');
-    await page.getByText('Panels', { exact: true }).click();
-    await expectNoAxeViolations(page, 'capture page with the panels menu open');
+    await page.getByRole('button', { name: 'Add panel' }).click();
+    await expectNoAxeViolations(page, 'capture page with the panel gallery open');
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Channels' }).click({ button: 'right' });
+    await expectNoAxeViolations(page, 'capture page with a tab menu open');
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Diagnostics' }).click();
     await expectNoAxeViolations(page, 'diagnostics page');
     await page.getByRole('button', { name: 'Device', exact: true }).click();
@@ -56,7 +60,7 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
   test('a maximized panel', async ({ page }) => {
     const device = await new MockDeviceServer().ready();
     await connected(page, device.url);
-    await page.getByRole('button', { name: 'Maximize Trace' }).click();
+    await page.getByRole('button', { name: 'Maximize this group' }).first().click();
     await expectNoAxeViolations(page, 'maximized trace');
     await device.close();
   });
@@ -75,7 +79,7 @@ test('a full session raises no console errors, page errors or Content-Security-P
   await expect(page.locator('[role=row][data-channel]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Diagnostics' }).click();
   await page.getByRole('button', { name: 'Device', exact: true }).click();
-  await page.getByRole('button', { name: 'Maximize Device' }).click();
+  await page.getByRole('button', { name: 'Maximize this group' }).click();
   await page.keyboard.press('Escape');
   device.drop(1013, 'overflow');
   await expect(page.locator('[data-notice=overflow]')).toBeVisible();
