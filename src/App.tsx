@@ -15,6 +15,7 @@ import { RecordControl } from './components/RecordControl';
 import { RecordingProvider } from './record/context';
 import { RecordingService } from './record/recorder';
 import { NoticeDock } from './components/NoticeDock';
+import { AnalysisProvider } from './analysis/context';
 import { ProjectProvider } from './workspace/context';
 import { DiagnosticsProvider } from './workspace/diagnostics';
 import { ProjectMenu } from './workspace/ProjectMenu';
@@ -492,9 +493,11 @@ export function App({ hub, browser, pageOrigin = location.origin, cloudClient, c
           <RecordingProvider service={recording}>
             <ProjectProvider store={projects}>
               <ToastProvider>
-                <div className="bw-app">
-                  <Shell browser={browser} pageOrigin={pageOrigin} />
-                </div>
+                <AnalysisProvider>
+                  <div className="bw-app">
+                    <Shell browser={browser} pageOrigin={pageOrigin} />
+                  </div>
+                </AnalysisProvider>
               </ToastProvider>
             </ProjectProvider>
           </RecordingProvider>
