@@ -142,8 +142,8 @@ describe('signed-out view', () => {
 
   it('the first-visit button "Sign in and add a device" opens the same pane with the Sign in with Plotune button', () => {
     setup();
-    expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    expect(screen.getByTestId('empty-canvas')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     expect(screen.getByRole('heading', { name: /sign in to connect your bridge/i })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign in with Plotune' })).toBeVisible();
   });
@@ -407,8 +407,8 @@ describe('the local-network address stays available', () => {
 
   it('the first empty workspace offers one obvious way to sign in and add a device', async () => {
     setup();
-    expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    expect(screen.getByTestId('empty-canvas')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     expect(await screen.findByRole('heading', { name: /sign in to connect your bridge/i })).toBeVisible();
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { BrowserInfo } from './lib/browser';
 import { CloudProvider, useCloud } from './cloud/context';
 import type { CloudStatus } from './cloud/context';
@@ -10,7 +10,8 @@ import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
 import { IconStart, IconStop } from './components/icons';
 import { NoticeCard } from './components/Notice';
-import { DatabaseMenu } from './components/DatabaseMenu';
+import { DeviceSettings } from './components/DeviceSettings';
+import { Explorer } from './components/Explorer';
 import { RecordControl } from './components/RecordControl';
 import { RecordingProvider } from './record/context';
 import { RecordingService } from './record/recorder';
@@ -18,11 +19,10 @@ import { NoticeDock } from './components/NoticeDock';
 import { AnalysisProvider } from './analysis/context';
 import { ProjectProvider } from './workspace/context';
 import { DiagnosticsProvider } from './workspace/diagnostics';
-import { ProjectMenu } from './workspace/ProjectMenu';
 import { ProjectStore } from './workspace/project';
-import { ToastProvider } from './workspace/ui';
-import { WorkspaceCanvas } from './workspace/WorkspaceCanvas';
-import { SetupPane } from './components/SetupPane';
+import { OpenSettingsContext } from './workspace/context';
+import { ToastProvider, useToast } from './workspace/ui';
+import { AddPanelButton, CanvasTabs, CanvasView, CommandButton, ExplorerToggle, WorkspaceUiProvider, useSheet } from './workspace/WorkspaceCanvas';
 import { SignInCard } from './components/SignInCard';
 import { SignInPending } from './components/SignInPending';
 import { ConnectStatus } from './components/ConnectStatus';
@@ -42,13 +42,20 @@ function MeasurementControls() {
   const connected = states.filter((s) => s.phase === 'connected');
   const capturing = connected.some((s) => s.capturing);
   const busy = states.some((s) => s.busy);
+  const toast = useToast();
+  // The reason a start was refused is shown next to the device in the explorer, and here too, since the explorer may be closed.
+  const start = async () => {
+    await hub.startAll();
+    const refused = hub.getState().slots.map((s) => s.store.getState().actionError).find((e): e is string => !!e);
+    if (refused) toast.show(refused);
+  };
   return capturing ? (
-    <button type="button" className="bw-button bw-small" onClick={() => void hub.stopAll()} disabled={busy}>
-      <IconStop /> Stop capture
+    <button type="button" className="bw-icon-button bw-capture is-on" onClick={() => void hub.stopAll()} disabled={busy} aria-label="Stop capture" title="Stop capture">
+      <IconStop />
     </button>
   ) : (
-    <button type="button" className="bw-button bw-primary bw-small" onClick={() => void hub.startAll()} disabled={connected.length === 0 || busy}>
-      <IconStart /> Start capture
+    <button type="button" className="bw-icon-button bw-capture" onClick={() => void start()} disabled={connected.length === 0 || busy} aria-label="Start capture" title={connected.length === 0 ? 'Connect a device to capture' : 'Start capture on every connected device'}>
+      <IconStart />
     </button>
   );
 }
@@ -75,30 +82,27 @@ function CaptureTimer() {
   );
 }
 
-function Topbar({ showControls }: { showControls: boolean }) {
+function Topbar({ showControls, explorerOpen }: { showControls: boolean; explorerOpen: boolean }) {
   const { slots } = useHubState();
-  const connected = slots.filter((s) => s.store.getState().phase === 'connected').length;
   const capturing = slots.some((s) => s.store.getState().phase === 'connected' && s.store.getState().capturing);
   return (
     <header className="bw-topbar">
-      <a className="bw-brand" href="https://plotune.net">
+      {showControls && <ExplorerToggle open={explorerOpen} />}
+      <a className="bw-brand" href="https://plotune.net" aria-label="Plotune" title="Plotune">
         <img className="bw-brand-logo" src={logo} alt="" />
-        <strong>
-          Plotune <span>Bridge</span>
-        </strong>
       </a>
-      {showControls && <ProjectMenu />}
-      {showControls && (
-        <>
-          <span className="bw-top-divider" />
-          <MeasurementControls />
-          {capturing && <CaptureTimer />}
-          <span className="bw-muted bw-top-summary">
-            {connected} of {slots.length} {slots.length === 1 ? 'device' : 'devices'} connected
-          </span>
-        </>
-      )}
+      {showControls && <CanvasTabs />}
       <div className="bw-top-end">
+        {showControls && (
+          <>
+            <AddPanelButton />
+            <CommandButton />
+            <span className="bw-top-divider" />
+            <RecordControl />
+            <MeasurementControls />
+            {capturing && <CaptureTimer />}
+          </>
+        )}
         <AccountMenu />
       </div>
     </header>
@@ -204,19 +208,6 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
   return <ConnectionNotice onLocal={onLocal} dock={(label, node) => <NoticeDock key={label} label={label}>{node}</NoticeDock>} />;
 }
 
-/** The bar above the canvas: canvas tabs, then recording, databases, Add panel and Commands. */
-function WorkspaceBar({ canvas = true }: { canvas?: boolean }) {
-  const state = useWorkspace();
-  const { slots } = useHubState();
-  const hub = useHub();
-  return (
-    <>
-      {slots.length > 1 && <span className="bw-device-tag" data-testid="active-device">{hub.active.label}{state.descriptor ? ` · ${state.descriptor.deviceId}` : ''}</span>}
-      <WorkspaceCanvas showCanvas={canvas} extras={<><RecordControl /><DatabaseMenu /></>} />
-    </>
-  );
-}
-
 /** The add-device pane. The Plotune account is the default; the local-network address form stays behind "Advanced". */
 function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal }: { browser: BrowserInfo; pageOrigin: string } & AddModeProps) {
   const hub = useHub();
@@ -303,39 +294,6 @@ function SignInBanner() {
 }
 
 /**
- * The empty workspace: say what to do and give one obvious way to start. Signed out, the way to start is signing in. Signed in,
- * the account is already there, so the intro only asks for a device. The sidebar "+" is easy to miss.
- */
-function EmptyIntro() {
-  const hub = useHub();
-  const cloud = useCloud();
-  if (cloud.status === 'signed-in') {
-    return (
-      <div className="bw-offline-intro" data-testid="empty-intro">
-        <h1>Add your first device</h1>
-        <p>Pair a Bridge device to your project and connect to it from anywhere. You can also explore the panels offline, or connect on your local network.</p>
-        <div className="bw-actions">
-          <button type="button" className="bw-button bw-primary" onClick={() => hub.addDevice()}>
-            Add a device
-          </button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="bw-offline-intro" data-testid="empty-intro">
-      <h1>Your workspace</h1>
-      <p>Sign in with your Plotune account to pair a Bridge device and connect to it from anywhere. You can also explore the panels offline, or connect on your local network.</p>
-      <div className="bw-actions">
-        <button type="button" className="bw-button bw-primary" onClick={() => hub.addDevice()}>
-          Sign in and add a device
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
  * Whether the connection banner is the screen's own title: a remote attempt (its card is headed "Connecting") or the
  * sign-in card for a remote device. Other banners are notices, and the screen then gets a visually hidden heading.
  */
@@ -352,26 +310,22 @@ interface AddModeProps {
 }
 
 function WorkspaceBody({ browser, pageOrigin, startLocal, setStartLocal, onLocalNetwork }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
-  const { slots, editingId, activeId } = useHubState();
+  const { editingId, activeId } = useHubState();
   const state = useWorkspace();
   const cloud = useCloud();
   const editing = editingId !== null && editingId === activeId;
-  // Each screen has exactly one h1: the intro, the banner title, or this hidden one for a workspace with only notices or panels.
-  const titled = slots.length === 0 || bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
+  // Each screen has exactly one h1: the banner title, or this hidden one.
+  const titled = bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
   return (
     <main className="bw-main">
       <SignInBanner />
       {editing ? (
-        <>
-          <WorkspaceBar canvas={false} />
-          <AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} />
-        </>
+        <AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} />
       ) : (
         <>
           {!titled && <h1 className="bw-sr-only">Plotune Bridge workspace</h1>}
-          {slots.length === 0 && <EmptyIntro />}
           <ConnectionBanner onLocal={onLocalNetwork} />
-          <WorkspaceBar />
+          <CanvasView />
         </>
       )}
     </main>
@@ -385,15 +339,18 @@ function ActiveStore({ children }: { children: React.ReactNode }) {
   return <StoreProvider store={slot.store}>{children}</StoreProvider>;
 }
 
-function Workspace({ browser, pageOrigin, onLocalNetwork, ...add }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
+function Workspace({ browser, pageOrigin, onLocalNetwork, explorerOpen, closeExplorer, settingsFor, closeSettings, ...add }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void; explorerOpen: boolean; closeExplorer: () => void; settingsFor: string | null; closeSettings: () => void } & AddModeProps) {
   const { activeId } = useHubState();
+  const sheet = useSheet();
   return (
     <ActiveStore>
       <DiagnosticsProvider>
-        <div className="bw-shell">
-          <SetupPane />
+        <div className={`bw-shell ${explorerOpen ? 'has-explorer' : ''}`}>
+          {explorerOpen && <Explorer onAway={closeExplorer} />}
+          {explorerOpen && sheet && <div className="bw-scrim" onClick={closeExplorer} aria-hidden="true" />}
           <WorkspaceBody key={activeId} browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} {...add} />
         </div>
+        {settingsFor !== null && <DeviceSettings deviceId={settingsFor} onClose={closeSettings} />}
       </DiagnosticsProvider>
     </ActiveStore>
   );
@@ -445,6 +402,11 @@ function RememberedReconnect() {
   return null;
 }
 
+const EXPLORER_KEY = 'bw.explorer';
+const readExplorer = (): boolean | null => {
+  try { const v = localStorage.getItem(EXPLORER_KEY); return v === 'open' ? true : v === 'closed' ? false : null; } catch { return null; }
+};
+
 function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: string }) {
   const cloud = useCloud();
   const hub = useHub();
@@ -454,17 +416,36 @@ function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: stri
     setStartLocal(true);
     hub.editDevice(hub.active.id);
   };
+  // Beside the canvas on a wide screen (open unless the user closed it, and that is remembered), and floating over it on a
+  // narrow one (closed until asked for, and never remembered).
+  const sheet = useSheet();
+  const [wideChoice, setWideChoice] = useState<boolean | null>(readExplorer);
+  const [floating, setFloating] = useState(false);
+  const explorerOpen = sheet ? floating : (wideChoice ?? true);
+  const toggleExplorer = useCallback(() => {
+    if (sheet) { setFloating(!floating); return; }
+    const next = !(wideChoice ?? true);
+    setWideChoice(next);
+    try { localStorage.setItem(EXPLORER_KEY, next ? 'open' : 'closed'); } catch { /* not remembered */ }
+  }, [sheet, floating, wideChoice]);
+  const closeExplorer = useCallback(() => setFloating(false), []);
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  const openSettings = useCallback((id?: string) => setSettingsFor(id ?? hub.active.id), [hub]);
+  const { slots } = useHubState();
+  const extraCommands = useMemo(() => slots.map((slot) => ({ label: `Settings: ${slot.label}`, group: 'Device', run: () => setSettingsFor(slot.id) })), [slots]);
   return (
-    <>
-      {/* The sign-in screen replaces the workspace, so the measurement controls would act on nothing and crowd a phone top bar. */}
-      <Topbar showControls={cloud.status !== 'signing-in'} />
-      <RememberedReconnect />
-      {cloud.status === 'signing-in' ? (
-        <SignInPending onContinueWithout={cloud.continueWithoutSignIn} />
-      ) : (
-        <Workspace browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} startLocal={startLocal} setStartLocal={setStartLocal} />
-      )}
-    </>
+    <OpenSettingsContext.Provider value={openSettings}>
+      <WorkspaceUiProvider onToggleExplorer={toggleExplorer} extraCommands={extraCommands}>
+        {/* The sign-in screen replaces the workspace, so the measurement controls would act on nothing and crowd a phone top bar. */}
+        <Topbar showControls={cloud.status !== 'signing-in'} explorerOpen={explorerOpen} />
+        <RememberedReconnect />
+        {cloud.status === 'signing-in' ? (
+          <SignInPending onContinueWithout={cloud.continueWithoutSignIn} />
+        ) : (
+          <Workspace browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} startLocal={startLocal} setStartLocal={setStartLocal} explorerOpen={explorerOpen} closeExplorer={closeExplorer} settingsFor={settingsFor} closeSettings={() => setSettingsFor(null)} />
+        )}
+      </WorkspaceUiProvider>
+    </OpenSettingsContext.Provider>
   );
 }
 

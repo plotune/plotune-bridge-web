@@ -93,7 +93,7 @@ export interface Theme { line: string; grid: string; text: string; muted: string
 export function readTheme(): Theme {
   const cs = getComputedStyle(document.documentElement);
   const v = (n: string, d: string) => cs.getPropertyValue(n).trim() || d;
-  return { line: v('--color-border', '#d2d5ce'), grid: v('--color-row-rule-soft', '#edf0f1'), text: v('--color-ink', '#1c242b'), muted: v('--color-muted', '#526067'), panel: v('--color-panel', '#ffffff'), paper: v('--color-paper', '#f7f6f2'), accent: v('--color-teal', '#00796b'), accent2: v('--color-violet', '#5b62a7'), bad: v('--text-bad', '#a8261f'), warn: v('--text-warn', '#7a5200') };
+  return { line: v('--color-border', '#d2d5ce'), grid: v('--color-row-rule-soft', '#edf0f1'), text: v('--color-ink', '#1c242b'), muted: v('--color-muted', '#526067'), panel: v('--color-panel', '#ffffff'), paper: v('--color-paper', '#f5f5f7'), accent: v('--color-accent-bright', '#5b62a7'), accent2: v('--color-accent', '#4a519a'), bad: v('--text-bad', '#a8261f'), warn: v('--text-warn', '#7a5200') };
 }
 export const styleOf = (s: SigCfg) => SERIES_STYLES[(s.color - 1) % SERIES_STYLES.length]!;
 

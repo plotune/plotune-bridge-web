@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DevicePanel } from '../src/components/DevicePanel';
+import { DeviceBody } from '../src/components/DevicePanel';
 import { StoreProvider } from '../src/state/context';
 import { defaultEnv, WorkspaceStore } from '../src/state/store';
 import type { ConnectionPath, LinkTraffic } from '../src/transport/types';
@@ -46,7 +46,7 @@ async function connectedPanel(path: ConnectionPath | 'pending', counters: LinkTr
     await current.connect('localhost:9101');
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  render(<StoreProvider store={current}><DevicePanel /></StoreProvider>);
+  render(<StoreProvider store={current}><DeviceBody /></StoreProvider>);
   return current;
 }
 
@@ -55,7 +55,7 @@ function connectionRow(): HTMLElement {
   return dt.parentElement!.querySelector('dd') as HTMLElement;
 }
 
-describe('DevicePanel connection row', () => {
+describe('DeviceBody connection row', () => {
   it('says direct on the local network for a WebSocket link', async () => {
     await connectedPanel({ kind: 'local-network' });
     expect(connectionRow()).toHaveTextContent('Direct on your local network · session 1');
@@ -105,7 +105,7 @@ describe('DevicePanel connection row', () => {
       queryPermission: async () => 'unknown',
       schedule: (fn) => fn(),
     }));
-    render(<StoreProvider store={store}><DevicePanel /></StoreProvider>);
+    render(<StoreProvider store={store}><DeviceBody /></StoreProvider>);
     expect(screen.queryByText('Connection')).toBeNull();
   });
 });

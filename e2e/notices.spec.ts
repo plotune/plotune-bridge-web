@@ -2,10 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { configureBothChannels, connected, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
-const SELECTORS = ['nav[aria-label=Workspace]', '#panel-trace', '#panel-channels', '#panel-stats'];
+const SELECTORS = ['nav[aria-label=Canvases]', '#panel-trace', '#panel-transmit', '#panel-stats'];
 
 // On a phone one panel fills the screen, so only the Trace is measured there.
-const PHONE_SELECTORS = ['nav[aria-label=Workspace]', '#panel-trace'];
+const PHONE_SELECTORS = ['nav[aria-label=Canvases]', '#panel-trace'];
 
 async function geometry(page: Page, selectors: string[] = SELECTORS): Promise<Record<string, { y: number; height: number; width: number }>> {
   const out: Record<string, { y: number; height: number; width: number }> = {};

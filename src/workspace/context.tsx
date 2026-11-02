@@ -27,3 +27,7 @@ export const useDocked = (): boolean => useContext(DockedContext);
 
 /** The DOM id of the panel being rendered. The first panel of a type keeps the id it always had (#panel-trace). */
 export const PanelDomIdContext = createContext<string | null>(null);
+
+/** Opens the settings dialog of a device (the selected one when no id is given). Provided by the app shell. */
+export const OpenSettingsContext = createContext<(deviceId?: string) => void>(() => undefined);
+export const useOpenSettings = (): ((deviceId?: string) => void) => useContext(OpenSettingsContext);

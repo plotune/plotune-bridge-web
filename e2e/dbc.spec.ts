@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { configureBothChannels, connected, maximizePanel, startCapture } from './helpers';
+import { configureBothChannels, connected, maximizePanel, openDatabases, putExplorerAway, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 // The mock device sends id 0x7E8 on CAN1 with data [counter, 0xAA].
@@ -17,7 +17,7 @@ test('a database names messages and signals in the trace, is remembered, and can
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);
 
   // A file that is not a database is refused in plain words and nothing changes.
-  await page.locator('summary', { hasText: 'Databases' }).click();
+  await openDatabases(page);
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'bad.dbc', mimeType: 'text/plain', buffer: Buffer.from('this is not a database') });
   await expect(page.getByRole('alert').filter({ hasText: 'No messages found' })).toBeVisible();
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);
@@ -45,7 +45,7 @@ test('a database names messages and signals in the trace, is remembered, and can
   // Remembered across a reload, without uploading anything.
   await page.reload();
   await connected(page, device.url);
-  await page.locator('summary', { hasText: 'Databases' }).click();
+  await openDatabases(page);
   await expect(page.getByTestId('db-row-1').getByText('car.dbc')).toBeVisible();
   device.generate(1, 20, 0x7e8);
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toBeVisible();
@@ -64,9 +64,9 @@ test('on a phone the Name column stays and the table scrolls sideways inside its
   await configureBothChannels(page);
   await startCapture(page);
   device.generate(1, 20, 0x7e8);
-  await page.locator('summary', { hasText: 'Databases' }).click();
+  await openDatabases(page);
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
-  await page.locator('summary', { hasText: 'Databases' }).click();
+  await putExplorerAway(page);
   const trace = page.getByRole('table', { name: 'Captured frames' });
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toBeVisible();
   await expect(trace.getByRole('button', { name: 'Show the signals of Resp' }).first()).toBeVisible();

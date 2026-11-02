@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
-import { ChannelsPanel } from '../src/components/ChannelsPanel';
+import { ChannelsBody } from '../src/components/ChannelsPanel';
 import { StoreProvider } from '../src/state/context';
 import { defaultEnv, WorkspaceStore } from '../src/state/store';
 import { FakeTransport } from './helpers/fakes';
@@ -18,7 +18,7 @@ it('leaves CAN2 visibly idle and lets it be configured while CAN1 captures', asy
   }));
   await store.connect('localhost:9101');
   await store.setBitrate(1, 500000);
-  render(<StoreProvider store={store}><ChannelsPanel /></StoreProvider>);
+  render(<StoreProvider store={store}><ChannelsBody /></StoreProvider>);
   const can2 = screen.getByTestId('channel-2');
   expect(within(can2).getByText(/Idle · set a bit rate/)).toBeVisible();
   expect(within(can2).getByRole('checkbox')).not.toBeChecked();
@@ -40,7 +40,7 @@ it('applies capture checkbox choices in the input event even when frame notifica
   }));
   await store.connect('localhost:9101');
   await store.setBitrate(1, 500000);
-  render(<StoreProvider store={store}><ChannelsPanel /></StoreProvider>);
+  render(<StoreProvider store={store}><ChannelsBody /></StoreProvider>);
   const checkbox = within(screen.getByTestId('channel-1')).getByRole('checkbox');
   expect(checkbox).toBeChecked();
   act(() => checkbox.click());

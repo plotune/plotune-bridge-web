@@ -10,7 +10,10 @@ export const MAX_PANELS = 120;
 export const MAX_PROJECTS = 20;
 export const MAX_NAME = 48;
 
-export const PANEL_TYPES = ['trace', 'plot', 'channels', 'stats', 'transmit', 'device', 'link', 'uds', 'xcp', 'analyzer', 'recordings'] as const;
+// Settings of one device (channels, the device itself, the diagnostic link) are not panels: they live in that device's settings
+// dialog, so two Bridges never share a panel that can only show one of them. An older saved workspace that still names those
+// panel types loses them when it is read.
+export const PANEL_TYPES = ['trace', 'plot', 'stats', 'transmit', 'uds', 'xcp', 'analyzer', 'recordings'] as const;
 export type PanelType = (typeof PANEL_TYPES)[number];
 export const isPanelType = (v: unknown): v is PanelType => PANEL_TYPES.includes(v as PanelType);
 
@@ -49,11 +52,10 @@ export const cleanName = (v: unknown, fallback: string): string => {
 /* ───────────── templates ───────────── */
 export interface Template { id: string; label: string; description: string }
 export const TEMPLATES: readonly Template[] = [
-  { id: 'capture', label: 'Capture', description: 'Trace and plot, with channels, statistics and a frame composer.' },
-  { id: 'debug', label: 'Debug a signal', description: 'A large plot with its trace and a channel panel beside it.' },
+  { id: 'capture', label: 'Capture', description: 'Trace and scope, with statistics and a frame composer.' },
+  { id: 'debug', label: 'Debug a signal', description: 'A large scope with its trace beside it.' },
   { id: 'transmit', label: 'Transmit and test', description: 'Compose frames and watch the bus.' },
-  { id: 'diagnostics', label: 'Diagnostics', description: 'Link settings, UDS requests and XCP calibration.' },
-  { id: 'device', label: 'Device', description: 'Connection and device information.' },
+  { id: 'diagnostics', label: 'Diagnostics', description: 'UDS requests and XCP calibration.' },
   { id: 'analysis', label: 'Analysis', description: 'Recordings and an Analyzer for recorded data.' },
 ];
 
@@ -68,15 +70,13 @@ export function buildTemplate(id: string): Built {
   const g = (...ids: string[]) => group(ids);
   switch (id) {
     case 'capture':
-      return { panels, root: split('col', [split('row', [g(mk('trace')), g(mk('plot'))], [0.6, 0.4]), split('row', [g(mk('channels')), g(mk('stats')), g(mk('transmit'))], [0.34, 0.33, 0.33])], [0.62, 0.38]) };
+      return { panels, root: split('col', [split('row', [g(mk('trace')), g(mk('plot'))], [0.6, 0.4]), split('row', [g(mk('stats')), g(mk('transmit'))], [0.4, 0.6])], [0.68, 0.32]) };
     case 'debug':
-      return { panels, root: split('row', [g(mk('plot')), split('col', [g(mk('trace')), g(mk('channels'))], [0.6, 0.4])], [0.62, 0.38]) };
+      return { panels, root: split('row', [g(mk('plot')), g(mk('trace'))], [0.62, 0.38]) };
     case 'transmit':
-      return { panels, root: split('row', [g(mk('transmit')), split('col', [g(mk('trace')), g(mk('stats'), mk('channels'))], [0.62, 0.38])], [0.45, 0.55]) };
+      return { panels, root: split('row', [g(mk('transmit')), split('col', [g(mk('trace')), g(mk('stats'))], [0.7, 0.3])], [0.45, 0.55]) };
     case 'diagnostics':
-      return { panels, root: split('row', [g(mk('link')), split('col', [g(mk('uds')), g(mk('xcp'))], [0.5, 0.5])], [0.32, 0.68]) };
-    case 'device':
-      return { panels, root: g(mk('device')) };
+      return { panels, root: split('row', [g(mk('uds')), g(mk('xcp'))], [0.5, 0.5]) };
     case 'analysis':
       return { panels, root: split('row', [g(mk('analyzer')), g(mk('recordings'))], [0.72, 0.28]) };
     default:
@@ -84,19 +84,10 @@ export function buildTemplate(id: string): Built {
   }
 }
 
+/** A first visit: one blank canvas. Nothing is laid out for the user; the empty canvas offers a few starting points. */
 export function defaultProject(name = 'My workspace'): Project {
-  const make = (label: string, template: string, panels: Record<string, PanelInstance>): Canvas => {
-    const b = buildTemplate(template);
-    Object.assign(panels, b.panels);
-    return { id: newId('c'), name: label, root: b.root };
-  };
-  const panels: Record<string, PanelInstance> = {};
-  // The three canvases a first visit has always had, as ordinary canvases the user can rename, change or delete.
-  const canvases = [make('Capture', 'capture', panels), make('Diagnostics', 'diagnostics', panels), make('Device', 'device', panels)];
-  // The Plot a first visit has always had keeps remembering its signals under the key it always used.
-  const plot = Object.values(panels).find((p) => p.type === 'plot');
-  if (plot) plot.config = { storageKey: 'bw.plot' };
-  return { version: PROJECT_VERSION, id: newId('pr'), name, active: canvases[0]!.id, canvases, panels };
+  const canvas: Canvas = { id: newId('c'), name: 'Canvas 1', root: null };
+  return { version: PROJECT_VERSION, id: newId('pr'), name, active: canvas.id, canvases: [canvas], panels: {} };
 }
 
 /* ───────────── reading and writing ───────────── */

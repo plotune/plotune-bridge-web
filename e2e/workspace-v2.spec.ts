@@ -1,15 +1,18 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { configureBothChannels, connected, startCapture } from './helpers';
+import { configureBothChannels, connected, explorer, seedWorkspace, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
-const nav = (page: Page) => page.getByRole('navigation', { name: 'Workspace' });
+const nav = (page: Page) => page.getByRole('navigation', { name: 'Canvases' });
 const DBC = 'BO_ 2024 Resp: 2 X\n SG_ Counter : 0|8@1+ (1,0) [0|255] "rpm" Y\n SG_ Level : 8|8@1+ (0.5,-10) [-10|117.5] "degC" Y\n';
 const CSV = 'time_s,Speed [km/h],Torque [Nm]\n' + Array.from({ length: 21 }, (_, i) => `${i / 2},${i * 5},${100 - i * 2}`).join('\n') + '\n';
 
 test('canvases can be added, named, switched and deleted, and are remembered after a reload', async ({ page }) => {
   await page.goto('/');
-  await expect(nav(page).getByRole('button')).toHaveText(['Capture', 'Diagnostics', 'Device', '+']);
+  // A first visit is a blank canvas with three starting points, and nothing else asking for attention.
+  await expect(nav(page).getByRole('button')).toHaveText(['Canvas 1']);
+  await expect(page.getByTestId('empty-canvas').getByRole('button')).toContainText(['Trace', 'Scope', 'Analyzer', 'Browse panels']);
+  await expect(page.getByText('Your workspace')).toHaveCount(0);
   await page.getByRole('button', { name: 'New canvas' }).click();
   await page.getByLabel('Canvas name').fill('Cell 7');
   await page.getByRole('button', { name: /Transmit and test/ }).click();
@@ -36,8 +39,8 @@ test('a tab can be dragged beside another panel, a divider resizes with the keyb
   await page.goto('/');
   await page.getByRole('button', { name: 'New canvas' }).click();
   await page.getByRole('button', { name: /Transmit and test/ }).click();
-  // Statistics and Channels share a tab group at the bottom right. Drag Channels to the left edge of the Send frame panel.
-  const channelsTab = page.getByRole('tab', { name: 'Channels' });
+  // Statistics sits under the Trace on the right. Drag it onto the right edge of the Send frame panel.
+  const channelsTab = page.getByRole('tab', { name: 'Statistics' });
   const send = page.getByRole('region', { name: 'Send frame' });
   const sendBox = (await send.boundingBox())!;
   const tabBox = (await channelsTab.boundingBox())!;
@@ -46,7 +49,7 @@ test('a tab can be dragged beside another panel, a divider resizes with the keyb
   await page.mouse.move(tabBox.x - 40, tabBox.y - 40, { steps: 5 });
   await page.mouse.move(sendBox.x + sendBox.width - 30, sendBox.y + sendBox.height / 2, { steps: 10 });
   await page.mouse.up();
-  const channels = page.getByRole('region', { name: 'Channels' });
+  const channels = page.getByRole('region', { name: 'Statistics', exact: true });
   await expect(channels).toBeVisible();
   const after = (await channels.boundingBox())!;
   expect(after.x).toBeGreaterThan(sendBox.x + sendBox.width * 0.4); // docked beside it, on the right
@@ -57,9 +60,9 @@ test('a tab can be dragged beside another panel, a divider resizes with the keyb
   await page.keyboard.press(before > 50 ? 'ArrowLeft' : 'ArrowRight');
   await expect.poll(async () => Number(await page.getByRole('separator', { name: 'Resize panels' }).first().getAttribute('aria-valuenow'))).not.toBe(before);
 
-  const box = (await page.getByRole('region', { name: 'Channels' }).boundingBox())!;
+  const box = (await page.getByRole('region', { name: 'Statistics', exact: true }).boundingBox())!;
   await page.reload();
-  const again = (await page.getByRole('region', { name: 'Channels' }).boundingBox())!;
+  const again = (await page.getByRole('region', { name: 'Statistics', exact: true }).boundingBox())!;
   expect(Math.abs(again.x - box.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(again.width - box.width)).toBeLessThanOrEqual(2);
 });
@@ -112,9 +115,8 @@ test('the Scope sends its window to the Analyzer', async ({ page }) => {
   await connected(page, device.url);
   await configureBothChannels(page);
   await startCapture(page);
-  await page.locator('summary', { hasText: 'Databases' }).click();
+  await (await explorer(page)).getByRole('button', { name: /^Databases/ }).click();
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
-  await page.locator('summary', { hasText: 'Databases' }).click();
   const scope = page.getByRole('region', { name: 'Scope' });
   await scope.getByLabel('Search signals').fill('counter');
   await scope.getByRole('group', { name: 'Choose signals to plot' }).getByRole('checkbox').first().check();
@@ -128,6 +130,7 @@ test('the Scope sends its window to the Analyzer', async ({ page }) => {
 });
 
 test('on a phone one panel fills the screen and the switcher changes it, without the page scrolling sideways', async ({ page }) => {
+  await seedWorkspace(page);
   await page.setViewportSize({ width: 390, height: 800 });
   await page.goto('/');
   await expect(nav(page)).toBeVisible();
@@ -137,4 +140,35 @@ test('on a phone one panel fills the screen and the switcher changes it, without
   await expect(page.getByRole('region', { name: 'Statistics', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Trace', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test('the command palette adds panels, and the explorer hides to give the canvas the whole width', async ({ page }) => {
+  await page.goto('/');
+  const side = page.getByRole('complementary', { name: 'Explorer' });
+  await expect(side).toBeVisible();
+  const withExplorer = (await page.getByRole('main').boundingBox())!.width;
+  await page.getByRole('button', { name: 'Explorer', exact: true }).click();
+  await expect(side).toHaveCount(0);
+  expect((await page.getByRole('main').boundingBox())!.width).toBeGreaterThan(withExplorer + 200);
+  await page.keyboard.press('Control+k');
+  await page.getByRole('combobox', { name: 'Search commands' }).fill('add panel: scope');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('region', { name: 'Scope' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('complementary', { name: 'Explorer' })).toHaveCount(0); // the choice is remembered
+});
+
+test('on a phone the explorer opens over the canvas, and the thumb bar stays inside the screen', async ({ page }) => {
+  await seedWorkspace(page);
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/');
+  const bar = page.getByRole('navigation', { name: 'Panels on this canvas' });
+  const box = (await bar.boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(800);
+  await expect(page.getByRole('complementary', { name: 'Explorer' })).toHaveCount(0);
+  await bar.getByRole('button', { name: 'Explorer' }).click();
+  await expect(page.getByRole('complementary', { name: 'Explorer' })).toBeVisible();
+  // Touch targets: the add-device button is at least 40 px.
+  const add = (await page.getByRole('complementary', { name: 'Explorer' }).getByRole('button', { name: 'Add a device' }).boundingBox())!;
+  expect(Math.min(add.width, add.height)).toBeGreaterThanOrEqual(40);
 });

@@ -1,7 +1,6 @@
 import type { BusState, ChannelStatus } from '../protocol/types';
 import { useStore, useWorkspace } from '../state/context';
 import { Badge, type Tone } from './Badge';
-import { Panel } from './Panel';
 
 export function formatBitrate(bps: number): string {
   return bps >= 1_000_000 ? `${bps / 1_000_000} Mbit/s` : `${bps / 1000} kbit/s`;
@@ -81,21 +80,20 @@ function ChannelCard({ channel }: { channel: ChannelStatus }) {
   );
 }
 
-export function ChannelsPanel() {
+/** The channels of the device whose store is provided: bit rate, termination and bus state. Shown in that device's settings. */
+export function ChannelsBody() {
   const state = useWorkspace();
   return (
-    <Panel id="channels" title="Channels" status={state.channels.length === 1 ? '1 channel' : `${state.channels.length} channels`}>
-      <div className="bw-channels">
-        {state.channels.length === 0 && <p className="bw-empty">Connect a device to see its channels.</p>}
-        {state.channels.map((c) => (
-          <ChannelCard key={c.channel} channel={c} />
-        ))}
-      </div>
+    <div className="bw-channels">
+      {state.channels.length === 0 && <p className="bw-empty">Connect the device to see its channels.</p>}
+      {state.channels.map((c) => (
+        <ChannelCard key={c.channel} channel={c} />
+      ))}
       {state.actionError && (
         <p className="bw-inline-error" role="alert" data-testid="action-error">
           {state.actionError}
         </p>
       )}
-    </Panel>
+    </div>
   );
 }

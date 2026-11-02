@@ -4,10 +4,10 @@ import { IsoTpLink } from '../diagnostics/isotp';
 import { UdsClient } from '../diagnostics/uds';
 import { XcpClient } from '../diagnostics/xcp';
 import { useHub, useHubState, useStore, useWorkspace } from '../state/context';
-import { ChannelsPanel } from './ChannelsPanel';
-import { DevicePanel } from './DevicePanel';
+import { ChannelsBody } from './ChannelsPanel';
+import { DeviceBody } from './DevicePanel';
 import type { LogEntry } from './diagnostics';
-import { LinkPanel, UdsPanel, XcpPanel } from './DiagnosticsPanels';
+import { UdsPanel, XcpPanel } from './DiagnosticsPanels';
 import { PlotPanel } from './PlotPanel';
 import { TraceSplitter } from './TraceSplitter';
 import { SPLIT_KEY, parseRatio, splitVars } from '../layout/split';
@@ -92,12 +92,12 @@ export function Dashboard({ page, panels: all, head, provides = null }: { page: 
 export const capturePanels: PanelDef[] = [
   { id: 'trace', accepts: ['frames'], label: 'Trace', wide: true, render: () => <TracePanel /> },
   { id: 'plot', accepts: ['signals'], label: 'Plot', wide: true, render: () => <PlotPanel /> },
-  { id: 'channels', accepts: ['frames'], label: 'Channels', wide: true, render: () => <ChannelsPanel /> },
+  { id: 'channels', accepts: ['frames'], label: 'Channels', wide: true, render: () => <ChannelsBody /> },
   { id: 'stats', accepts: ['frames'], label: 'Statistics', wide: true, render: () => <StatsPanel /> },
   { id: 'transmit', accepts: ['frames'], label: 'Send frame', wide: true, render: () => <TransmitPanel /> },
 ];
 
-export const devicePanels: PanelDef[] = [{ id: 'device', accepts: 'any', label: 'Device', wide: true, render: () => <DevicePanel /> }];
+export const devicePanels: PanelDef[] = [{ id: 'device', accepts: 'any', label: 'Device', wide: true, render: () => <DeviceBody /> }];
 
 export function useDiagnostics() {
   const store = useStore();
@@ -129,7 +129,6 @@ export function useDiagnostics() {
 
 export function diagnosticsPanels(d: ReturnType<typeof useDiagnostics>): PanelDef[] {
   return [
-    { id: 'link', accepts: ['frames'], label: 'Diagnostic link', render: () => <LinkPanel settings={d.settings} onChange={d.change} errors={d.errors} /> },
     { id: 'uds', accepts: ['frames'], label: 'Diagnostic requests', wide: true, render: () => <UdsPanel uds={d.uds} settings={d.settings} log={d.udsLog} onLog={d.addUdsLog} /> },
     { id: 'xcp', accepts: ['frames'], label: 'Calibration (XCP)', wide: true, render: () => <XcpPanel xcp={d.xcp} settings={d.settings} log={d.xcpLog} onLog={d.addXcpLog} /> },
   ];

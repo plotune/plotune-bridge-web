@@ -3,21 +3,70 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { expect, type Page } from '@playwright/test';
+import { PROJECTS_KEY } from '../src/workspace/project';
+import { seededProject } from '../tests/helpers/project';
+
+/**
+ * A first visit is one blank canvas. Most tests want panels to be there, so they start from a workspace with three canvases
+ * (Capture, Diagnostics, Analysis). It is written before the page loads, and only when the browser has no workspace yet.
+ */
+export async function seedWorkspace(page: Page): Promise<void> {
+  const storage = { data: {} as Record<string, string>, getItem: (k: string) => storage.data[k] ?? null, setItem: (k: string, v: string) => { storage.data[k] = v; }, removeItem: (k: string) => { delete storage.data[k]; } };
+  seededProject(storage);
+  const json = storage.data[PROJECTS_KEY]!;
+  await page.addInitScript(([key, value]) => { try { if (localStorage.getItem(key!) === null) localStorage.setItem(key!, value!); } catch { /* storage blocked */ } }, [PROJECTS_KEY, json]);
+}
+
+/** The explorer on the left. On a phone it is closed until asked for, so this opens it. */
+export async function explorer(page: Page) {
+  await page.getByRole('navigation', { name: 'Canvases' }).waitFor(); // the page has rendered, so "not visible" means closed
+  const side = page.getByRole('complementary', { name: 'Explorer' });
+  if (!(await side.isVisible())) await page.getByRole('button', { name: 'Explorer', exact: true }).first().click();
+  await expect(side).toBeVisible();
+  return side;
+}
+
+/** Opens the Databases section of the explorer, where a DBC is loaded for each channel. */
+export async function openDatabases(page: Page): Promise<void> {
+  const toggle = (await explorer(page)).getByRole('button', { name: /^Databases/ });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+}
+
+/** On a phone the explorer floats over the canvas; this puts it away again. Wide screens keep it beside the canvas. */
+export async function putExplorerAway(page: Page): Promise<void> {
+  const side = page.getByRole('complementary', { name: 'Explorer' });
+  if ((await side.isVisible()) && (page.viewportSize()?.width ?? 1440) <= 900) await page.getByRole('button', { name: 'Explorer', exact: true }).first().click();
+}
+
+/** The settings dialog of a device (the first one when no name is given). Channels, the device and the diagnostic link are here, not on the canvas. */
+export async function openDeviceSettings(page: Page, label?: string) {
+  const side = await explorer(page);
+  await (label ? side.getByRole('button', { name: `Settings for ${label}`, exact: true }) : side.getByRole('button', { name: /^Settings for / }).first()).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+export async function closeDialog(page: Page): Promise<void> {
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+}
 
 /** The Advanced link on the account pane. The local-network address form is behind it. */
 export const LOCAL_ADVANCED = 'Advanced: connect on the local network instead';
 
 /** Opens the local-network address form from the add-device pane (the account pane is the default). */
 export async function openLocalAddressForm(page: Page): Promise<void> {
-  await page.locator('.bw-setup').getByRole('button', { name: 'Add a device' }).click();
+  await (await explorer(page)).getByRole('button', { name: 'Add a device' }).click();
   await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
 }
 
 /** Answers the first-visit explainer and connects. `address` may be a full ws:// or wss:// URL. */
 export async function connect(page: Page, address: string): Promise<void> {
+  await seedWorkspace(page);
   await page.goto('/');
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
-  const remembered = page.getByTestId('device-chip').filter({ hasText: address.startsWith('ws') ? address : `ws://${address}` });
+  await expect(page.getByRole('navigation', { name: 'Canvases' })).toBeVisible();
+  const remembered = (await explorer(page)).getByTestId('device-chip').filter({ hasText: address.startsWith('ws') ? address : `ws://${address}` });
   if (await remembered.count()) {
     await remembered.getByRole('button', { name: /^Select / }).click();
     await page.locator('main').getByRole('button', { name: 'Reconnect', exact: true }).click();
@@ -33,7 +82,8 @@ export async function connect(page: Page, address: string): Promise<void> {
 
 export async function connected(page: Page, address: string): Promise<void> {
   await connect(page, address);
-  await expect(page.getByTestId('device-chip')).toContainText('Connected');
+  await expect((await explorer(page)).getByTestId('device-chip')).toContainText('Connected');
+  await putExplorerAway(page);
 }
 
 /** On a phone one panel fills the screen; this shows the named one. On a wide screen every panel is already in view. */
@@ -49,12 +99,14 @@ export async function maximizePanel(page: Page, name: string): Promise<void> {
   await page.locator('[data-dock-group]').filter({ has: page.getByRole('region', { name, exact: true }) }).getByRole('button', { name: 'Maximize this group' }).click();
 }
 
-export async function configureBothChannels(page: Page, bitrate = '500000'): Promise<void> {
-  await showPanel(page, 'Channels');
-  await page.getByLabel('CAN1 bit rate').selectOption(bitrate);
-  await page.getByLabel('CAN2 bit rate').selectOption(bitrate);
-  await expect(page.getByLabel('CAN2 bit rate')).toHaveValue(bitrate);
-  await showPanel(page, 'Trace');
+/** Sets both channels of a device to the same bit rate, in that device's settings. */
+export async function configureBothChannels(page: Page, bitrate = '500000', label?: string): Promise<void> {
+  const dialog = await openDeviceSettings(page, label);
+  await dialog.getByLabel('CAN1 bit rate').selectOption(bitrate);
+  await dialog.getByLabel('CAN2 bit rate').selectOption(bitrate);
+  await expect(dialog.getByLabel('CAN2 bit rate')).toHaveValue(bitrate);
+  await closeDialog(page);
+  await putExplorerAway(page);
 }
 
 export async function startCapture(page: Page): Promise<void> {
