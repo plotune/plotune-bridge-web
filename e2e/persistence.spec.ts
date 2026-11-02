@@ -36,7 +36,7 @@ test('zero-device first load renders the workspace and offline settings without 
   await page.getByRole('textbox', { name: /^Request ID/ }).fill('701');
   await expect(page.getByRole('button', { name: 'Start session' })).toBeDisabled();
   await page.reload();
-  await expect(page.locator('main')).toHaveAttribute('data-page', 'diagnostics');
+  await expect(page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Diagnostics', exact: true })).toHaveAttribute('aria-current', 'page');
   // The remembered value shows in the one-line summary, and in the form once it is opened.
   await expect(page.getByTestId('link-summary')).toContainText('requests 701');
   await page.getByRole('button', { name: 'Edit settings' }).click();
@@ -45,7 +45,7 @@ test('zero-device first load renders the workspace and offline settings without 
   await openLocalAddressForm(page);
   await expect(page.getByTestId('permission-explainer')).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(page.locator('main')).toHaveAttribute('data-page', 'diagnostics');
+  await expect(page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Diagnostics', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('device-chip')).toHaveCount(0);
 });
 
@@ -67,7 +67,7 @@ test('reload keeps the view, both devices and UI choices; reconnect reads live s
     const connections = a.connections;
     await observeDeviceAccess(page);
     await page.reload();
-    await expect(page.locator('main')).toHaveAttribute('data-page', 'diagnostics');
+    await expect(page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Diagnostics', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('device-chip')).toHaveCount(2);
     await expect(page.getByTestId('device-chip').first()).toContainText(a.url);
     expect(await page.evaluate(() => (window as unknown as { __deviceAccess: unknown }).__deviceAccess)).toEqual({ sockets: 0, permissions: 0 });

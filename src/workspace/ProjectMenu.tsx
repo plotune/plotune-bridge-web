@@ -12,7 +12,7 @@ function OpenProjects({ onClose }: { onClose: () => void }) {
   const { project, projects } = useProject();
   const toast = useToast();
   return (
-    <Modal title="Open project" onClose={onClose}>
+    <Modal title="Open workspace" onClose={onClose}>
       <ul className="bw-project-list">
         {projects.map((p) => (
           <li key={p.id}>
@@ -27,7 +27,7 @@ function OpenProjects({ onClose }: { onClose: () => void }) {
           </li>
         ))}
       </ul>
-      <p className="bw-fine">Projects are saved in this browser. Saving them to your Plotune account, to open on another device, is planned.</p>
+      <p className="bw-fine">Workspaces are saved in this browser. Saving them in your Plotune project, to open on another device, is planned.</p>
     </Modal>
   );
 }
@@ -45,14 +45,14 @@ function ExportImport({ onClose }: { onClose: () => void }) {
   };
   return (
     <Modal title="Export or import" onClose={onClose} wide footer={<button type="button" className="bw-button" onClick={onClose}>Close</button>}>
-      <h3>Export this project</h3>
-      <textarea className="bw-json" readOnly rows={6} aria-label="Project file contents" value={json} />
+      <h3>Export this workspace</h3>
+      <textarea className="bw-json" readOnly rows={6} aria-label="Workspace file contents" value={json} />
       <div className="bw-actions">
         <button type="button" className="bw-button" onClick={() => { void navigator.clipboard?.writeText(json).then(() => toast.show('Copied'), () => toast.show('Select the text and copy it')); }}>Copy</button>
-        <a className="bw-button" href={`data:application/json;charset=utf-8,${encodeURIComponent(json)}`} download={`${store.getState().project.name.replace(/[^\w.-]+/g, '-')}.bridge-project.json`}>Download</a>
+        <a className="bw-button" href={`data:application/json;charset=utf-8,${encodeURIComponent(json)}`} download={`${store.getState().project.name.replace(/[^\w.-]+/g, '-')}.bridge-workspace.json`}>Download</a>
       </div>
-      <h3>Import a project</h3>
-      <textarea className="bw-json" rows={5} aria-label="Paste a project file" placeholder="Paste a project file here" value={text} onChange={(e) => { setText(e.target.value); setError(''); }} />
+      <h3>Import a workspace</h3>
+      <textarea className="bw-json" rows={5} aria-label="Paste a workspace file" placeholder="Paste a workspace file here" value={text} onChange={(e) => { setText(e.target.value); setError(''); }} />
       {error && <p className="bw-error" role="alert">{error}</p>}
       <div className="bw-actions">
         <button type="button" className="bw-button bw-primary" disabled={!text.trim()} onClick={() => doImport(text)}>Import</button>
@@ -67,7 +67,7 @@ function ExportImport({ onClose }: { onClose: () => void }) {
 export function ProjectMenu() {
   const store = useProjectStore();
   const { project, saveFailed } = useProject() as ReturnType<typeof useProject> & { saveFailed: boolean };
-  const menu = useContextMenu('Project');
+  const menu = useContextMenu('Workspace');
   const [dialog, setDialog] = useState<'rename' | 'open' | 'export' | 'new' | 'copy' | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   return (
@@ -77,13 +77,13 @@ export function ProjectMenu() {
         type="button"
         className="bw-button bw-small bw-project-button"
         aria-haspopup="menu"
-        title="Project"
+        title="Saved workspace"
         onClick={() => { const r = button.current!.getBoundingClientRect(); menu.open(r.left, r.bottom + 4, [
           { heading: saveFailed ? 'Could not save in this browser' : 'Saved in this browser' },
-          { label: 'Rename project…', onSelect: () => setDialog('rename') },
-          { label: 'New project…', onSelect: () => setDialog('new') },
-          { label: 'Open project…', onSelect: () => setDialog('open') },
-          { label: 'Duplicate project…', onSelect: () => setDialog('copy') },
+          { label: 'Rename workspace…', onSelect: () => setDialog('rename') },
+          { label: 'New workspace…', onSelect: () => setDialog('new') },
+          { label: 'Open workspace…', onSelect: () => setDialog('open') },
+          { label: 'Duplicate workspace…', onSelect: () => setDialog('copy') },
           { separator: true },
           { label: 'Export or import…', onSelect: () => setDialog('export') },
         ]); }}
@@ -92,9 +92,9 @@ export function ProjectMenu() {
         <span className={`bw-project-state ${saveFailed ? 'is-bad' : ''}`}>{saveFailed ? 'Not saved' : 'Saved'}</span>
       </button>
       {menu.menu}
-      {dialog === 'rename' && <NameDialog title="Rename project" label="Project name" initial={project.name} onSubmit={(v) => store.renameProject(v)} onClose={() => setDialog(null)} />}
-      {dialog === 'new' && <NameDialog title="New project" label="Project name" initial="Untitled project" action="Create" onSubmit={(v) => store.newProject(v)} onClose={() => setDialog(null)} />}
-      {dialog === 'copy' && <NameDialog title="Duplicate project" label="Name of the copy" initial={`${project.name} copy`} action="Duplicate" onSubmit={(v) => store.duplicateProject(v)} onClose={() => setDialog(null)} />}
+      {dialog === 'rename' && <NameDialog title="Rename workspace" label="Workspace name" initial={project.name} onSubmit={(v) => store.renameProject(v)} onClose={() => setDialog(null)} />}
+      {dialog === 'new' && <NameDialog title="New workspace" label="Workspace name" initial="Untitled workspace" action="Create" onSubmit={(v) => store.newProject(v)} onClose={() => setDialog(null)} />}
+      {dialog === 'copy' && <NameDialog title="Duplicate workspace" label="Name of the copy" initial={`${project.name} copy`} action="Duplicate" onSubmit={(v) => store.duplicateProject(v)} onClose={() => setDialog(null)} />}
       {dialog === 'open' && <OpenProjects onClose={() => setDialog(null)} />}
       {dialog === 'export' && <ExportImport onClose={() => setDialog(null)} />}
     </>

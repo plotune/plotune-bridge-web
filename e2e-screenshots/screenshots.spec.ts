@@ -138,3 +138,40 @@ test('diagnostics against the real bench ECU', async ({ page }) => {
   control.close();
   void connect;
 });
+
+test('workspace: canvases and docked panels, with a device', async ({ page }) => {
+  const device = await new MockDeviceServer().ready();
+  await connected(page, device.url);
+  device.generate(1, 60, 0x7e8);
+  await page.getByRole('button', { name: 'Start capture' }).click();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: out('workspace-canvases') });
+  await device.close();
+});
+
+test('analyzer: strips, a shared axis, cursors and statistics on a recording', async ({ page }) => {
+  // A synthetic run: speed and torque (own axes), three voltages that share one axis, and a two-state limit signal.
+  const rows = ['time_s,Speed [km/h],Torque [Nm],Supply [V],Sense A [V],Sense B [V],Limit'];
+  for (let i = 0; i <= 600; i += 1) {
+    const t = i / 4;
+    const limit = t > 90 && t < 120 ? 1 : 0;
+    rows.push([t, 60 + 35 * Math.sin(t / 12), 140 + 60 * Math.cos(t / 9), 12 + 0.4 * Math.sin(t / 3), 4 + 2 * Math.sin(t / 7), 5.5 + 1.2 * Math.cos(t / 5), limit].map((v) => (typeof v === 'number' ? Number(v.toFixed(4)) : v)).join(','));
+  }
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New canvas' }).click();
+  await page.getByLabel('Canvas name').fill('Analysis');
+  await page.getByRole('button', { name: /^Analysis/ }).click();
+  await page.getByRole('region', { name: 'Recordings' }).locator('input[type=file]').setInputFiles({ name: 'bench-run.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.join('\n')) });
+  const analyzer = page.getByRole('region', { name: 'Analyzer' });
+  await expect(analyzer.getByRole('rowheader', { name: 'Speed' })).toBeVisible();
+  for (const name of ['Sense B', 'Limit']) {
+    await analyzer.getByRole('button', { name: 'Signal', exact: true }).click();
+    await page.getByRole('menuitem', { name: new RegExp(`^${name}`) }).click();
+  }
+  await analyzer.getByRole('button', { name: 'Cursors' }).click();
+  await analyzer.getByRole('button', { name: 'Cursors' }).click();
+  await analyzer.getByRole('button', { name: 'Statistics' }).click();
+  await page.locator('[data-dock-group]').filter({ has: analyzer }).getByRole('button', { name: 'Maximize this group' }).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: out('analyzer') });
+});

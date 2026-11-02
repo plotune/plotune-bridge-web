@@ -32,15 +32,16 @@ export function Dock({ root, panels, focusedGroup, onFocusGroup, onAddPanel }: D
   const store = useProjectStore();
   const [maximized, setMaximized] = useState<string | null>(null);
   const ids = domIds(root, panels);
-  const target = maximized ? groupById(root, maximized) : null;
   useEffect(() => {
     if (!maximized) return;
     const onKey = (e: KeyboardEvent | globalThis.KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[role=dialog],[role=menu]')) setMaximized(null); };
     document.addEventListener('keydown', onKey as EventListener);
     return () => document.removeEventListener('keydown', onKey as EventListener);
   }, [maximized]);
-  const props = { store, panels, ids, focusedGroup, onFocusGroup, onAddPanel, maximized, setMaximized };
-  return <div className="bw-dock" data-testid="dock">{target ? <GroupView group={target} {...props} /> : <NodeView node={root} {...props} />}</div>;
+  // A maximized group is drawn over the others, which stay mounted (so a paused trace or a zoomed plot keeps its state) but inert.
+  const active = maximized && groupById(root, maximized) ? maximized : null;
+  const props = { store, panels, ids, focusedGroup, onFocusGroup, onAddPanel, maximized: active, setMaximized };
+  return <div className="bw-workspace" data-testid="dock"><NodeView node={root} {...props} /></div>;
 }
 
 interface Shared {
@@ -148,6 +149,7 @@ function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAd
       activate(next);
       requestAnimationFrame(() => document.getElementById(`tab-${next}`)?.focus());
     }
+    if (e.key === 'Delete') { e.preventDefault(); store.closePanel(pid); }
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
       e.preventDefault();
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -157,7 +159,7 @@ function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAd
 
   const setFocus = useCallback(() => onFocusGroup(group.id), [onFocusGroup, group.id]);
   return (
-    <section className={`bw-group ${focused ? 'is-focused' : ''}`} data-dock-group={group.id} onPointerDownCapture={setFocus} onFocusCapture={setFocus} aria-label="Panel group">
+    <section className={`bw-group ${focused ? 'is-focused' : ''} ${maximized === group.id ? 'is-maximized' : ''}`} inert={maximized !== null && maximized !== group.id ? true : undefined} data-dock-group={group.id} onPointerDownCapture={setFocus} onFocusCapture={setFocus} aria-label="Panel group">
       <div className="bw-group-tabs">
         <div className="bw-tablist" role="tablist" aria-label="Panels in this group">
           {group.tabs.map((pid) => {
@@ -165,13 +167,14 @@ function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAd
             if (!inst) return null;
             const selected = pid === group.active;
             return (
-              <div key={pid} className="bw-tab" data-selected={selected}>
+              <div key={pid} className="bw-tab" role="presentation" data-selected={selected}>
                 <button
                   type="button"
                   role="tab"
                   id={`tab-${pid}`}
                   aria-selected={selected}
                   aria-controls={`tabpanel-${pid}`}
+                  aria-keyshortcuts="Delete"
                   tabIndex={selected ? 0 : -1}
                   onClick={() => { if (!justDragged) activate(pid); }}
                   onPointerDown={(e) => startTabDrag(e, pid)}
@@ -179,8 +182,9 @@ function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAd
                   onKeyDown={(e) => onTabKey(e, pid)}
                 >
                   {panelTitle(inst)}
+                  {/* A pointer shortcut. The keyboard closes a tab with Delete or from its menu, so this is not a second tab stop. */}
+                  <span className="bw-tab-close" aria-hidden="true" title={`Close ${panelTitle(inst)}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); store.closePanel(pid); }}>×</span>
                 </button>
-                <button type="button" className="bw-tab-close" aria-label={`Close ${panelTitle(inst)}`} onClick={() => store.closePanel(pid)}>×</button>
               </div>
             );
           })}

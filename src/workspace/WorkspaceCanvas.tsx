@@ -46,10 +46,10 @@ function NewCanvasDialog({ onClose, canDuplicate }: { onClose: () => void; canDu
   const { project } = useProject();
   const toast = useToast();
   const [name, setName] = useState(`Canvas ${project.canvases.length + 1}`);
-  const make = (template: string) => { if (store.addCanvas(name.trim() || name, template)) onClose(); else toast.show(`A project can have up to ${MAX_CANVASES} canvases.`); };
+  const make = (template: string) => { if (store.addCanvas(name.trim() || name, template)) onClose(); else toast.show(`A workspace can have up to ${MAX_CANVASES} canvases.`); };
   return (
     <Modal title="New canvas" onClose={onClose} wide>
-      <label className="bw-field"><span>Canvas name</span><input data-autofocus value={name} maxLength={48} onChange={(e) => setName(e.target.value)} /></label>
+      <label className="bw-labelled"><span>Canvas name</span><input data-autofocus value={name} maxLength={48} onChange={(e) => setName(e.target.value)} /></label>
       <p className="bw-fine">Start from</p>
       <ul className="bw-gallery">
         <li><button type="button" className="bw-gallery-card" onClick={() => make('')}><strong>Blank canvas</strong><span>Empty. Add the panels you want.</span></button></li>
@@ -69,11 +69,10 @@ function CanvasBar({ onNew }: { onNew: () => void }) {
   const toast = useToast();
   const menu = useContextMenu('Canvas');
   const [renaming, setRenaming] = useState<string | null>(null);
-  const phone = usePhone();
   const del = useCallback((id: string) => {
     const name = project.canvases.find((c) => c.id === id)?.name ?? 'canvas';
     if (store.deleteCanvas(id)) toast.show(`Deleted “${name}”`, { label: 'Undo', run: () => store.undoDeleteCanvas() });
-    else toast.show('A project needs at least one canvas.');
+    else toast.show('A workspace needs at least one canvas.');
   }, [project.canvases, store, toast]);
   const open = (x: number, y: number, id: string) => menu.open(x, y, [
     { label: 'Rename…', hint: 'F2', onSelect: () => setRenaming(id) },
@@ -84,16 +83,6 @@ function CanvasBar({ onNew }: { onNew: () => void }) {
     { label: 'Delete canvas', onSelect: () => del(id) },
   ]);
   const renamingCanvas = project.canvases.find((c) => c.id === renaming);
-  if (phone) {
-    return (
-      <div className="bw-canvasbar bw-canvasbar-phone">
-        <select aria-label="Canvas" value={project.active} onChange={(e) => (e.target.value === '__new' ? onNew() : store.setActive(e.target.value))}>
-          {project.canvases.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          <option value="__new">New canvas…</option>
-        </select>
-      </div>
-    );
-  }
   return (
     <nav className="bw-tabs bw-canvasbar" aria-label="Workspace">
       {project.canvases.map((c) => (

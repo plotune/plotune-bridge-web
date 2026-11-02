@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { configureBothChannels, connected, startCapture } from './helpers';
+import { configureBothChannels, connected, maximizePanel, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 // The mock device sends id 0x7E8 on CAN1 with data [counter, 0xAA].
@@ -11,6 +11,7 @@ test('a database names messages and signals in the trace, is remembered, and can
   await configureBothChannels(page);
   await startCapture(page);
   device.generate(1, 20, 0x7e8);
+  await maximizePanel(page, 'Trace'); // room for the expanded rows below a frame
   const trace = page.getByRole('table', { name: 'Captured frames' });
   await expect(trace.locator('.bw-trace-row[data-channel]').first()).toBeVisible();
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);

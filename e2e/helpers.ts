@@ -36,10 +36,25 @@ export async function connected(page: Page, address: string): Promise<void> {
   await expect(page.getByTestId('device-chip')).toContainText('Connected');
 }
 
+/** On a phone one panel fills the screen; this shows the named one. On a wide screen every panel is already in view. */
+export async function showPanel(page: Page, name: string): Promise<void> {
+  const switcher = page.getByRole('navigation', { name: 'Panels on this canvas' });
+  if (await switcher.isVisible()) await switcher.getByRole('button', { name, exact: true }).click();
+}
+
+/** Gives a panel the whole workspace, so rows and plots have room and nothing is below the fold. A phone shows one panel at a time already. */
+export async function maximizePanel(page: Page, name: string): Promise<void> {
+  const switcher = page.getByRole('navigation', { name: 'Panels on this canvas' });
+  if (await switcher.isVisible()) { await switcher.getByRole('button', { name, exact: true }).click(); return; }
+  await page.locator('[data-dock-group]').filter({ has: page.getByRole('region', { name, exact: true }) }).getByRole('button', { name: 'Maximize this group' }).click();
+}
+
 export async function configureBothChannels(page: Page, bitrate = '500000'): Promise<void> {
+  await showPanel(page, 'Channels');
   await page.getByLabel('CAN1 bit rate').selectOption(bitrate);
   await page.getByLabel('CAN2 bit rate').selectOption(bitrate);
   await expect(page.getByLabel('CAN2 bit rate')).toHaveValue(bitrate);
+  await showPanel(page, 'Trace');
 }
 
 export async function startCapture(page: Page): Promise<void> {

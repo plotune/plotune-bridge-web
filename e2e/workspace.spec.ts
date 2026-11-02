@@ -239,20 +239,20 @@ test.describe('browsers that cannot open a direct connection', () => {
 });
 
 test.describe('panels', () => {
-  test('a panel can be maximized, restored with Escape, hidden, and stays hidden after a reload', async ({ page }) => {
+  test('a group can be maximized, restored with Escape, a panel closed, and it stays closed after a reload', async ({ page }) => {
     const device = await new MockDeviceServer().ready();
     await connected(page, device.url);
     const trace = page.locator('#panel-trace');
     const before = await trace.boundingBox();
-    await page.getByRole('button', { name: 'Maximize Trace' }).click();
-    await expect(trace).toHaveClass(/is-maximized/);
+    await page.getByRole('button', { name: 'Maximize this group' }).first().click();
     const maximized = await trace.boundingBox();
     expect(maximized!.height).toBeGreaterThan(before!.height);
+    await expect.poll(() => page.locator('#panel-stats').evaluate((el) => !!el.closest('[inert]'))).toBe(true); // the other groups are covered and out of reach
     await page.keyboard.press('Escape');
-    await expect(trace).not.toHaveClass(/is-maximized/);
+    await expect.poll(() => page.locator('#panel-stats').evaluate((el) => !!el.closest('[inert]'))).toBe(false);
 
-    await page.getByText('Panels', { exact: true }).click();
-    await page.getByRole('group', { name: 'Show panels' }).getByLabel('Statistics').uncheck();
+    await page.getByRole('tab', { name: 'Statistics' }).focus();
+    await page.keyboard.press('Delete');
     await expect(page.locator('#panel-stats')).toHaveCount(0);
     await page.reload();
     await connected(page, device.url);

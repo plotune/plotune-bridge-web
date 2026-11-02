@@ -5,7 +5,7 @@ import { NO_AXIS, stripAxes, type AnalyzerConfig, type SigCfg } from './model';
 import { decimalsForStep, reduceColumns, ticks, valueAt, type Recording, type SignalData } from './math';
 
 export const AXIS_WIDTH = 58;
-export const TOP = 26;
+export const TOP = 38;
 export const STRIP_GAP = 6;
 export const BOOL_HEIGHT = 46;
 export const EVENT_HEIGHT = 30;
@@ -26,7 +26,7 @@ export interface Geometry {
 }
 
 export function layout(cfg: AnalyzerConfig, rec: Recording | null, width: number, height: number): Geometry {
-  const axisCount = Math.max(1, Math.min(4, ...cfg.strips.filter((s) => s.kind === 'analog').map((s) => stripAxes(cfg, s.id).length), 1));
+  const axisCount = Math.min(4, Math.max(1, ...cfg.strips.filter((s) => s.kind === 'analog').map((s) => stripAxes(cfg, s.id).length)));
   const px0 = axisCount * AXIS_WIDTH + 4;
   const px1 = Math.max(px0 + 40, width - RIGHT);
   const hasEvents = !!rec && rec.events.length > 0;
@@ -230,7 +230,7 @@ export function drawAnalyzer(ctx: CanvasRenderingContext2D, g: Geometry, cfg: An
     ctx.fillStyle = th.text;
     ctx.textAlign = 'center';
     const mid = Math.min(g.px1 - 90, Math.max(g.px0 + 90, (timeToX(g, view, cfg.cur.a.t) + timeToX(g, view, cfg.cur.b.t)) / 2));
-    ctx.fillText(`Δt ${dt.toFixed(3)} s${dt ? ` · ${(1 / Math.abs(dt)).toFixed(3)} Hz` : ''}`, mid, TOP - 8);
+    ctx.fillText(`Δt ${dt.toFixed(3)} s${dt ? ` · ${(1 / Math.abs(dt)).toFixed(3)} Hz` : ''}`, mid, TOP - 7);
   }
   if (st.hoverX !== null) {
     ctx.strokeStyle = th.muted;

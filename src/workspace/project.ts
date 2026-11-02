@@ -1,5 +1,6 @@
-// A project: named canvases, each a dock layout of panels, and the panels' settings. It is browser-owned convenience state:
-// it never holds device addresses, tokens or captured data. Saving to a Plotune account is a later step (see docs/workspace-v2.md).
+// A saved workspace (called a Project in the code): named canvases, each a dock layout of panels, and the panels' settings. It is
+// browser-owned convenience state: it never holds device addresses, tokens or captured data. It is not the Plotune account project
+// that devices are paired to; saving a workspace into that project is the V2.5 step (see docs/workspace-v2.md).
 import { group, groupById, insertPanel, movePanel as moveInTree, newId, normalize, panelsIn, parseLayout, remap, removePanel, resizeSplit, setActiveTab, split, type DropZone, type LayoutNode } from './layout';
 
 export const PROJECT_VERSION = 2;
@@ -83,7 +84,7 @@ export function buildTemplate(id: string): Built {
   }
 }
 
-export function defaultProject(name = 'My project'): Project {
+export function defaultProject(name = 'My workspace'): Project {
   const make = (label: string, template: string, panels: Record<string, PanelInstance>): Canvas => {
     const b = buildTemplate(template);
     Object.assign(panels, b.panels);
@@ -232,11 +233,11 @@ export class ProjectStore {
   exportJson(): string { return JSON.stringify(this.project, null, 1); }
   /** Imports a project file as a new project. Returns the reason when it cannot. */
   importJson(text: string): { ok: true; name: string } | { ok: false; reason: string } {
-    if (text.length > 2_000_000) return { ok: false, reason: 'That file is too large to be a project.' };
+    if (text.length > 2_000_000) return { ok: false, reason: 'That file is too large to be a workspace.' };
     let data: unknown;
-    try { data = JSON.parse(text); } catch { return { ok: false, reason: 'That is not a project file.' }; }
+    try { data = JSON.parse(text); } catch { return { ok: false, reason: 'That is not a workspace file.' }; }
     const parsed = parseProject(data);
-    if (!parsed) return { ok: false, reason: 'That file is not a Plotune Bridge project, or it is from a newer version.' };
+    if (!parsed) return { ok: false, reason: 'That file is not a Plotune Bridge workspace, or it is from a newer version.' };
     this.commit({ ...parsed, id: newId('pr') }, true, { deleted: null });
     return { ok: true, name: parsed.name };
   }

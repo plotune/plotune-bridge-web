@@ -53,7 +53,7 @@ export function NameDialog({ title, label, initial, action = 'Save', onSubmit, o
   const submit = () => { const v = value.trim(); if (v) { onSubmit(v); onClose(); } };
   return (
     <Modal title={title} onClose={onClose} footer={<><button type="button" className="bw-button" onClick={onClose}>Cancel</button><button type="button" className="bw-button bw-primary" onClick={submit} disabled={!value.trim()}>{action}</button></>}>
-      <label className="bw-field" htmlFor={id}>
+      <label className="bw-labelled" htmlFor={id}>
         <span>{label}</span>
         <input id={id} data-autofocus value={value} maxLength={48} onChange={(e) => setValue(e.target.value)} onFocus={(e) => e.currentTarget.select()} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} />
       </label>

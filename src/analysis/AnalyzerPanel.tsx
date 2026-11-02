@@ -46,9 +46,9 @@ function CalcDialog({ rec, onAdd, onClose }: { rec: Recording; onAdd: (s: Signal
     <Modal title="Calculated signal" onClose={onClose} wide footer={<><button type="button" className="bw-button" onClick={onClose}>Cancel</button><button type="button" className="bw-button bw-primary" onClick={go} disabled={!formula.trim()}>Add to plot</button></>}>
       <p className="bw-fine">Combine signals of this recording with + − × ÷ and abs, sqrt, min, max. A signal keeps its last value until it changes.</p>
       <div className="bw-form-row">
-        <label className="bw-field"><span>Name</span><input data-autofocus value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} /></label>
-        <label className="bw-field bw-grow"><span>Formula</span><input className="bw-mono" value={formula} placeholder="for example  BatteryV * BatteryA" onChange={(e) => { setFormula(e.target.value); setError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }} /></label>
-        <label className="bw-field"><span>Unit</span><input value={unit} maxLength={12} style={{ width: 80 }} onChange={(e) => setUnit(e.target.value)} /></label>
+        <label className="bw-labelled"><span>Name</span><input data-autofocus value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} /></label>
+        <label className="bw-labelled bw-grow"><span>Formula</span><input className="bw-mono" value={formula} placeholder="for example  BatteryV * BatteryA" onChange={(e) => { setFormula(e.target.value); setError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') go(); }} /></label>
+        <label className="bw-labelled"><span>Unit</span><input value={unit} maxLength={12} style={{ width: 80 }} onChange={(e) => setUnit(e.target.value)} /></label>
       </div>
       {error && <p className="bw-error" role="alert">{error}</p>}
       <div className="bw-chips" role="group" aria-label="Signals you can use">
@@ -76,9 +76,9 @@ function AxisDialog({ cfg, axisId, rec, view, onChange, onClose }: { cfg: Analyz
     <Modal title="Axis range" onClose={() => { apply(); onClose(); }} footer={<button type="button" className="bw-button bw-primary" onClick={() => { apply(); onClose(); }}>Done</button>}>
       <p className="bw-fine">{on.map((s) => rec.signals[s.key]?.label ?? s.key).join(', ')}</p>
       <div className="bw-form-row">
-        <label className="bw-field"><span>Minimum</span><input data-autofocus className="bw-mono" value={min} onChange={(e) => setMin(e.target.value)} /></label>
-        <label className="bw-field"><span>Maximum</span><input className="bw-mono" value={max} onChange={(e) => setMax(e.target.value)} /></label>
-        <label className="bw-field"><span>Axis name</span><input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="bw-labelled"><span>Minimum</span><input data-autofocus className="bw-mono" value={min} onChange={(e) => setMin(e.target.value)} /></label>
+        <label className="bw-labelled"><span>Maximum</span><input className="bw-mono" value={max} onChange={(e) => setMax(e.target.value)} /></label>
+        <label className="bw-labelled"><span>Axis name</span><input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} /></label>
       </div>
       <div className="bw-actions">
         <button type="button" className="bw-button bw-small" onClick={() => { const n = fitAxes(cfg, rec, [axisId], view[0], view[1]); const x = n.axes[axisId]!; setMin(String(+x.min.toFixed(4))); setMax(String(+x.max.toFixed(4))); onChange(n); }}>Zoom to fit</button>
@@ -227,7 +227,7 @@ export function AnalyzerPanel({ pid }: { pid: string }) {
         const timeOnly = Math.abs(dy) < 12;
         const valueOnly = Math.abs(dx) < 12;
         rubberBoth = !timeOnly && !valueOnly;
-        ui.current.rubber = { x0: valueOnly ? g.px0 : Math.min(start.x, p.x), x1: valueOnly ? g.px1 : Math.max(start.x, p.x), y0: timeOnly ? 26 : Math.min(start.y, p.y), y1: timeOnly ? g.time.y0 : Math.max(start.y, p.y) };
+        ui.current.rubber = { x0: valueOnly ? g.px0 : Math.min(start.x, p.x), x1: valueOnly ? g.px1 : Math.max(start.x, p.x), y0: timeOnly ? 38 : Math.min(start.y, p.y), y1: timeOnly ? g.time.y0 : Math.max(start.y, p.y) };
         redraw();
         return;
       }

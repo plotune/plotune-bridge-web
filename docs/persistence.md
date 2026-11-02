@@ -89,3 +89,7 @@ Multiple unfinished entries remain reachable: selecting a draft reopens its
 connection form, and removing the active entry opens the next draft if necessary.
 
 No change to contract v0.1.0, transport protocol, WebRTC, device firmware or backend.
+
+## Saved workspaces (canvases and panels)
+
+`bw.projects` (version 2) holds the saved workspaces: named canvases, each a dock layout of panels, and the panels' settings. It is separate from `bw.workspace` and never holds a device address, a token or captured data. It is written by the first change, not by opening the page, and validated on read and on import (see `docs/workspace-v2.md`). `bw.plot` and `bw.plot.<panel id>` keep each Scope's chosen signals.
