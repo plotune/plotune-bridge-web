@@ -6,6 +6,7 @@ import { DeviceHub } from '../src/state/hub';
 import { defaultEnv, WorkspaceStore } from '../src/state/store';
 import { panelsIn } from '../src/workspace/layout';
 import { ProjectStore, type StoragePort } from '../src/workspace/project';
+import { seededProject } from './helpers/project';
 import { fakeSso } from './helpers/sso';
 
 const browser = { family: 'chromium', name: 'Chrome', supported: true } as const;
@@ -15,26 +16,26 @@ function memory(): StoragePort & { data: Record<string, string> } {
   const data: Record<string, string> = {};
   return { data, getItem: (k) => data[k] ?? null, setItem: (k, v) => { data[k] = v; }, removeItem: (k) => { delete data[k]; } };
 }
-function mount(storage = memory()) {
+function mount(storage = memory(), seed = true) {
   const hub = new DeviceHub(() => new WorkspaceStore(defaultEnv({ transportFactory: () => { throw new Error('no device'); }, queryPermission: async () => 'unknown', browser })), (fn) => fn());
-  const project = new ProjectStore(() => storage);
+  const project = seed ? seededProject(storage) : new ProjectStore(() => storage);
   render(<App hub={hub} browser={browser} cloudSso={fakeSso()} project={project} />);
   return { project, storage, hub };
 }
-const tabs = () => within(screen.getByRole('navigation', { name: 'Workspace' })).getAllByRole('button').map((b) => b.textContent);
+const tabs = () => within(screen.getByRole('navigation', { name: 'Canvases' })).getAllByRole('button').map((b) => b.textContent);
 
 describe('canvases', () => {
-  it('start as the three pages a first visit always had', () => {
+  it('are a row of tabs, and the first one is open', () => {
     mount();
-    expect(tabs()).toEqual(['Capture', 'Diagnostics', 'Device', '+']);
+    expect(tabs()).toEqual(['Capture', 'Diagnostics', 'Analysis']);
     expect(screen.getByRole('button', { name: 'Capture' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('region', { name: 'Trace' })).toBeVisible();
   });
 
   it('switch on a click, and each canvas shows its own panels', () => {
     mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Device' }));
-    expect(screen.getByText('Not connected to a device.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Analysis' }));
+    expect(screen.getByRole('region', { name: 'Recordings' })).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Trace' })).toBeNull();
   });
 
@@ -46,7 +47,7 @@ describe('canvases', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Blank canvas/ }));
     expect(tabs()).toContain('Cell 7');
     expect(screen.getByTestId('empty-canvas')).toBeVisible();
-    fireEvent.click(within(screen.getByTestId('empty-canvas')).getByRole('button', { name: 'Add a panel' }));
+    fireEvent.click(within(screen.getByTestId('empty-canvas')).getByRole('button', { name: 'Browse panels' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a panel' })).getByRole('button', { name: /^Statistics/ }));
     expect(screen.getByRole('region', { name: 'Statistics' })).toBeVisible();
     expect(panelsIn(project.getState().project.canvases.at(-1)!.root)).toHaveLength(1);
@@ -94,7 +95,7 @@ describe('panels', () => {
 
   it('can be renamed from the tab menu', () => {
     const { project } = mount();
-    fireEvent.contextMenu(screen.getByRole('tab', { name: 'Channels' }));
+    fireEvent.contextMenu(screen.getByRole('tab', { name: 'Statistics' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Rename…' }));
     const dialog = screen.getByRole('dialog', { name: 'Rename panel' });
     fireEvent.change(within(dialog).getByLabelText('Panel name'), { target: { value: 'Bus state' } });
@@ -126,14 +127,16 @@ describe('panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New canvas' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'New canvas' })).getByRole('button', { name: /Transmit and test/ }));
     const stats = screen.getByRole('tab', { name: 'Statistics' });
-    expect(stats).toHaveAttribute('aria-selected', 'true');
-    fireEvent.keyDown(stats, { key: 'ArrowRight' });
-    expect(screen.getByRole('tab', { name: 'Channels' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(within(stats.closest('section')!).getByRole('button', { name: 'Add a panel to this group' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a panel' })).getByRole('button', { name: /^Scope/ }));
+    expect(screen.getByRole('tab', { name: 'Scope' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Scope' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Statistics' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('a panel pointed at a device that is gone offers the selected device', () => {
     const { project } = mount();
-    const pid = Object.entries(project.getState().project.panels).find(([, p]) => p.type === 'channels')![0];
+    const pid = Object.entries(project.getState().project.panels).find(([, p]) => p.type === 'stats')![0];
     act(() => project.updatePanel(pid, { device: 'd9' }));
     expect(screen.getByText(/reads from a device that is not in this workspace/)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /Use the selected device/ }));
@@ -158,12 +161,12 @@ describe('workspaces', () => {
     fireEvent.click(screen.getByRole('button', { name: /My workspace/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'New workspace…' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'New workspace' })).getByRole('button', { name: 'Create' }));
-    expect(tabs()).toEqual(['Canvas 1', '+']);
+    expect(tabs()).toEqual(['Canvas 1']);
     fireEvent.click(screen.getByRole('button', { name: /Untitled workspace/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open workspace…' }));
     const dialog = screen.getByRole('dialog', { name: 'Open workspace' });
     fireEvent.click(within(dialog).getByRole('button', { name: /^My workspace/ }));
-    expect(tabs()).toEqual(['Capture', 'Diagnostics', 'Device', '+']);
+    expect(tabs()).toEqual(['Capture', 'Diagnostics', 'Analysis']);
   });
 
   it('export shows the file, and import takes it back or explains why not', () => {
@@ -183,7 +186,7 @@ describe('workspaces', () => {
   });
 
   it('are not written just by opening the page', () => {
-    const { storage } = mount();
+    const { storage } = mount(memory(), false);
     expect(Object.keys(storage.data)).toEqual([]);
   });
 });

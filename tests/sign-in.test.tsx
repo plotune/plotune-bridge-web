@@ -453,7 +453,7 @@ describe('origins other than bridge.plotune.net', () => {
   it('Sign in with Plotune on the local-network pane shows the same notice and does not redirect', async () => {
     const rig = makeRig({ silentFailed: false, origin: 'http://localhost:4173' });
     load(rig);
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in with a Plotune account works on bridge.plotune.net.');
     expect(rig.sso.redirect).not.toHaveBeenCalled();

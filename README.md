@@ -21,16 +21,20 @@ The connection layer sits behind an adapter interface so a WebRTC or helper tran
 
 ## Use it
 
-1. Open the workspace. Capture, Diagnostics settings and Device views work with no devices added. When ready, choose **Add a device** and read the permission explanation.
+1. Open the workspace. It starts as a blank canvas that works with no device: pick Trace, Scope or Analyzer, or press ⌘K. When ready, choose **Add a device** (the + in the explorer on the left) and read the permission explanation.
 2. Enter the device address (`192.168.1.50:9101`, or a `wss://` address). **The device must list this page's origin as allowed**; see [docs/device-requirements.md](docs/device-requirements.md). The page shows the origin to add, with a copy button.
 3. Choose **Allow** when the browser asks about local network access.
-4. Set a bit rate on the channel(s) you want to use, then **Start capture**. Unconfigured channels stay idle and are excluded. Sending requires a bit rate only on the selected channel.
+4. Open the device's settings (the sliders icon on the device in the explorer), set a bit rate on the channel(s) you want to use, then **Start capture** (the round button in the top bar). Unconfigured channels stay idle and are excluded. Sending requires a bit rate only on the selected channel.
 
-The workspace is a set of **canvases**: layouts of panels that you arrange, name and keep (see [docs/workspace-v2.md](docs/workspace-v2.md)). A first visit starts with Capture, Diagnostics and Device, as ordinary canvases you can rename, change or delete; add your own from the **+** tab, from a template or blank. Drag a panel's tab beside another panel to dock it, drag a divider to resize it, and choose **Add panel** to pick what a canvas shows. Ctrl K opens a command palette. On a phone one panel fills the screen with a switcher at the bottom. Workspaces are saved in this browser as you work, and can be exported and imported.
+The workspace is a set of **canvases**: layouts of panels that you arrange, name and keep (see [docs/workspace-v2.md](docs/workspace-v2.md)). A first visit is one blank canvas; add canvases from the **+** next to the tabs, from a template or blank. Drag a panel's tab beside another panel to dock it, drag a divider to resize it, and choose **Add panel** to pick what a canvas shows. The **explorer** on the left lists devices, databases and recordings, and each device has its own settings dialog (channels, device, diagnostic link), so two identical Bridges never share one panel. ⌘K (Ctrl K) searches everything; most controls are icons with a tooltip and a shortcut. On a phone one panel fills the screen with a thumb bar at the bottom. Workspaces are saved in this browser as you work, and can be exported and imported.
 
 | Canvases and docked panels (with a device) | Analyzer on a recording |
 |---|---|
-| ![A canvas of docked panels: Trace and Scope above Channels, Statistics and Send frame](docs/screenshots/workspace-canvases.png) | ![The Analyzer: strips with their own axes, a shared axis, cursors and statistics](docs/screenshots/analyzer.png) |
+| ![A canvas of docked panels: Trace and Scope above Statistics and Send frame](docs/screenshots/workspace-canvases.png) | ![The Analyzer: strips with their own axes, a shared axis, cursors and statistics](docs/screenshots/analyzer.png) |
+
+| First screen: a blank canvas | Two Bridges, each with its own settings | On a phone |
+|---|---|---|
+| ![A blank canvas with three starting points](docs/screenshots/blank-canvas.png) | ![Two Bridges in the explorer; the settings dialog of Bridge 2 open](docs/screenshots/device-settings.png) | ![A phone: one panel, the thumb bar at the bottom](docs/screenshots/workspace-mobile.png) |
 
 The **Scope** is the live plot. **Analyze this window** keeps what is on screen as a recording and opens it in the **Analyzer**, which studies recorded data with strips, common or individual y axes, zoom, cursors, statistics and calculated signals; **Recordings** also imports a CSV file. The Analyzer is modelled on the oscilloscope of ETAS MDA (see the design document).
 

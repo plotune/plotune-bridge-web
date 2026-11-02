@@ -13,6 +13,7 @@ import { createCloudSession, type CloudSession } from '../src/cloud/session';
 import { DeviceHub } from '../src/state/hub';
 import { defaultEnv, WorkspaceStore } from '../src/state/store';
 import { type DeviceTransport } from '../src/transport/types';
+import { seededProject } from './helpers/project';
 import { fakeSso, stateFromRedirect, type FakeSso } from './helpers/sso';
 
 const BROWSER = { family: 'chromium', name: 'Chrome', supported: true } as const;
@@ -96,7 +97,7 @@ describe('landmarks and live regions', () => {
 
   it('while signing in the workspace is replaced, so its Start capture control is not offered', async () => {
     const rig = setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
     await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalled());
     expect(screen.getByRole('status')).toHaveTextContent('Signing you in');
@@ -140,7 +141,7 @@ describe('focus after a state change', () => {
 
   it('opening the add-device pane from the empty workspace moves focus to its title, since that button is gone', () => {
     const rig = setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toHaveFocus();
     expect(rig.sso.redirect).not.toHaveBeenCalled();
   });
@@ -183,7 +184,7 @@ describe('account menu keyboard', () => {
 describe('transmit form references', () => {
   it('no field points at an error message that is not on the page', () => {
     const hub = new DeviceHub(() => new WorkspaceStore(defaultEnv({ transportFactory: vi.fn(pendingTransport), browser: BROWSER, queryPermission: async () => 'unknown' })), (fn) => fn());
-    render(<App hub={hub} browser={BROWSER} cloudSso={fakeSso()} />);
+    render(<App hub={hub} browser={BROWSER} cloudSso={fakeSso()} project={seededProject()} />);
     expect(screen.getByLabelText('ID (hex)')).not.toHaveAttribute('aria-describedby');
     const dangling = [...document.querySelectorAll('[aria-describedby]')].filter((el) => !document.getElementById(el.getAttribute('aria-describedby') ?? ''));
     expect(dangling).toEqual([]);
@@ -208,13 +209,13 @@ describe('one h1 per screen, one wording for sign-in, and no raw remote address 
   it('the signed-out empty workspace has one h1, and the topbar brand is not a heading', () => {
     setup();
     expect(h1Count()).toBe(1);
-    expect(screen.getByRole('heading', { level: 1, name: 'Your workspace' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Plotune Bridge workspace' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Plotune Bridge' })).toBeNull();
   });
 
   it('the add-device pane has one h1 while signed out, while signed in, and while connecting', async () => {
     const rig = setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Sign in to connect your Bridge' })).toBeVisible();
     expect(h1Count()).toBe(1);
     // The primary sign-in button has one wording in the pane.
@@ -231,17 +232,15 @@ describe('one h1 per screen, one wording for sign-in, and no raw remote address 
     expect(h1Count()).toBe(1);
   });
 
-  it('signed in with no devices, the intro asks for a device and does not mention signing in', async () => {
+  it('signed in with no devices, the canvas stays blank and nothing asks for sign-in', async () => {
     const rig = setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in and add a device' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     await signIn(rig);
-    // The sign-in leaves the pane open; leaving it shows the workspace intro a signed-in user sees.
+    // The sign-in leaves the pane open; leaving it shows the blank canvas, with nothing squeezing it.
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    const intro = await screen.findByTestId('empty-intro');
-    expect(within(intro).getByRole('heading', { level: 1, name: 'Add your first device' })).toBeVisible();
-    expect(intro).not.toHaveTextContent(/sign in/i);
-    expect(within(intro).getByRole('button', { name: 'Add a device' })).toBeVisible();
-    expect(within(intro).queryByRole('button', { name: 'Sign in and add a device' })).toBeNull();
+    const canvas = await screen.findByTestId('empty-canvas');
+    expect(canvas).not.toHaveTextContent(/sign in/i);
+    expect(screen.queryByTestId('empty-intro')).toBeNull();
     expect(h1Count()).toBe(1);
   });
 

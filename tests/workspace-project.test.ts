@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { panelsIn } from '../src/workspace/layout';
+import { seededProject } from './helpers/project';
 import { defaultProject, parseProject, ProjectStore, PROJECTS_KEY, type StoragePort } from '../src/workspace/project';
 
 function memory(initial: Record<string, string> = {}): StoragePort & { data: Record<string, string> } {
@@ -8,11 +9,19 @@ function memory(initial: Record<string, string> = {}): StoragePort & { data: Rec
 }
 
 describe('default project', () => {
-  it('has the three canvases a first visit always had, each with panels', () => {
+  it('is one blank canvas', () => {
     const p = defaultProject();
-    expect(p.canvases.map((c) => c.name)).toEqual(['Capture', 'Diagnostics', 'Device']);
-    expect(panelsIn(p.canvases[0]!.root).map((id) => p.panels[id]!.type)).toEqual(['trace', 'plot', 'channels', 'stats', 'transmit']);
-    expect(panelsIn(p.canvases[2]!.root).map((id) => p.panels[id]!.type)).toEqual(['device']);
+    expect(p.canvases.map((c) => c.name)).toEqual(['Canvas 1']);
+    expect(p.canvases[0]!.root).toBeNull();
+    expect(p.panels).toEqual({});
+  });
+
+  it('drops the settings panels an older workspace had, since they live in the device settings now', () => {
+    const old = defaultProject();
+    const id = old.canvases[0]!.id;
+    const read = parseProject({ ...old, panels: { a: { type: 'channels' }, b: { type: 'trace' }, c: { type: 'device' }, d: { type: 'link' } }, canvases: [{ id, name: 'Capture', root: { kind: 'split', id: 's', dir: 'row', sizes: [0.25, 0.25, 0.25, 0.25], children: ['a', 'b', 'c', 'd'].map((p) => ({ kind: 'group', id: `g${p}`, tabs: [p], active: p })) } }] })!;
+    expect(Object.values(read.panels).map((p) => p.type)).toEqual(['trace']);
+    expect(panelsIn(read.canvases[0]!.root)).toEqual(['b']);
   });
 });
 
@@ -45,25 +54,25 @@ describe('canvases', () => {
   });
 
   it('deleting keeps one canvas, drops its panels and can be undone', () => {
-    const s = new ProjectStore(() => memory());
+    const s = seededProject();
     const before = Object.keys(s.getState().project.panels).length;
     const victim = s.getState().project.canvases[1]!;
     expect(s.deleteCanvas(victim.id)).toBe(true);
     expect(Object.keys(s.getState().project.panels).length).toBeLessThan(before);
     s.undoDeleteCanvas();
-    expect(s.getState().project.canvases.map((c) => c.name)).toEqual(['Capture', 'Diagnostics', 'Device']);
+    expect(s.getState().project.canvases.map((c) => c.name)).toEqual(['Capture', 'Diagnostics', 'Analysis']);
     expect(Object.keys(s.getState().project.panels)).toHaveLength(before);
-    const only = new ProjectStore(() => memory());
+    const only = seededProject();
     only.deleteCanvas(only.getState().project.canvases[1]!.id);
     only.deleteCanvas(only.getState().project.canvases[1]!.id);
     expect(only.deleteCanvas(only.getState().project.canvases[0]!.id)).toBe(false);
   });
 
   it('moves a canvas left and right', () => {
-    const s = new ProjectStore(() => memory());
+    const s = seededProject();
     const id = s.getState().project.canvases[2]!.id;
     s.moveCanvas(id, -1);
-    expect(s.getState().project.canvases.map((c) => c.name)).toEqual(['Capture', 'Device', 'Diagnostics']);
+    expect(s.getState().project.canvases.map((c) => c.name)).toEqual(['Capture', 'Analysis', 'Diagnostics']);
     s.moveCanvas(id, 1);
     s.moveCanvas(id, 1);
     expect(s.getState().project.canvases.at(-1)!.id).toBe(id);
@@ -95,9 +104,9 @@ describe('persistence', () => {
   });
 
   it('starts clean when storage is damaged or unavailable', () => {
-    expect(new ProjectStore(() => memory({ [PROJECTS_KEY]: '{not json' })).getState().project.canvases).toHaveLength(3);
-    expect(new ProjectStore(() => null).getState().project.canvases).toHaveLength(3);
-    expect(new ProjectStore(() => memory({ [PROJECTS_KEY]: JSON.stringify({ version: 1, projects: [] }) })).getState().project.canvases).toHaveLength(3);
+    expect(new ProjectStore(() => memory({ [PROJECTS_KEY]: '{not json' })).getState().project.canvases).toHaveLength(1);
+    expect(new ProjectStore(() => null).getState().project.canvases).toHaveLength(1);
+    expect(new ProjectStore(() => memory({ [PROJECTS_KEY]: JSON.stringify({ version: 1, projects: [] }) })).getState().project.canvases).toHaveLength(1);
   });
 
   it('keeps working in memory when saving fails, and says so', () => {
@@ -111,14 +120,14 @@ describe('persistence', () => {
 
 describe('import and export', () => {
   it('round-trips a project as a new project', () => {
-    const a = new ProjectStore(() => memory());
+    const a = seededProject();
     a.renameProject('Round trip');
     const text = a.exportJson();
     const b = new ProjectStore(() => memory());
     const r = b.importJson(text);
     expect(r).toEqual({ ok: true, name: 'Round trip' });
     expect(b.getState().project.id).not.toBe(a.getState().project.id);
-    expect(b.getState().project.canvases.map((c) => c.name)).toEqual(['Capture', 'Diagnostics', 'Device']);
+    expect(b.getState().project.canvases.map((c) => c.name)).toEqual(['Capture', 'Diagnostics', 'Analysis']);
   });
 
   it('refuses files that are not projects, with a reason', () => {

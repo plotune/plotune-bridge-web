@@ -1,5 +1,7 @@
 # UX notes
 
+> **Superseded in part (v2.1).** The palette, type, radii and the device-list sidebar described below are the earlier design (teal, paper, sharp corners, a Devices list). The workspace now uses a neutral, rounded, macOS-style design with graphite and the Plotune indigo, an explorer in place of the device list, and icon-only tool buttons; see "Design" in [workspace-v2.md](workspace-v2.md). The research notes below remain the reasoning for the content and wording.
+
 How the Bridge workspace takes its look from Plotune's public brand, and which workflow ideas it borrows from a reference measurement tool.
 
 ## 1. Brand source

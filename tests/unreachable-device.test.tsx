@@ -175,7 +175,6 @@ describe('Cancel', () => {
     expect(attempts[0].closed).toBe(true);
     expect(hub.slot('d1')).toBeDefined();
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
-    expect(screen.queryByText('Your workspace')).toBeNull();
     expect(hub.lastFailureAt(REMOTE)).toBeNull();
     expect(screen.queryByText('Your device is not reachable')).toBeNull();
   });
@@ -210,7 +209,6 @@ describe('Cancel', () => {
     });
     await connect(hub, hub.getState().activeId);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByText('Your workspace')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
     expect(hub.getState().slots).toHaveLength(1);
     expect(attempts[0].closed).toBe(true);

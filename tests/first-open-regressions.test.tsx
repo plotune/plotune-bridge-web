@@ -119,7 +119,7 @@ describe('finding 1: the fallback ends a callback that is still exchanging', () 
     });
     fireEvent.click(screen.getByRole('button', { name: 'Continue without signing in' }));
 
-    expect(await screen.findByRole('navigation', { name: 'Workspace' })).toBeVisible();
+    expect(await screen.findByRole('navigation', { name: 'Canvases' })).toBeVisible();
     expect(screen.queryByRole('status')).toBeNull();
     expect(rig.sso.storage.data.get(SILENT_FAILED_KEY)).toBe('1');
 

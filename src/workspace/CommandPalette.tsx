@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from './ui';
 
-export interface Command { label: string; group: string; run: () => void }
+export interface Command { label: string; group: string; hint?: string; run: () => void }
 
 /** Ctrl K: type to find a canvas, a panel or an action. */
 export function CommandPalette({ commands, onClose }: { commands: Command[]; onClose: () => void }) {
@@ -24,7 +24,7 @@ export function CommandPalette({ commands, onClose }: { commands: Command[]; onC
         aria-controls={listId}
         aria-activedescendant={results[index] ? `${listId}-${index}` : undefined}
         aria-label="Search commands"
-        placeholder="Type a canvas, panel or action"
+        placeholder="Search canvases, panels and actions"
         value={query}
         onChange={(e) => { setQuery(e.target.value); setIndex(0); }}
         onKeyDown={(e) => {
@@ -37,7 +37,7 @@ export function CommandPalette({ commands, onClose }: { commands: Command[]; onC
         {results.map((c, i) => (
           <li key={`${c.group}-${c.label}`} id={`${listId}-${i}`} role="option" aria-selected={i === index} onPointerDown={(e) => { e.preventDefault(); run(c); }}>
             <span>{c.label}</span>
-            <small>{c.group}</small>
+            <small>{c.hint ? <kbd>{c.hint}</kbd> : c.group}</small>
           </li>
         ))}
         {results.length === 0 && <li className="bw-fine" aria-disabled="true">No command matches.</li>}

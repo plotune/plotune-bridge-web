@@ -18,7 +18,8 @@ export function describeLink(settings: DiagSettings, channelName: string): strin
   return `${channelName} · requests ${id(settings.udsRequestId)} → answers ${id(settings.udsResponseId)} · calibration ${id(settings.xcpRequestId)} → ${id(settings.xcpResponseId)}${format}`;
 }
 
-export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettings; onChange: (patch: Partial<DiagSettings>) => void; errors: string[] }) {
+/** The diagnostic link of the selected device: which channel and which identifiers requests and calibration use. Shown in device settings. */
+export function LinkBody({ settings, onChange, errors }: { settings: DiagSettings; onChange: (patch: Partial<DiagSettings>) => void; errors: string[] }) {
   const state = useWorkspace();
   const [editing, setEditing] = useState(false);
   // Invalid settings always show the form, so the problem is never hidden behind a closed section.
@@ -32,7 +33,7 @@ export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettin
     </label>
   );
   return (
-    <Panel id="link" title="Diagnostic link" status={errors.length ? 'Check settings' : 'Ready'}>
+    <div className="bw-link-body">
       <div className="bw-link-summary">
         <p className="bw-mono" data-testid="link-summary">{describeLink(settings, channelName)}</p>
         <button type="button" className="bw-button bw-small" aria-expanded={open} aria-controls="diag-link-settings" disabled={errors.length > 0} onClick={() => setEditing(!editing)}>
@@ -80,7 +81,7 @@ export function LinkPanel({ settings, onChange, errors }: { settings: DiagSettin
         <p key={e} className="bw-inline-error" role="alert">{e}</p>
       ))}
       {open && <p className="bw-fine">These identifiers are examples. Use the ones your target uses.</p>}
-    </Panel>
+    </div>
   );
 }
 

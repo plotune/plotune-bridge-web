@@ -1,3 +1,4 @@
+import { IconReset } from './icons';
 import { useStore, useWorkspace } from '../state/context';
 import { Badge } from './Badge';
 import { Panel } from './Panel';
@@ -23,8 +24,8 @@ export function StatsPanel() {
       title="Statistics"
       status={status}
       actions={
-        <button type="button" className="bw-button bw-small" onClick={() => void store.resetStatistics()} disabled={state.busy || state.phase !== 'connected'}>
-          Reset counters
+        <button type="button" className="bw-icon-button" aria-label="Reset counters" title="Reset counters" onClick={() => void store.resetStatistics()} disabled={state.busy || state.phase !== 'connected'}>
+          <IconReset />
         </button>
       }
     >

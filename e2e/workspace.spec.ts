@@ -1,7 +1,7 @@
 import { createServer } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { MockEcu } from '../tests/helpers/mockEcu';
-import { configureBothChannels, connect, connected, openLocalAddressForm, selfSignedCert, serveBuildAt, simulateLocalNetworkPermission, startCapture } from './helpers';
+import { closeDialog, configureBothChannels, connect, connected, openDeviceSettings, openLocalAddressForm, selfSignedCert, serveBuildAt, simulateLocalNetworkPermission, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 const BASE = 2n ** 63n + 12345n; // far above 2^53: any conversion to a double would corrupt the low digits
@@ -19,9 +19,11 @@ test.describe('capture workflow', () => {
   test('captures both channels, preserves timestamps and direction, and sends frames', async ({ page }) => {
     const device = await new MockDeviceServer().ready();
     await connected(page, device.url);
-    await expect(page.getByTestId('channel-1')).toContainText('Bus OK');
-    await expect(page.getByLabel('CAN1 bit rate')).toHaveValue(''); // unconfigured until set
-    await expect(page.getByRole('switch', { name: 'Termination (120 Ω)' }).first()).toHaveAttribute('aria-checked', 'false');
+    const settings = await openDeviceSettings(page);
+    await expect(settings.getByTestId('channel-1')).toContainText('Bus OK');
+    await expect(settings.getByLabel('CAN1 bit rate')).toHaveValue(''); // unconfigured until set
+    await expect(settings.getByRole('switch', { name: 'Termination (120 Ω)' }).first()).toHaveAttribute('aria-checked', 'false');
+    await closeDialog(page);
 
     await page.getByRole('button', { name: 'Start capture' }).click();
     await expect(page.getByTestId('action-error')).toHaveText('Set a bit rate on at least one selected channel before capturing.');
@@ -92,7 +94,8 @@ test.describe('capture workflow', () => {
     await expect(page.getByTestId('device-chip')).toContainText('Connected');
     await expect(page.locator('[data-marker=session]').last()).toContainText('Reconnected');
     await expect(page.locator('[role=row][data-channel]').filter({ hasText: '42' })).toHaveCount(1);
-    await expect(page.getByLabel('CAN1 bit rate')).toHaveValue('500000'); // configuration survived on the device
+    await expect((await openDeviceSettings(page)).getByLabel('CAN1 bit rate')).toHaveValue('500000'); // configuration survived on the device
+    await closeDialog(page);
     await device.close();
   });
 });
@@ -282,9 +285,12 @@ test.describe('diagnostics against a synthetic ECU', () => {
     await expect(page.getByTestId('needs-capture')).toHaveCount(0);
 
     const fill = (name: string, value: string) => page.getByRole('textbox', { name, exact: true }).fill(value);
-    await page.getByRole('button', { name: 'Edit settings' }).click();
-    await page.getByRole('textbox', { name: /^Request ID \(hex\)/ }).fill('700');
-    await page.getByRole('textbox', { name: /^Response ID \(hex\)/ }).fill('708');
+    await page.getByRole('button', { name: 'Diagnostic link settings' }).first().click();
+    const link = page.getByRole('dialog');
+    await link.getByRole('button', { name: 'Edit settings' }).click();
+    await link.getByRole('textbox', { name: /^Request ID \(hex\)/ }).fill('700');
+    await link.getByRole('textbox', { name: /^Response ID \(hex\)/ }).fill('708');
+    await closeDialog(page);
 
     const udsLog = page.getByTestId('log-diagnostic-log');
     await page.getByRole('button', { name: 'Start session' }).click();

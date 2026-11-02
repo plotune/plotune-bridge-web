@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { IconCopy, IconCursors, IconFit, IconFullscreen, IconFx, IconPlus, IconSamples, IconSigma, IconStrips } from '../components/icons';
 import { Panel } from '../components/Panel';
 import { useProject, useProjectStore } from '../workspace/context';
 import { Modal, useContextMenu, useToast } from '../workspace/ui';
@@ -434,17 +435,17 @@ export function AnalyzerPanel({ pid }: { pid: string }) {
     <Panel id="analyzer" title="Analyzer" status={status}>
       <div className="bw-analyzer-tools" role="toolbar" aria-label="Analyzer tools">
         {recOptions}
-        <button type="button" className="bw-button bw-small" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); addMenu(r.left, r.bottom + 4); }}>Signal</button>
-        <button type="button" className="bw-button bw-small" onClick={() => setCalc(true)}>Calculated</button>
+        <button type="button" className="bw-icon-button" aria-label="Signal" title="Add a signal" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); addMenu(r.left, r.bottom + 4); }}><IconPlus /></button>
+        <button type="button" className="bw-icon-button" aria-label="Calculated" title="Add a calculated signal" onClick={() => setCalc(true)}><IconFx /></button>
         <span className="bw-tool-sep" aria-hidden="true" />
-        <button type="button" className="bw-button bw-small" onClick={() => setView(full)}>Full range</button>
-        <button type="button" className="bw-button bw-small" onClick={() => commit(fitAxes(cfg, rec, Object.keys(cfg.axes), view[0], view[1]))}>Fit all</button>
-        <button type="button" className="bw-button bw-small" onClick={() => commit(addStrip(cfg))}>Add strip</button>
+        <button type="button" className="bw-icon-button" aria-label="Full range" title="Show the full time range" onClick={() => setView(full)}><IconFullscreen /></button>
+        <button type="button" className="bw-icon-button" aria-label="Fit all" title="Fit every axis to its signals" onClick={() => commit(fitAxes(cfg, rec, Object.keys(cfg.axes), view[0], view[1]))}><IconFit /></button>
+        <button type="button" className="bw-icon-button" aria-label="Add strip" title="Add a strip" onClick={() => commit(addStrip(cfg))}><IconStrips /></button>
         <span className="bw-tool-sep" aria-hidden="true" />
-        <button type="button" className="bw-button bw-small" onClick={() => commit(cycleCursors(cfg, view))} title="Add cursor A, then B, then remove both (C)">Cursors</button>
-        <button type="button" className="bw-button bw-small" aria-pressed={cfg.sample} onClick={() => commit({ ...cfg, sample: !cfg.sample })} title="Move cursors from sample to sample">Sample-wise</button>
-        <button type="button" className="bw-button bw-small" aria-pressed={cfg.stats} onClick={() => commit({ ...cfg, stats: !cfg.stats })} title="Minimum, maximum, average and deviation">Statistics</button>
-        <button type="button" className="bw-button bw-small" onClick={() => { const t = csv(); void navigator.clipboard?.writeText(t).then(() => toast.show('Copied the visible signals as CSV'), () => toast.show('Copying was blocked by the browser')); }}>Copy CSV</button>
+        <button type="button" className="bw-icon-button" aria-label="Cursors" onClick={() => commit(cycleCursors(cfg, view))} title="Cursors: add A, then B, then remove both (C)"><IconCursors /></button>
+        <button type="button" className="bw-icon-button" aria-pressed={cfg.sample} aria-label="Sample-wise" onClick={() => commit({ ...cfg, sample: !cfg.sample })} title="Sample-wise: move cursors from sample to sample"><IconSamples /></button>
+        <button type="button" className="bw-icon-button" aria-pressed={cfg.stats} aria-label="Statistics" onClick={() => commit({ ...cfg, stats: !cfg.stats })} title="Statistics: minimum, maximum, average and deviation"><IconSigma /></button>
+        <button type="button" className="bw-icon-button" aria-label="Copy CSV" title="Copy the visible signals as CSV" onClick={() => { const t = csv(); void navigator.clipboard?.writeText(t).then(() => toast.show('Copied the visible signals as CSV'), () => toast.show('Copying was blocked by the browser')); }}><IconCopy /></button>
       </div>
       <div className="bw-analyzer">
         <div ref={holder} className="bw-analyzer-plot">

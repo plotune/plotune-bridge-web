@@ -3,10 +3,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
-const token = (name: string): string => {
-  const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
-  if (!m) throw new Error(`token --${name} is missing or not a 6-digit hex colour`);
-  return m[1];
+/** A token's colour, following aliases (var(--other)) to the hex value. */
+const token = (name: string, depth = 0): string => {
+  const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6}|var\\(--([a-z-]+)\\))`));
+  if (!m || depth > 4) throw new Error(`token --${name} is missing or not a colour`);
+  return m[2] ? token(m[2], depth + 1) : m[1];
 };
 const luminance = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -17,26 +18,27 @@ const contrast = (a: string, b: string) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-// Every foreground/background pair app.css puts text on. WCAG AA for normal text is 4.5:1.
+// Every foreground/background pair the stylesheet puts text on. WCAG AA for normal text is 4.5:1.
 const PAIRS: [string, string, string][] = [
   ['color-ink', 'color-paper', 'page text'],
   ['color-ink', 'color-panel', 'panel text'],
   ['color-text', 'color-panel', 'table and notice text'],
   ['color-muted', 'color-paper', 'secondary text on the page'],
   ['color-muted', 'color-panel', 'secondary text on panels'],
-  ['color-muted', 'color-chrome', 'table heads and navigation labels'],
+  ['color-muted', 'color-chrome', 'table heads, toolbar and explorer labels'],
   ['color-muted', 'status-neutral-bg', 'neutral badge'],
-  ['color-ink', 'color-teal-tint', 'channel 1 chip, banners, session rows'],
-  ['color-ink', 'color-violet-tint', 'channel 2 chip'],
-  ['color-on-teal', 'color-teal', 'active navigation'],
-  ['color-panel', 'color-teal', 'primary button'],
-  ['color-panel', 'color-teal-hover', 'primary button, hover'],
+  ['color-ink', 'color-neutral-tint', 'hover and pressed rows'],
+  ['color-ink', 'color-accent-tint', 'selected row, channel 2 chip'],
+  ['color-on-action', 'color-action', 'primary button'],
+  ['color-on-action', 'color-action-hover', 'primary button, hover'],
   ['button-text', 'color-panel', 'secondary button'],
   ['button-text', 'button-hover-bg', 'secondary button, hover'],
-  ['nav-text', 'color-chrome', 'navigation item'],
+  ['nav-text', 'color-chrome', 'canvas tab and explorer item'],
   ['icon-text', 'color-panel', 'icon button'],
-  ['color-teal', 'color-panel', 'links and disclosure text'],
-  ['color-teal', 'color-chrome', 'wordmark: product name in the top bar'],
+  ['icon-text', 'color-chrome', 'icon button on the toolbar'],
+  ['color-accent', 'color-panel', 'links and disclosure text'],
+  ['color-accent', 'color-chrome', 'active tab text on the toolbar'],
+  ['color-accent', 'color-accent-tint', 'selected state text'],
   ['color-teal-link-hover', 'color-panel', 'link, hover'],
   ['text-good', 'color-panel', 'success text'],
   ['text-good', 'status-good-bg', 'good badge'],
@@ -47,21 +49,18 @@ const PAIRS: [string, string, string][] = [
   ['text-warn', 'status-warn-bg', 'warn badge and drop markers'],
 ];
 
-describe('brand colour pairs meet WCAG AA (4.5:1) for the text they carry', () => {
+describe('colour pairs meet WCAG AA (4.5:1) for the text they carry', () => {
   it.each(PAIRS)('%s on %s (%s)', (fg, bg) => {
     expect(contrast(token(fg), token(bg))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("records why Stream's own badge text colours are not used: they fall below AA for small text", () => {
-    expect(contrast(token('status-warn-fg'), token('status-warn-bg'))).toBeLessThan(4.5);
-    expect(contrast(token('status-neutral-fg'), token('status-neutral-bg'))).toBeLessThan(4.5);
-  });
-
-  it('keeps every token a brand value from the vendored list (no new colours)', () => {
-    const used = [...css.matchAll(/--[a-z-]+:\s*(#[0-9a-fA-F]{6})\b/g)].map((m) => m[1].toLowerCase());
-    expect(new Set(used).size).toBeGreaterThan(20);
-    // Each colour line cites its plotune-web source (W:, I:, T: or stream.css:), so nothing here is invented.
-    const colourLines = css.split('\n').filter((l) => /--[a-z-]+:\s*#[0-9a-fA-F]{6}/.test(l));
-    for (const line of colourLines) expect(line, 'colour without a source citation').toMatch(/\/\*.*\b(W:|I:|T:|stream\.css:)/);
+  it('keeps the chrome neutral: graphite for the action, one indigo for what is active', () => {
+    expect(token('color-action')).toBe('#1d1d1f');
+    expect(token('color-accent-bright')).toBe('#5b62a7'); // the logo's own colour
+    // The old teal names are aliases now; none of them may hold a hue of its own again.
+    for (const alias of ['color-teal', 'color-teal-hover', 'color-on-teal', 'color-violet', 'color-teal-tint', 'color-violet-tint']) {
+      expect(css, alias).toMatch(new RegExp(`--${alias}:\\s*var\\(--`));
+    }
+    expect(css).not.toMatch(/#00796b|#26a69a/i);
   });
 });

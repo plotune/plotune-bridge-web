@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FORMATS, type RecordFormat } from '../record/formats';
 import { useRecording } from '../record/context';
 import { useHub } from '../state/context';
+import { IconRecord, IconStop } from './icons';
 
 /** BLF needs the browser's built-in compression; where it is missing the option is not offered, so a recording can never be lost at the end. */
 const AVAILABLE_FORMATS = FORMATS.filter((f) => !f.binary || typeof CompressionStream !== 'undefined');
@@ -32,22 +33,19 @@ export function RecordControl() {
   return (
     <>
       {!recorder && (
-        <label className="bw-inline-check">
-          Record as
-          <select value={format} onChange={(e) => setFormat(e.target.value as RecordFormat)} aria-label="Recording format">
-            {AVAILABLE_FORMATS.map((f) => (
-              <option key={f.id} value={f.id}>{f.label}</option>
-            ))}
-          </select>
-        </label>
+        <select className="bw-format-select" value={format} onChange={(e) => setFormat(e.target.value as RecordFormat)} aria-label="Recording format" title="Recording format">
+          {AVAILABLE_FORMATS.map((f) => (
+            <option key={f.id} value={f.id}>{f.label}</option>
+          ))}
+        </select>
       )}
       {recorder ? (
-        <button type="button" className="bw-button bw-small" onClick={() => void save()} title="Stop recording and save the file">
-          Stop and save
+        <button type="button" className="bw-icon-button bw-record is-recording" aria-label="Stop and save" onClick={() => void save()} title="Stop recording and save the file">
+          <IconStop />
         </button>
       ) : (
-        <button type="button" className="bw-button bw-small" disabled={!connected} onClick={() => service.start(store, format)} title={connected ? 'Record every frame of this device to a file' : 'Connect a device to record'}>
-          Record
+        <button type="button" className="bw-icon-button bw-record" aria-label="Record" disabled={!connected} onClick={() => service.start(store, format)} title={connected ? 'Record every frame of this device to a file' : 'Connect a device to record'}>
+          <IconRecord />
         </button>
       )}
       {recorder ? (

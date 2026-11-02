@@ -1,3 +1,4 @@
+import { IconAnalyze, IconDownload, IconList, IconMinus, IconPause, IconPlus, IconReset, IconStart } from './icons';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import type { DbcRegistry } from '../dbc/registry';
@@ -254,8 +255,8 @@ export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: stri
       status={series.length === 0 ? 'No signals chosen' : `${paused ? 'Paused · ' : ''}${series.length} ${series.length === 1 ? 'signal' : 'signals'} · ${zoom ? `zoomed to ${formatValue(Number((t1 - t0).toFixed(3)))} s` : `last ${windowLabel(seconds)}`}`}
       actions={
         <>
-          <button type="button" className="bw-button bw-small" aria-expanded={picking} onClick={() => setPicking(!picking)}>
-            {picking ? 'Hide signal list' : 'Choose signals'}
+          <button type="button" className="bw-icon-button" aria-expanded={picking} aria-label={picking ? 'Hide signal list' : 'Choose signals'} title={picking ? 'Hide signal list' : 'Choose signals'} onClick={() => setPicking(!picking)}>
+            <IconList />
           </button>
           <label className="bw-inline-check">
             Show
@@ -265,27 +266,27 @@ export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: stri
               ))}
             </select>
           </label>
-          <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={() => zoomBy(0.5)} title="Zoom in around the cursor, or the middle (key +)">
-            Zoom in
+          <button type="button" className="bw-icon-button" aria-label="Zoom in" disabled={!hasData} onClick={() => zoomBy(0.5)} title="Zoom in around the cursor, or the middle (key +)">
+            <IconPlus />
           </button>
-          <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={() => zoomBy(2)} title="Zoom out (key -)">
-            Zoom out
+          <button type="button" className="bw-icon-button" aria-label="Zoom out" disabled={!hasData} onClick={() => zoomBy(2)} title="Zoom out (key -)">
+            <IconMinus />
           </button>
           {zoom && (
-            <button type="button" className="bw-button bw-small" onClick={() => setZoom(null)} title="Follow the newest data again (key 0 or Esc)">
-              Reset zoom
+            <button type="button" className="bw-icon-button" aria-label="Reset zoom" onClick={() => setZoom(null)} title="Follow the newest data again (key 0 or Esc)">
+              <IconReset />
             </button>
           )}
-          <button type="button" className="bw-button bw-small" aria-pressed={paused !== null} disabled={!paused && !hasData} onClick={() => setPaused(paused ? null : { t1 })} title={paused ? 'Follow the newest data again' : 'Freeze the plot; capture goes on'}>
-            {paused ? 'Resume' : 'Pause'}
+          <button type="button" className="bw-icon-button" aria-pressed={paused !== null} aria-label={paused ? 'Resume' : 'Pause'} disabled={!paused && !hasData} onClick={() => setPaused(paused ? null : { t1 })} title={paused ? 'Resume: follow the newest data again' : 'Pause: freeze the plot; capture goes on'}>
+            {paused ? <IconStart /> : <IconPause />}
           </button>
           {analysis && (
-            <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={analyze} title="Keep the window on screen as a recording and open it in the Analyzer">
-              Analyze this window
+            <button type="button" className="bw-icon-button" aria-label="Analyze this window" disabled={!hasData} onClick={analyze} title="Analyze this window: keep it as a recording and open it in the Analyzer">
+              <IconAnalyze />
             </button>
           )}
-          <button type="button" className="bw-button bw-small" disabled={!hasData} onClick={download} title="Save the samples in the visible window as a CSV file">
-            Download CSV
+          <button type="button" className="bw-icon-button" aria-label="Download CSV" disabled={!hasData} onClick={download} title="Download CSV: the samples in the visible window">
+            <IconDownload />
           </button>
         </>
       }

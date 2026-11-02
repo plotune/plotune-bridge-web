@@ -107,7 +107,7 @@ describe('the sign-in bounce on first open', () => {
     expect(screen.getByRole('heading', { name: 'Plotune Bridge' })).toBeVisible();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText(CARD_TITLE)).toBeNull();
-    expect(screen.queryByRole('navigation', { name: 'Workspace' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Canvases' })).toBeNull();
     expect(rig.transportFactory).not.toHaveBeenCalled();
   });
 
@@ -120,7 +120,7 @@ describe('the sign-in bounce on first open', () => {
     await act(async () => undefined);
     expect(rig.transportFactory).toHaveBeenCalledTimes(1);
     expect(rig.transportFactory.mock.calls[0][0]).toBe(REMOTE);
-    expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Canvases' })).toBeVisible();
   });
 
   it('a signed-in page with a remembered device shows the workspace, not the add-device pane', async () => {
@@ -129,7 +129,7 @@ describe('the sign-in bounce on first open', () => {
     await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalledTimes(1));
     returnWith(rig, { code: CODE, state: stateFromRedirect(rig.sso) });
     await waitFor(() => expect(connectsTo(rig, REMOTE)).toBe(1));
-    expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Canvases' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Connect a Bridge device' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeNull();
     expect(screen.queryByText(CARD_TITLE)).toBeNull();
@@ -231,7 +231,7 @@ describe('the fallback on the sign-in state', () => {
       vi.advanceTimersByTime(CONTINUE_WITHOUT_MS);
     });
     fireEvent.click(screen.getByRole('button', { name: 'Continue without signing in' }));
-    expect(await screen.findByRole('navigation', { name: 'Workspace' })).toBeVisible();
+    expect(await screen.findByRole('navigation', { name: 'Canvases' })).toBeVisible();
     expect(screen.queryByRole('status')).toBeNull();
     expect(await screen.findByRole('heading', { name: CARD_TITLE })).toBeVisible();
     expect(rig.sso.storage.data.get(SILENT_FAILED_KEY)).toBe('1');

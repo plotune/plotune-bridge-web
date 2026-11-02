@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { MockEcu } from '../tests/helpers/mockEcu';
-import { configureBothChannels, connect, connected, LOCAL_ADVANCED, startCapture } from './helpers';
+import { closeDialog, configureBothChannels, connect, connected, explorer, LOCAL_ADVANCED, openDeviceSettings, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 async function expectNoAxeViolations(page: Page, label: string): Promise<void> {
@@ -13,8 +13,8 @@ async function expectNoAxeViolations(page: Page, label: string): Promise<void> {
 test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
   test('the permission explanation and the address screen', async ({ page }) => {
     await page.goto('/');
-    await expectNoAxeViolations(page, 'offline workspace');
-    await page.locator('.bw-setup').getByRole('button', { name: 'Add a device' }).click();
+    await expectNoAxeViolations(page, 'blank canvas');
+    await (await explorer(page)).getByRole('button', { name: 'Add a device' }).click();
     await expect(page.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
     await expectNoAxeViolations(page, 'account sign-in');
     await page.getByRole('button', { name: LOCAL_ADVANCED }).click();
@@ -43,13 +43,20 @@ test.describe('accessibility (axe, WCAG 2.1 A and AA)', () => {
     await page.getByRole('button', { name: 'Add panel' }).click();
     await expectNoAxeViolations(page, 'capture page with the panel gallery open');
     await page.keyboard.press('Escape');
-    await page.getByRole('tab', { name: 'Channels' }).click({ button: 'right' });
+    await page.getByRole('tab', { name: 'Statistics' }).click({ button: 'right' });
     await expectNoAxeViolations(page, 'capture page with a tab menu open');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Diagnostics' }).click();
     await expectNoAxeViolations(page, 'diagnostics page');
-    await page.getByRole('button', { name: 'Device', exact: true }).click();
-    await expectNoAxeViolations(page, 'device page');
+    await page.getByRole('button', { name: 'Analysis', exact: true }).click();
+    await expectNoAxeViolations(page, 'analysis page');
+    await openDeviceSettings(page);
+    await expectNoAxeViolations(page, 'device settings dialog');
+    await closeDialog(page);
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
+    await expectNoAxeViolations(page, 'command palette');
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Capture', exact: true }).click();
     device.drop(4001, 'replaced');
     await expect(page.locator('[data-notice=replaced]')).toBeVisible();
@@ -78,8 +85,8 @@ test('a full session raises no console errors, page errors or Content-Security-P
   device.generate(1, 100);
   await expect(page.locator('[role=row][data-channel]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Diagnostics' }).click();
-  await page.getByRole('button', { name: 'Device', exact: true }).click();
-  await page.getByRole('button', { name: 'Maximize this group' }).click();
+  await page.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await page.getByRole('button', { name: 'Maximize this group' }).first().click();
   await page.keyboard.press('Escape');
   device.drop(1013, 'overflow');
   await expect(page.locator('[data-notice=overflow]')).toBeVisible();

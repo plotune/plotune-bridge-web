@@ -1,7 +1,6 @@
 import { useStore, useWorkspace } from '../state/context';
 import type { ConnectionPath, LinkTraffic } from '../transport/types';
 import { Badge } from './Badge';
-import { Panel } from './Panel';
 
 /** Null means the first check has not finished yet. */
 function pathLabel(path: ConnectionPath | null): string {
@@ -34,7 +33,8 @@ function pathDetail(path: ConnectionPath | null, traffic: LinkTraffic | null): s
   }
 }
 
-export function DevicePanel() {
+/** Connection and information of the device whose store is provided. Shown in that device's settings. */
+export function DeviceBody() {
   const store = useStore();
   const state = useWorkspace();
   const d = state.descriptor;
@@ -42,7 +42,8 @@ export function DevicePanel() {
   const relayed = state.connectionPath?.kind === 'relay';
   const wall = d?.clock.wallClockNs != null ? new Date(Number(d.clock.wallClockNs / 1_000_000n)).toISOString().replace('T', ' ').replace('Z', ' UTC') : null;
   return (
-    <Panel id="device" title="Device" status={connected ? <Badge tone="good">Connected</Badge> : <Badge tone="neutral">Not connected</Badge>}>
+    <div className="bw-device-body">
+      <p>{connected ? <Badge tone="good">Connected</Badge> : <Badge tone="neutral">Not connected</Badge>}</p>
       {d ? (
         <dl className="bw-facts" data-testid="device-facts">
           <div><dt>Device</dt><dd className="bw-mono">{d.deviceId}</dd></div>
@@ -78,6 +79,6 @@ export function DevicePanel() {
           {connected && <code>connection path: {pathDetail(state.connectionPath, state.traffic)}</code>}
         </details>
       )}
-    </Panel>
+    </div>
   );
 }

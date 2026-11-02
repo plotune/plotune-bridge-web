@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { IconAnalyze, IconEdit, IconTrash, IconUpload } from '../components/icons';
 import { Panel } from '../components/Panel';
 import { NameDialog, useToast } from '../workspace/ui';
 import { useAnalysis, useRecordings } from './context';
@@ -28,7 +29,7 @@ export function RecordingsPanel() {
       id="recordings"
       title="Recordings"
       status={`${recordings.length} ${recordings.length === 1 ? 'recording' : 'recordings'}`}
-      actions={<><button type="button" className="bw-button bw-small" onClick={() => file.current?.click()}>Import CSV…</button><input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > MAX_CSV_BYTES) { setError('That file is too large to open here.'); return; } void f.text().then((t) => importText(t, f.name)); }} /></>}
+      actions={<><button type="button" className="bw-icon-button" aria-label="Import CSV…" title="Import a CSV file" onClick={() => file.current?.click()}><IconUpload /></button><input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > MAX_CSV_BYTES) { setError('That file is too large to open here.'); return; } void f.text().then((t) => importText(t, f.name)); }} /></>}
     >
       {error && <p className="bw-error" role="alert">{error}</p>}
       {recordings.length === 0 ? (
@@ -45,9 +46,9 @@ export function RecordingsPanel() {
                 <small>{r.duration.toFixed(1)} s · {Object.keys(r.signals).length} signals · {r.source === 'scope' ? 'from the Scope' : 'imported'} · {when(r.created)}</small>
               </div>
               <div className="bw-actions">
-                <button type="button" className="bw-button bw-small bw-primary" onClick={() => open(r)}>Analyze</button>
-                <button type="button" className="bw-button bw-small" onClick={() => setRenaming(r.id)} aria-label={`Rename ${r.name}`}>Rename</button>
-                <button type="button" className="bw-button bw-small" onClick={() => { const prev = r; store.remove(r.id); toast.show(`Removed “${prev.name}”`, { label: 'Undo', run: () => store.add(prev) }); }} aria-label={`Remove ${r.name}`}>Remove</button>
+                <button type="button" className="bw-icon-button" onClick={() => open(r)} aria-label="Analyze" title="Open in an Analyzer"><IconAnalyze /></button>
+                <button type="button" className="bw-icon-button" onClick={() => setRenaming(r.id)} aria-label={`Rename ${r.name}`} title="Rename"><IconEdit /></button>
+                <button type="button" className="bw-icon-button" onClick={() => { const prev = r; store.remove(r.id); toast.show(`Removed “${prev.name}”`, { label: 'Undo', run: () => store.add(prev) }); }} aria-label={`Remove ${r.name}`} title="Remove"><IconTrash /></button>
               </div>
             </li>
           ))}

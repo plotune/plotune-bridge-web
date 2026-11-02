@@ -8,7 +8,7 @@ import { readStored, writeStored } from '../lib/storage';
 import { NO_FILTER, RECENT_FILTERS_KEY, filterActive, formatTraceData, formatTraceId, highlightQuery, parseRecent, rememberRecent, splitMatches, type Radix, type TraceFilter } from '../lib/traceFilter';
 import { useHub, useHubState } from '../state/context';
 import type { TraceBuffer, TraceRow } from '../state/trace';
-import { IconClear } from './icons';
+import { IconClear, IconPause, IconStart } from './icons';
 import { Badge } from './Badge';
 import { Panel } from './Panel';
 
@@ -261,8 +261,8 @@ export function TracePanel() {
               </select>
             </label>
           )}
-          <button type="button" className="bw-button bw-small" aria-pressed={paused} disabled={!paused && trace.length === 0} onClick={() => setPause(paused ? null : { source: trace, end: trace.evicted + trace.length, generation: trace.generation })} title={paused ? 'Show new rows again' : 'Freeze the view; capture goes on'}>
-            {paused ? 'Resume' : 'Pause'}
+          <button type="button" className="bw-icon-button" aria-pressed={paused} aria-label={paused ? 'Resume' : 'Pause'} disabled={!paused && trace.length === 0} onClick={() => setPause(paused ? null : { source: trace, end: trace.evicted + trace.length, generation: trace.generation })} title={paused ? 'Resume: show new rows again' : 'Pause: freeze the view; capture goes on'}>
+            {paused ? <IconStart /> : <IconPause />}
           </button>
           <label className="bw-inline-check">
             Numbers
@@ -274,8 +274,8 @@ export function TracePanel() {
           <label className="bw-inline-check">
             <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Follow
           </label>
-          <button type="button" className="bw-button bw-small" onClick={() => hub.clearTraces()} disabled={trace.length === 0}>
-            <IconClear /> Clear
+          <button type="button" className="bw-icon-button" aria-label="Clear" title="Clear the trace" onClick={() => hub.clearTraces()} disabled={trace.length === 0}>
+            <IconClear />
           </button>
         </>
       }

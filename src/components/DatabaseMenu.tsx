@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import { readDbcFile } from '../dbc/readFile';
 import { useHubState } from '../state/context';
-import { IconPanels } from './icons';
+import { IconClose, IconUpload } from './icons';
 
 /** One channel's database: load, see the file name, remove. Read in the browser, never uploaded. */
 function DatabaseRow({ channel }: { channel: number }) {
@@ -31,13 +31,13 @@ function DatabaseRow({ channel }: { channel: number }) {
         <>
           <span className="bw-db-name" title={assigned.fileName}>{assigned.fileName}</span>
           <small>{assigned.dbc.messages.length} {assigned.dbc.messages.length === 1 ? 'message' : 'messages'}</small>
-          <button type="button" className="bw-button bw-small" aria-label={`Remove the database from ${name}`} onClick={() => { registry.remove(channel); setNotes([]); setError(null); }}>
-            Remove
+          <button type="button" className="bw-icon-button" aria-label={`Remove the database from ${name}`} title="Remove the database" onClick={() => { registry.remove(channel); setNotes([]); setError(null); }}>
+            <IconClose />
           </button>
         </>
       ) : (
-        <button type="button" className="bw-button bw-small" aria-label={`Load a database (DBC) for ${name}`} onClick={() => input.current?.click()}>
-          Load DBC…
+        <button type="button" className="bw-icon-button" aria-label={`Load a database (DBC) for ${name}`} title="Load a DBC file" onClick={() => input.current?.click()}>
+          <IconUpload />
         </button>
       )}
       <input ref={input} type="file" accept=".dbc,text/plain" hidden aria-hidden="true" tabIndex={-1} data-testid={`dbc-input-${channel}`} onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
@@ -52,23 +52,18 @@ function DatabaseRow({ channel }: { channel: number }) {
   );
 }
 
-/** A database (DBC) per channel names the messages and signals in the Trace. It lives in the toolbar so it is easy to find. */
-export function DatabaseMenu() {
+/** A database (DBC) per channel names the messages and signals in the Trace. Listed in the Explorer. */
+export function DatabaseRows() {
   const { slots } = useHubState();
   const assigned = useDbcAssignments();
   const fromDevices = slots.flatMap((s) => s.store.getState().channels.map((c) => c.channel));
   const channels = [...new Set([1, 2, ...fromDevices, ...assigned.map((a) => a.channel)])].sort((a, b) => a - b);
   return (
-    <details className="bw-menu">
-      <summary className="bw-button bw-small">
-        <IconPanels /> Databases{assigned.length > 0 ? ` · ${assigned.length}` : ''}
-      </summary>
-      <div className="bw-menu-body bw-db-menu" role="group" aria-label="Databases per channel">
-        <p className="bw-fine">A DBC names messages and signals in the Trace. The file stays in this browser.</p>
-        {channels.map((channel) => (
-          <DatabaseRow key={channel} channel={channel} />
-        ))}
-      </div>
-    </details>
+    <div className="bw-db-list" role="group" aria-label="Databases per channel">
+      <p className="bw-ex-empty">A DBC names messages and signals in the Trace. The file stays in this browser.</p>
+      {channels.map((channel) => (
+        <DatabaseRow key={channel} channel={channel} />
+      ))}
+    </div>
   );
 }
