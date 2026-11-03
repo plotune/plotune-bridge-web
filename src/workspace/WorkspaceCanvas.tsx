@@ -143,7 +143,7 @@ export function WorkspaceUiProvider({ children, onToggleExplorer, extraCommands 
     { label: 'Add a device', group: 'Device', run: () => hub.addDevice() },
     ...(slots.length ? [{ label: 'Start capture on all devices', group: 'Capture', run: () => void hub.startAll() }, { label: 'Stop capture on all devices', group: 'Capture', run: () => void hub.stopAll() }] : []),
     ...extraCommands,
-  ], [project.canvases, project.active, store, focus, slots.length, hub, onToggleExplorer, extraCommands]);
+  ], [project.canvases, project.active, store, slots.length, hub, onToggleExplorer, extraCommands]);
 
   const ui = useMemo<Ui>(() => ({
     openGallery: (groupId) => setGallery({ groupId }),
