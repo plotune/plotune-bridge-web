@@ -12,7 +12,6 @@ interface DockProps {
   panels: Record<string, PanelInstance>;
   focusedGroup: string | null;
   onFocusGroup: (id: string) => void;
-  onAddPanel: (groupId: string) => void;
 }
 
 /** DOM ids: the first panel of a type keeps the id it always had (#panel-trace); later ones use their own id. */
@@ -28,7 +27,7 @@ export function domIds(root: LayoutNode, panels: Record<string, PanelInstance>):
   return out;
 }
 
-export function Dock({ root, panels, focusedGroup, onFocusGroup, onAddPanel }: DockProps) {
+export function Dock({ root, panels, focusedGroup, onFocusGroup }: DockProps) {
   const store = useProjectStore();
   const [maximized, setMaximized] = useState<string | null>(null);
   const ids = domIds(root, panels);
@@ -40,7 +39,7 @@ export function Dock({ root, panels, focusedGroup, onFocusGroup, onAddPanel }: D
   }, [maximized]);
   // A maximized group is drawn over the others, which stay mounted (so a paused trace or a zoomed plot keeps its state) but inert.
   const active = maximized && groupById(root, maximized) ? maximized : null;
-  const props = { store, panels, ids, focusedGroup, onFocusGroup, onAddPanel, maximized: active, setMaximized };
+  const props = { store, panels, ids, focusedGroup, onFocusGroup, maximized: active, setMaximized };
   return <div className="bw-workspace" data-testid="dock"><NodeView node={root} {...props} /></div>;
 }
 
@@ -50,7 +49,6 @@ interface Shared {
   ids: Record<string, string>;
   focusedGroup: string | null;
   onFocusGroup: (id: string) => void;
-  onAddPanel: (groupId: string) => void;
   maximized: string | null;
   setMaximized: (id: string | null) => void;
 }
@@ -108,7 +106,7 @@ function SplitChild({ share, children }: { share: number; children: React.ReactN
   return <div className="bw-split-child" style={style}>{children}</div>;
 }
 
-function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAddPanel, maximized, setMaximized }: { group: GroupNode } & Shared) {
+function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, maximized, setMaximized }: { group: GroupNode } & Shared) {
   const menu = useContextMenu('Panel');
   const [renaming, setRenaming] = useState<string | null>(null);
   const focused = focusedGroup === group.id;
@@ -159,7 +157,7 @@ function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAd
 
   const setFocus = useCallback(() => onFocusGroup(group.id), [onFocusGroup, group.id]);
   return (
-    <section className={`bw-group ${focused ? 'is-focused' : ''} ${maximized === group.id ? 'is-maximized' : ''}`} inert={maximized !== null && maximized !== group.id ? true : undefined} data-dock-group={group.id} onPointerDownCapture={setFocus} onFocusCapture={setFocus} aria-label="Panel group">
+    <section className={`bw-group ${focused ? 'is-focused' : ''} ${maximized === group.id ? 'is-maximized' : ''}`} inert={maximized !== null && maximized !== group.id ? true : undefined} data-dock-group={group.id} data-single={group.tabs.length === 1} onPointerDownCapture={setFocus} onFocusCapture={setFocus} aria-label="Panel group">
       <div className="bw-group-tabs">
         <div className="bw-tablist" role="tablist" aria-label="Panels in this group">
           {group.tabs.map((pid) => {
@@ -190,7 +188,6 @@ function GroupView({ group, store, panels, ids, focusedGroup, onFocusGroup, onAd
           })}
         </div>
         <div className="bw-group-tools">
-          <button type="button" className="bw-icon-button" aria-label="Add a panel to this group" title="Add a panel" onClick={() => onAddPanel(group.id)}>+</button>
           <button type="button" className="bw-icon-button" aria-pressed={maximized === group.id} aria-label={maximized === group.id ? 'Restore this group' : 'Maximize this group'} title={maximized === group.id ? 'Restore (Esc)' : 'Maximize'} onClick={() => setMaximized(maximized === group.id ? null : group.id)}>
             {maximized === group.id ? <IconRestore /> : <IconMaximize />}
           </button>
