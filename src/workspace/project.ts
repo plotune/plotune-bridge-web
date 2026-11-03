@@ -1,7 +1,7 @@
 // A saved workspace (called a Project in the code): named canvases, each a dock layout of panels, and the panels' settings. It is
 // browser-owned convenience state: it never holds device addresses, tokens or captured data. It is not the Plotune account project
 // that devices are paired to; saving a workspace into that project is the V2.5 step (see docs/workspace-v2.md).
-import { group, groupById, insertPanel, movePanel as moveInTree, newId, normalize, panelsIn, parseLayout, remap, removePanel, resizeSplit, setActiveTab, split, type DropZone, type LayoutNode } from './layout';
+import { autoPlace, group, groupById, insertPanel, movePanel as moveInTree, newId, normalize, panelsIn, parseLayout, remap, removePanel, resizeSplit, setActiveTab, split, type DropZone, type LayoutNode } from './layout';
 
 export const PROJECT_VERSION = 2;
 export const PROJECTS_KEY = 'bw.projects';
@@ -299,8 +299,9 @@ export class ProjectStore {
     if (!c || Object.keys(this.project.panels).length >= MAX_PANELS || panelsIn(c.root).length >= 40) return null;
     const pid = newId('p');
     const target = (groupId && groupById(c.root, groupId)) || null;
-    const first = target ?? (c.root ? findFirstGroup(c.root) : null);
-    const root = c.root && first ? insertPanel(c.root, first.id, 'center', pid) : group([pid]);
+    // Named group: a tab in it. Otherwise the panel is tiled into the canvas, beside or under the group with the most room.
+    const place = target ? { groupId: target.id, zone: 'center' as const } : autoPlace(c.root);
+    const root = c.root && place ? insertPanel(c.root, place.groupId, place.zone, pid) : group([pid]);
     this.commit({ ...this.project, canvases: this.project.canvases.map((x) => (x.id === c.id ? { ...x, root } : x)), panels: { ...this.project.panels, [pid]: { type, ...init } } });
     return pid;
   }
@@ -337,6 +338,3 @@ export class ProjectStore {
   setPanelConfig(panelId: string, config: Record<string, unknown>): void { this.updatePanel(panelId, { config }); }
 }
 
-function findFirstGroup(n: LayoutNode): LayoutNode & { kind: 'group' } {
-  return n.kind === 'group' ? n : findFirstGroup(n.children[0]!);
-}

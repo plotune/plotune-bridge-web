@@ -108,7 +108,7 @@ export function WorkspaceUiProvider({ children, onToggleExplorer, extraCommands 
 
   const focus = focusedGroup && canvas.root && groupById(canvas.root, focusedGroup) ? focusedGroup : undefined;
   const pick = (t: PanelType) => {
-    const pid = store.addPanel(t, gallery?.groupId ?? focus);
+    const pid = store.addPanel(t, gallery?.groupId);
     setGallery(null);
     if (pid) setPhonePanel(pid); else toast.show('This canvas is full.');
   };
@@ -138,12 +138,12 @@ export function WorkspaceUiProvider({ children, onToggleExplorer, extraCommands 
     { label: 'Rename this canvas…', group: 'Canvas', run: () => setRenaming(true) },
     { label: 'Duplicate this canvas', group: 'Canvas', run: () => { store.duplicateCanvas(project.active); } },
     { label: 'Add panel…', group: 'Panel', hint: combo(ALT, 'P'), run: () => setGallery({}) },
-    ...PANEL_TYPES.map((t) => ({ label: `Add panel: ${PANEL_DEFS[t].title}`, group: 'Panel', run: () => { store.addPanel(t, focus); } })),
+    ...PANEL_TYPES.map((t) => ({ label: `Add panel: ${PANEL_DEFS[t].title}`, group: 'Panel', run: () => { store.addPanel(t); } })),
     { label: 'Show or hide the explorer', group: 'View', hint: combo(MOD, 'B'), run: onToggleExplorer },
     { label: 'Add a device', group: 'Device', run: () => hub.addDevice() },
     ...(slots.length ? [{ label: 'Start capture on all devices', group: 'Capture', run: () => void hub.startAll() }, { label: 'Stop capture on all devices', group: 'Capture', run: () => void hub.stopAll() }] : []),
     ...extraCommands,
-  ], [project.canvases, project.active, store, focus, slots.length, hub, onToggleExplorer, extraCommands]);
+  ], [project.canvases, project.active, store, slots.length, hub, onToggleExplorer, extraCommands]);
 
   const ui = useMemo<Ui>(() => ({
     openGallery: (groupId) => setGallery({ groupId }),
@@ -291,7 +291,7 @@ export function CanvasView() {
   if (phoneGroup) {
     return (
       <>
-        <Dock root={phoneGroup} panels={project.panels} focusedGroup={null} onFocusGroup={() => undefined} onAddPanel={(id) => ui.openGallery(id)} />
+        <Dock root={phoneGroup} panels={project.panels} focusedGroup={null} onFocusGroup={() => undefined} />
         <nav className="bw-phone-switcher" aria-label="Panels on this canvas">
           <button type="button" className="bw-icon-button" onClick={ui.toggleExplorer} aria-label="Explorer" title="Explorer"><IconSidebar /></button>
           <div className="bw-phone-chips">
@@ -304,5 +304,5 @@ export function CanvasView() {
       </>
     );
   }
-  return <Dock root={canvas.root} panels={project.panels} focusedGroup={ui.focusedGroup} onFocusGroup={ui.setFocusedGroup} onAddPanel={(id) => ui.openGallery(id)} />;
+  return <Dock root={canvas.root} panels={project.panels} focusedGroup={ui.focusedGroup} onFocusGroup={ui.setFocusedGroup} />;
 }

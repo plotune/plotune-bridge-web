@@ -1095,19 +1095,6 @@ input[aria-invalid='true'] {
 
 /* ---- Small screens ---------------------------------------------------------------------------- */
 @media (max-width: 900px) {
-  .bw-shell {
-    display: block;
-    height: auto;
-  }
-  .bw-setup {
-    border-right: 0;
-    border-bottom: 1px solid var(--color-chrome-border);
-  }
-  .bw-main {
-    overflow: visible;
-    padding-left: 16px;
-    padding-right: 16px;
-  }
   .bw-grid,
   .bw-grid[data-page='capture'],
   .bw-grid[data-page='capture'][data-plot] {
@@ -1117,10 +1104,6 @@ input[aria-invalid='true'] {
   }
   .bw-grid[data-page='capture'] > .bw-tile-trace {
     grid-column: auto;
-  }
-  .bw-trace-scroll {
-    flex: none;
-    height: 360px;
   }
   .bw-topbar {
     padding: 0 12px;
@@ -2278,3 +2261,7 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
 .bw-tree-signal label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .bw-tree-signal:hover { background: var(--color-neutral-tint); }
 .bw-tree .bw-empty { position: absolute; inset: 0; padding: 24px 12px; }
+
+/* A group with one panel shows its name as a title, not as a tab: tabs appear only where panels share a group. */
+.bw-group[data-single='true'] .bw-tab > button[role='tab'],
+.bw-group[data-single='true'] .bw-tab:hover > button[role='tab'] { background: transparent; font-weight: 600; color: var(--color-ink); padding-left: 6px; }

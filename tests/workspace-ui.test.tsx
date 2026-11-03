@@ -118,10 +118,12 @@ describe('panels', () => {
 
   it('more than one panel of a type can be on a canvas, and the first keeps its familiar id', () => {
     mount();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add a panel to this group' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Add panel' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a panel' })).getByRole('button', { name: /^Trace/ }));
     expect(document.querySelectorAll('#panel-trace')).toHaveLength(1);
+    // The new panel is tiled into the canvas beside the others, not hidden behind a tab.
     expect(screen.getAllByRole('tab', { name: 'Trace' })).toHaveLength(2);
+    expect(screen.getAllByRole('tab', { name: 'Trace' }).every((t) => t.closest('[data-single]')?.getAttribute('data-single') === 'true')).toBe(true);
   });
 
   it('a tab group can be maximized and restored with Escape', () => {
@@ -135,12 +137,12 @@ describe('panels', () => {
   });
 
   it('tabs in a group move with the arrow keys', () => {
-    mount();
+    const { project } = mount();
     fireEvent.click(screen.getByRole('button', { name: 'New canvas' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'New canvas' })).getByRole('button', { name: /Transmit and test/ }));
     const stats = screen.getByRole('tab', { name: 'Statistics' });
-    fireEvent.click(within(stats.closest('section')!).getByRole('button', { name: 'Add a panel to this group' }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a panel' })).getByRole('button', { name: /^Scope/ }));
+    // Panels share a group (and so get tabs) only when one is dragged onto another, or added to that group by the store.
+    act(() => project.addPanel('plot', stats.closest('section')!.getAttribute('data-dock-group')!));
     expect(screen.getByRole('tab', { name: 'Scope' })).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Scope' }), { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Statistics' })).toHaveAttribute('aria-selected', 'true');
@@ -222,5 +224,25 @@ describe('command palette', () => {
     expect(screen.getByText('No command matches.')).toBeVisible();
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Commands' }), { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
+  });
+});
+
+describe('adding panels', () => {
+  it('tiles every new panel into the canvas so all of them are in view', () => {
+    mount(memory(), false);
+    fireEvent.click(within(screen.getByTestId('empty-canvas')).getByRole('button', { name: /^Trace/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add panel' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a panel' })).getByRole('button', { name: /^Scope/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add panel' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a panel' })).getByRole('button', { name: /^Analyzer/ }));
+    expect(document.querySelectorAll('[data-dock-group]')).toHaveLength(3);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    for (const name of ['Trace', 'Scope', 'Analyzer']) expect(screen.getByRole('region', { name })).toBeVisible();
+  });
+
+  it('puts the keyboard in the search box when the command palette opens', () => {
+    mount();
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('combobox', { name: 'Search commands' })).toHaveFocus();
   });
 });

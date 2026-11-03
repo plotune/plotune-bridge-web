@@ -110,6 +110,25 @@ export function insertPanel(node: LayoutNode | null, groupId: string, zone: Drop
   return { ...node, children: node.children.map((c) => insertPanel(c, groupId, zone, panelId) as LayoutNode) };
 }
 
+/**
+ * Where a new panel goes so that every panel stays in view: beside or under the group with the most room, along its longer side.
+ * `aspect` is the canvas' width over its height; the sizes of the splits give each group its share of the area.
+ */
+export function autoPlace(root: LayoutNode | null, aspect = 1.7): { groupId: string; zone: 'right' | 'bottom' } | null {
+  if (!root) return null;
+  let best: { groupId: string; zone: 'right' | 'bottom'; area: number } | null = null;
+  const walk = (n: LayoutNode, w: number, h: number): void => {
+    if (n.kind === 'group') {
+      const area = w * h;
+      if (!best || area > best.area + 1e-9) best = { groupId: n.id, zone: w >= h ? 'right' : 'bottom', area };
+      return;
+    }
+    n.children.forEach((c, i) => (n.dir === 'row' ? walk(c, w * n.sizes[i]!, h) : walk(c, w, h * n.sizes[i]!)));
+  };
+  walk(root, aspect, 1);
+  return best ? { groupId: (best as { groupId: string }).groupId, zone: (best as { zone: 'right' | 'bottom' }).zone } : null;
+}
+
 /** Moves a panel to a group or its edge. Dropping the only tab of a group onto itself is a no-op. */
 export function movePanel(root: LayoutNode | null, panelId: string, groupId: string, zone: DropZone): LayoutNode | null {
   const source = groupOf(root, panelId);

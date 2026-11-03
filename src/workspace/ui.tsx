@@ -10,7 +10,8 @@ export function Modal({ title, onClose, children, footer, wide }: { title: strin
   const titleId = useId();
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>('[data-autofocus], input, textarea, select, button');
+    // The field marked for focus first (the Close button comes earlier in the document, so one selector list would pick it).
+    const first = ref.current?.querySelector<HTMLElement>('[data-autofocus]') ?? ref.current?.querySelector<HTMLElement>('input, textarea, select') ?? ref.current?.querySelector<HTMLElement>('button');
     (first ?? ref.current)?.focus();
     return () => before?.focus?.();
   }, []);

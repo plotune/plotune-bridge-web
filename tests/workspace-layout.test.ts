@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { group, groupById, groupOf, insertPanel, movePanel, normalize, panelsIn, parseLayout, removePanel, resizeSplit, setActiveTab, split, type LayoutNode, type SplitNode } from '../src/workspace/layout';
+import { autoPlace, group, groupById, groupOf, insertPanel, movePanel, normalize, panelsIn, parseLayout, removePanel, resizeSplit, setActiveTab, split, type LayoutNode, type SplitNode } from '../src/workspace/layout';
 
 const base = (): LayoutNode => split('row', [group(['trace'], undefined, 'g1'), split('col', [group(['plot'], undefined, 'g2'), group(['stats', 'send'], 'stats', 'g3')], [0.5, 0.5], 's2')], [0.6, 0.4], 's1');
 
@@ -96,5 +96,23 @@ describe('reading a layout from storage', () => {
   it('repairs bad sizes instead of failing', () => {
     const r = parseLayout({ kind: 'split', dir: 'row', sizes: [-1, 'x'], children: [{ kind: 'group', tabs: ['trace'], active: 'trace' }, { kind: 'group', tabs: ['plot'], active: 'plot' }] }, known) as SplitNode;
     expect(r.sizes[0]).toBeCloseTo(0.5);
+  });
+});
+
+describe('autoPlace', () => {
+  it('splits the roomiest group along its longer side, so panels end up side by side and then in a grid', () => {
+    expect(autoPlace(null)).toBeNull();
+    let root: LayoutNode | null = group(['a']);
+    const first = autoPlace(root)!;
+    expect(first.zone).toBe('right'); // a wide canvas: beside
+    root = insertPanel(root, first.groupId, first.zone, 'b');
+    const second = autoPlace(root)!; // two halves, each taller than wide: under
+    expect(second.zone).toBe('bottom');
+    root = insertPanel(root, second.groupId, second.zone, 'c');
+    expect(panelsIn(root).sort()).toEqual(['a', 'b', 'c']);
+    // The group left whole (the biggest) is split next.
+    const third = autoPlace(root)!;
+    expect(root!.kind).toBe('split');
+    expect(third.groupId).toBeTruthy();
   });
 });
