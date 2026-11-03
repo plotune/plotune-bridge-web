@@ -166,10 +166,11 @@ test('analyzer: strips, a shared axis, cursors and statistics on a recording', a
   await page.getByRole('region', { name: 'Recordings' }).locator('input[type=file]').setInputFiles({ name: 'bench-run.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.join('\n')) });
   const analyzer = page.getByRole('region', { name: 'Analyzer' });
   await expect(analyzer.getByRole('rowheader', { name: 'Speed' })).toBeVisible();
-  for (const name of ['Sense B', 'Limit']) {
-    await analyzer.getByRole('button', { name: 'Signal', exact: true }).click();
-    await page.getByRole('menuitem', { name: new RegExp(`^${name}`) }).click();
-  }
+  await analyzer.getByRole('button', { name: 'Signal', exact: true }).click();
+  const add = page.getByRole('dialog', { name: 'Add signals' });
+  await add.getByRole('checkbox', { name: /Sense B/ }).check();
+  await add.getByRole('checkbox', { name: /Limit/ }).check();
+  await add.getByRole('button', { name: /^Add 2 signals/ }).click();
   await analyzer.getByRole('button', { name: 'Cursors' }).click();
   await analyzer.getByRole('button', { name: 'Cursors' }).click();
   await analyzer.getByRole('button', { name: 'Statistics' }).click();

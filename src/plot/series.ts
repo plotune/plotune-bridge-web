@@ -4,6 +4,8 @@ import type { TraceBuffer } from '../state/trace';
 
 /** A signal to plot: which channel's database message and signal, with what the database says about its unit. */
 export interface SignalKey {
+  /** Whose channel: a device's label, so two identical Bridges keep their CAN1 apart. */
+  source: string;
   channel: number;
   id: number;
   extended: boolean;
@@ -14,7 +16,7 @@ export interface SignalKey {
   unit: string;
 }
 
-export const signalId = (k: Pick<SignalKey, 'channel' | 'id' | 'extended' | 'signal'>): string => `${k.channel}:${k.extended ? 'x' : 's'}${k.id}:${k.signal}`;
+export const signalId = (k: Pick<SignalKey, 'source' | 'channel' | 'id' | 'extended' | 'signal'>): string => `${k.source}/${k.channel}:${k.extended ? 'x' : 's'}${k.id}:${k.signal}`;
 
 /** Points of one signal, oldest first. Time is seconds on the device's own clock, counted from its first frame. */
 export class Series {
@@ -110,7 +112,7 @@ export class SeriesStore {
   }
 
   /** Reads rows of `trace` not yet seen, up to the absolute position `end` (a paused plot passes its freeze point). */
-  update(trace: TraceBuffer, registry: DbcRegistry, databaseKey: unknown, end?: number): void {
+  update(trace: TraceBuffer, registry: DbcRegistry, databaseKey: unknown, sourceOf: (row: { device?: string }) => string, end?: number): void {
     if (this.series.size === 0) return;
     const evicted = trace.evicted;
     if (this.generation !== trace.generation || this.databaseKey !== databaseKey) {
@@ -126,7 +128,7 @@ export class SeriesStore {
     const byMessage = new Map<string, { names: Set<string>; series: Map<string, Series> }>();
     for (const s of this.series.values()) {
       const k = s.key;
-      const mk = `${k.channel}:${k.extended ? 'x' : 's'}${k.id}`;
+      const mk = `${k.source}/${k.channel}:${k.extended ? 'x' : 's'}${k.id}`;
       let entry = byMessage.get(mk);
       if (!entry) byMessage.set(mk, (entry = { names: new Set(), series: new Map() }));
       entry.names.add(k.signal);
@@ -137,9 +139,10 @@ export class SeriesStore {
       const row = trace.at(absolute - evicted);
       if (row.kind !== 'frame' || row.frame.rtr) continue;
       const f = row.frame;
-      const entry = byMessage.get(`${f.channel}:${f.extended ? 'x' : 's'}${f.id}`);
+      const source = sourceOf(row);
+      const entry = byMessage.get(`${source}/${f.channel}:${f.extended ? 'x' : 's'}${f.id}`);
       if (!entry) continue;
-      const message = registry.message(f.channel, f.id, f.extended);
+      const message = registry.message(source, f.channel, f.id, f.extended);
       if (!message) continue;
       const origin = row.originNs ?? trace.originNs ?? f.timestampNs;
       const time = Number(f.timestampNs - origin) / 1e9;

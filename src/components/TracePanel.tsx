@@ -176,10 +176,10 @@ export function TracePanel() {
     });
   // Names for the filter come from the loaded databases; the registry caches them per message.
   const namesOf = useMemo(
-    () => (frame: CanFrame): string => registry.searchText(frame.channel, frame.id, frame.extended),
+    () => (frame: CanFrame, device?: string): string => registry.searchText(hub.sourceOf({ device }), frame.channel, frame.id, frame.extended),
     // A new assignment changes what a frame's names are.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [registry, assignments],
+    [registry, assignments, hub, traceView, slots.length],
   );
   // The rows to show: those that pass the filter, each followed by its decoded signals when expanded.
   // With no filter and nothing expanded the buffer is shown as it is.
@@ -194,7 +194,7 @@ export function TracePanel() {
       const row = trace.at(i);
       out.push({ index: i });
       if (row.kind === 'frame' && expanded.has(row.key) && !row.frame.rtr) {
-        const decoded = registry.decode(row.frame.channel, row.frame.id, row.frame.extended, row.frame.data);
+        const decoded = registry.decode(hub.sourceOf(row), row.frame.channel, row.frame.id, row.frame.extended, row.frame.data);
         for (const signal of decoded?.signals ?? []) out.push({ index: i, signal });
       }
     }
@@ -208,7 +208,7 @@ export function TracePanel() {
   for (let i = first; i < last; i += 1) {
     const entry = entries ? entries[i] : { index: i };
     const row = trace.at(entry.index);
-    const message = row.kind === 'frame' ? registry.message(row.frame.channel, row.frame.id, row.frame.extended) : undefined;
+    const message = row.kind === 'frame' ? registry.message(hub.sourceOf(row), row.frame.channel, row.frame.id, row.frame.extended) : undefined;
     rows.push(
       <Row
         key={entry.signal ? `${row.key}-${entry.signal.name}` : row.key}

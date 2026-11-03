@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { IconCopy, IconCursors, IconFit, IconFullscreen, IconFx, IconPlus, IconSamples, IconSigma, IconStrips } from '../components/icons';
+import { SignalTree, type TreeGroup } from '../components/SignalTree';
+import { useDbcRegistry } from '../dbc/context';
+import { decodeLogSignals, logCatalog, logSource } from '../logs/decode';
+import { IconCopy, IconCursors, IconFit, IconFullscreen, IconFx, IconPlus, IconSamples, IconSettings, IconSigma, IconStrips } from '../components/icons';
 import { Panel } from '../components/Panel';
 import { useProject, useProjectStore } from '../workspace/context';
 import { Modal, useContextMenu, useToast } from '../workspace/ui';
-import { useRecordings } from './context';
+import { useAnalysis, useRecordings } from './context';
 import { drawAnalyzer, hitTest, layout, readTheme, styleOf, xToTime, yToValue, type Geometry, type Hit } from './draw';
 import { FormulaError, evaluate } from './expression';
 import { clamp, clampView, formatValue, nearestSample, panBy, rangeStats, stepSample, valueAt, zoomAbout, type Recording, type SignalData } from './math';
@@ -59,6 +62,34 @@ function CalcDialog({ rec, onAdd, onClose }: { rec: Recording; onAdd: (s: Signal
   );
 }
 
+/**
+ * The signals of the recording that are not on the plot yet, as a searchable tree by message. A log of CAN frames lists what its
+ * linked databases define and the log contains; a recording from a file or the Scope lists its columns. Chosen signals are added together.
+ */
+function AddSignalsDialog({ rec, used, onAdd, onClose }: { rec: Recording; used: ReadonlySet<string>; onAdd: (keys: string[]) => void; onClose: () => void }) {
+  const { store, logSettings } = useAnalysis();
+  const registry = useDbcRegistry();
+  const entry = store.logs.get(rec.id);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const groups = useMemo<TreeGroup[]>(() => {
+    const all: TreeGroup[] = entry
+      ? logCatalog(entry.present, registry, logSource(rec.id))
+      : [{ id: 'all', title: rec.name, subtitle: 'Recording', signals: Object.values(rec.signals).filter((s) => !s.key.startsWith('calc:')).map((s) => ({ id: s.key, name: s.label, unit: s.unit })) }];
+    return all.map((g) => ({ ...g, signals: g.signals.filter((s) => !used.has(s.id)) })).filter((g) => g.signals.length > 0);
+  }, [entry, registry, rec, used]);
+  return (
+    <Modal title="Add signals" onClose={onClose} wide footer={<><button type="button" className="bw-button" onClick={onClose}>Cancel</button><button type="button" className="bw-button bw-primary" disabled={picked.size === 0} onClick={() => { onAdd([...picked]); onClose(); }}>Add {picked.size || ''} {picked.size === 1 ? 'signal' : 'signals'}</button></>}>
+      <SignalTree groups={groups} chosen={picked} height={320} label="Choose signals to add" onToggle={(_g, s, on) => setPicked((cur) => { const next = new Set(cur); if (on) next.add(s.id); else next.delete(s.id); return next; })} />
+      {groups.length === 0 && (
+        <p className="bw-fine">
+          {entry ? 'No signal can be decoded yet. Link a database to a channel of this log first.' : 'Every signal of this recording is already on the plot.'}
+          {entry && <> <button type="button" className="bw-link-button" onClick={() => { onClose(); logSettings(rec.id); }}>Open the log’s settings</button></>}
+        </p>
+      )}
+    </Modal>
+  );
+}
+
 function AxisDialog({ cfg, axisId, rec, view, onChange, onClose }: { cfg: AnalyzerConfig; axisId: string; rec: Recording; view: readonly [number, number]; onChange: (c: AnalyzerConfig) => void; onClose: () => void }) {
   const a = cfg.axes[axisId]!;
   const [min, setMin] = useState(String(+a.min.toFixed(4)));
@@ -94,6 +125,9 @@ export function AnalyzerPanel({ pid }: { pid: string }) {
   const project = useProjectStore();
   const { project: pr } = useProject();
   const recordings = useRecordings();
+  const { store: recStore, logSettings } = useAnalysis();
+  const registry = useDbcRegistry();
+  const [adding, setAdding] = useState(false);
   const toast = useToast();
   const stored = pr.panels[pid]?.config;
   const [cfg, setCfg] = useState<AnalyzerConfig>(() => parseConfig(stored));
@@ -361,11 +395,19 @@ export function AnalyzerPanel({ pid }: { pid: string }) {
   };
 
   /* ---- toolbar ---- */
-  const addMenu = (x: number, y: number) => {
-    if (!rec) return;
-    const used = new Set(cfg.sigs.map((s) => s.key));
-    const items = Object.values(rec.signals).filter((s) => !used.has(s.key)).map((s) => ({ label: s.label, hint: s.unit || (s.bool ? 'on/off' : ''), onSelect: () => commit(addSignals(cfg, rec, [s.key], cfg.strips.find((st) => st.kind === 'analog')?.id ?? 'new', 'unit')) }));
-    menu.open(x, y, items.length ? items : [{ heading: 'Every signal is already on the plot' }]);
+  /** Adds the chosen signals. A log decodes them from its frames first, with the databases linked to its channels. */
+  const addChosen = (keys: string[]) => {
+    if (!rec || keys.length === 0) return;
+    let target = rec;
+    const entry = recStore.logs.get(rec.id);
+    if (entry) {
+      const decoded = decodeLogSignals(entry.log, registry, logSource(rec.id), new Set(keys));
+      target = recStore.addSignals(rec.id, decoded) ?? rec;
+      target = { ...target, signals: { ...rec.signals, ...target.signals } };
+      keys = keys.filter((k) => target.signals[k]);
+      if (keys.length === 0) { toast.show('Those signals have no samples in this log.'); return; }
+    }
+    commit(addSignals(cfg, target, keys, cfg.strips.find((st) => st.kind === 'analog')?.id ?? 'new', 'unit'));
   };
 
   const csv = (): string => {
@@ -435,7 +477,8 @@ export function AnalyzerPanel({ pid }: { pid: string }) {
     <Panel id="analyzer" title="Analyzer" status={status}>
       <div className="bw-analyzer-tools" role="toolbar" aria-label="Analyzer tools">
         {recOptions}
-        <button type="button" className="bw-icon-button" aria-label="Signal" title="Add a signal" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); addMenu(r.left, r.bottom + 4); }}><IconPlus /></button>
+        <button type="button" className="bw-icon-button" aria-label="Signal" title="Add signals" onClick={() => setAdding(true)}><IconPlus /></button>
+        {recStore.logs.has(rec.id) && <button type="button" className="bw-icon-button" aria-label="Log settings" title="Channels and databases of this log" onClick={() => logSettings(rec.id)}><IconSettings /></button>}
         <button type="button" className="bw-icon-button" aria-label="Calculated" title="Add a calculated signal" onClick={() => setCalc(true)}><IconFx /></button>
         <span className="bw-tool-sep" aria-hidden="true" />
         <button type="button" className="bw-icon-button" aria-label="Full range" title="Show the full time range" onClick={() => setView(full)}><IconFullscreen /></button>
@@ -489,11 +532,17 @@ export function AnalyzerPanel({ pid }: { pid: string }) {
               })}
             </tbody>
           </table>
-          {rows.length === 0 && <p className="bw-fine bw-pad">No signals yet. Choose Signal in the toolbar.</p>}
+          {rows.length === 0 && (
+            <div className="bw-pad">
+              <p className="bw-fine">No signals yet.</p>
+              <button type="button" className="bw-button bw-small" onClick={() => setAdding(true)}>Choose signals…</button>
+            </div>
+          )}
           <p className="bw-fine bw-pad">{cfg.stats ? `Statistics cover ${a && b ? `the cursor range ${range[0].toFixed(2)} to ${range[1].toFixed(2)} s` : `the visible range ${range[0].toFixed(1)} to ${range[1].toFixed(1)} s`}.` : 'Cursor values appear in columns A and B.'}</p>
         </div>
       </div>
       {menu.menu}
+      {adding && <AddSignalsDialog rec={rec} used={new Set(cfg.sigs.map((s) => s.key))} onAdd={addChosen} onClose={() => setAdding(false)} />}
       {axisDialog && cfg.axes[axisDialog] && <AxisDialog cfg={cfg} axisId={axisDialog} rec={rec} view={view} onChange={commit} onClose={() => setAxisDialog(null)} />}
       {calc && <CalcDialog rec={rec} onClose={() => setCalc(false)} onAdd={(sig, formula) => { const next = { ...rec, signals: { ...rec.signals, [sig.key]: sig } }; const added = addSignals(cfg, next, [sig.key], cfg.strips.find((st) => st.kind === 'analog')?.id ?? 'new', 'individual'); commit({ ...added, calcs: [...cfg.calcs, { key: sig.key, label: sig.label, unit: sig.unit, formula }] }); }} />}
     </Panel>

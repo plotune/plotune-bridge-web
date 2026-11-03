@@ -23,13 +23,13 @@ function memory(initial: string | null = null): DbcStorage & { value: string | n
 describe('DbcRegistry', () => {
   it('assigns one database per channel, independently, and decodes frames of that channel only', () => {
     const registry = new DbcRegistry();
-    expect(registry.assign(1, 'one.dbc', DBC)).toEqual({ ok: true, warnings: [] });
-    expect(registry.message(1, 2024, false)?.name).toBe('Resp');
-    expect(registry.message(2, 2024, false)).toBeUndefined();
-    const decoded = registry.decode(1, 2024, false, Uint8Array.of(7, 0xaa));
+    expect(registry.assign('Bridge 1', 1, 'one.dbc', DBC)).toEqual({ ok: true, warnings: [] });
+    expect(registry.message('Bridge 1', 1, 2024, false)?.name).toBe('Resp');
+    expect(registry.message('Bridge 1', 2, 2024, false)).toBeUndefined();
+    const decoded = registry.decode('Bridge 1', 1, 2024, false, Uint8Array.of(7, 0xaa));
     expect(decoded?.signals.map((s) => [s.name, s.value, s.label])).toEqual([['Counter', 7, undefined], ['Marker', 170, 'Alive']]);
-    registry.remove(1);
-    expect(registry.message(1, 2024, false)).toBeUndefined();
+    registry.remove('Bridge 1', 1);
+    expect(registry.message('Bridge 1', 1, 2024, false)).toBeUndefined();
     expect(registry.getSnapshot()).toEqual([]);
   });
 
@@ -37,30 +37,47 @@ describe('DbcRegistry', () => {
     const registry = new DbcRegistry();
     let changes = 0;
     registry.subscribe(() => changes++);
-    registry.assign(1, 'ok.dbc', DBC);
-    expect(registry.assign(1, 'bad.dbc', 'not a database')).toEqual({ ok: false, message: expect.stringMatching(/No messages found/) });
-    expect(registry.for(1)?.fileName).toBe('ok.dbc');
+    registry.assign('Bridge 1', 1, 'ok.dbc', DBC);
+    expect(registry.assign('Bridge 1', 1, 'bad.dbc', 'not a database')).toEqual({ ok: false, message: expect.stringMatching(/No messages found/) });
+    expect(registry.for('Bridge 1', 1)?.fileName).toBe('ok.dbc');
     expect(changes).toBe(1);
   });
 
   it('searches by message and signal names, lower-case', () => {
     const registry = new DbcRegistry();
-    registry.assign(1, 'a.dbc', DBC);
-    expect(registry.searchText(1, 2024, false)).toBe('resp counter marker');
-    expect(registry.searchText(1, 1, false)).toBe('');
-    expect(registry.searchText(2, 2024, false)).toBe('');
+    registry.assign('Bridge 1', 1, 'a.dbc', DBC);
+    expect(registry.searchText('Bridge 1', 1, 2024, false)).toBe('resp counter marker');
+    expect(registry.searchText('Bridge 1', 1, 1, false)).toBe('');
+    expect(registry.searchText('Bridge 1', 2, 2024, false)).toBe('');
   });
 
   it('remembers files in this browser and restores them, parsed again', () => {
     const storage = memory();
     const first = new DbcRegistry(storage);
-    first.assign(2, 'C:\\fakepath\\car.dbc', DBC);
+    first.assign('Bridge 1', 2, 'C:\\fakepath\\car.dbc', DBC);
     expect(JSON.parse(storage.value!).files[0]).toMatchObject({ channel: 2, fileName: 'car.dbc' });
     const second = new DbcRegistry(storage);
-    expect(second.for(2)?.fileName).toBe('car.dbc');
-    expect(second.message(2, 2024, false)?.name).toBe('Resp');
-    second.remove(2);
+    expect(second.for('Bridge 1', 2)?.fileName).toBe('car.dbc');
+    expect(second.message('Bridge 1', 2, 2024, false)?.name).toBe('Resp');
+    second.remove('Bridge 1', 2);
     expect(storage.value).toBeNull();
+  });
+
+  it('files remembered before databases were linked to devices belong to the first device', () => {
+    const storage = memory(JSON.stringify({ version: 1, files: [{ channel: 1, fileName: 'old.dbc', text: DBC }] }));
+    const registry = new DbcRegistry(storage);
+    expect(registry.for('Bridge 1', 1)?.fileName).toBe('old.dbc');
+    expect(registry.for('Bridge 2', 1)).toBeUndefined();
+  });
+
+  it('does not remember the databases of opened logs', () => {
+    const storage = memory();
+    const registry = new DbcRegistry(storage);
+    registry.assign('log:r1', 1, 'a.dbc', DBC);
+    registry.assign('Bridge 2', 1, 'b.dbc', DBC);
+    const saved = JSON.parse(storage.value!).files;
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ source: 'Bridge 2', channel: 1 });
   });
 
   it('ignores damaged or oversized remembered values and never throws', () => {
@@ -72,17 +89,17 @@ describe('DbcRegistry', () => {
   it('keeps a very large set for this session only instead of filling the storage', () => {
     const storage = memory();
     const registry = new DbcRegistry(storage);
-    const big = DBC + 'CM_ "' + 'x'.repeat(2_100_000) + '";\n';
-    expect(registry.assign(1, 'big.dbc', big).ok).toBe(true);
+    const big = DBC + 'CM_ "' + 'x'.repeat(3_100_000) + '";\n';
+    expect(registry.assign('Bridge 1', 1, 'big.dbc', big).ok).toBe(true);
     expect(storage.value).toBeNull();
-    expect(registry.for(1)).toBeDefined();
+    expect(registry.for('Bridge 1', 1)).toBeDefined();
   });
 
   it('survives a storage that throws', () => {
     const broken: DbcStorage = { get: () => { throw new Error('blocked'); }, set: () => { throw new Error('quota'); }, remove: () => { throw new Error('blocked'); } };
     const registry = new DbcRegistry(broken);
-    expect(registry.assign(1, 'a.dbc', DBC).ok).toBe(true);
-    expect(registry.for(1)).toBeDefined();
+    expect(registry.assign('Bridge 1', 1, 'a.dbc', DBC).ok).toBe(true);
+    expect(registry.for('Bridge 1', 1)).toBeDefined();
   });
 
   it('uses a fixed storage key', () => {

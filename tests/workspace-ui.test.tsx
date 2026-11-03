@@ -22,7 +22,7 @@ function mount(storage = memory(), seed = true) {
   render(<App hub={hub} browser={browser} cloudSso={fakeSso()} project={project} />);
   return { project, storage, hub };
 }
-const tabs = () => within(screen.getByRole('navigation', { name: 'Canvases' })).getAllByRole('button').map((b) => b.textContent);
+const tabs = () => within(screen.getByRole('navigation', { name: 'Canvases' })).getAllByRole('button').map((b) => b.firstChild?.textContent);
 
 describe('canvases', () => {
   it('are a row of tabs, and the first one is open', () => {
@@ -74,6 +74,18 @@ describe('canvases', () => {
     expect(tabs()).not.toContain('Diagnostics');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(tabs()).toContain('Diagnostics'));
+  });
+
+  it('can be deleted with the mark on the tab or the Delete key, never the last one', () => {
+    const { project } = mount();
+    const diag = screen.getByRole('button', { name: 'Diagnostics' });
+    fireEvent.click(diag.querySelector('.bw-seg-close')!);
+    expect(tabs()).toEqual(['Capture', 'Analysis']);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Analysis' }), { key: 'Delete' });
+    expect(tabs()).toEqual(['Capture']);
+    expect(screen.getByRole('button', { name: 'Capture' }).querySelector('.bw-seg-close')).toBeNull();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Capture' }), { key: 'Delete' });
+    expect(project.getState().project.canvases).toHaveLength(1);
   });
 
   it('can be duplicated from the menu', () => {

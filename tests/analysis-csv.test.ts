@@ -30,9 +30,9 @@ describe('recordings from CSV', () => {
   });
 
   it('takes the Scope\'s own export back', () => {
-    const s = new Series({ channel: 1, id: 0x100, extended: false, signal: 'Speed', messageName: 'Drive', unit: 'km/h' }, 100);
+    const s = new Series({ source: 'Bridge 1', channel: 1, id: 0x100, extended: false, signal: 'Speed', messageName: 'Drive', unit: 'km/h' }, 100);
     [0, 0.1, 0.2].forEach((t, i) => s.push(t, 10 * (i + 1)));
-    const flag = new Series({ channel: 1, id: 0x101, extended: false, signal: 'Flag', messageName: 'Drive', unit: '' }, 100);
+    const flag = new Series({ source: 'Bridge 1', channel: 1, id: 0x101, extended: false, signal: 'Flag', messageName: 'Drive', unit: '' }, 100);
     [0, 0.1, 0.2].forEach((t, i) => flag.push(t, i % 2));
     const r = recordingFromCsv(visibleCsv([s, flag], 0, 1), 'scope');
     const speed = r.signals['CAN1:Drive.Speed']!;
@@ -57,7 +57,7 @@ describe('recordings from CSV', () => {
 
 describe('recordings from the Scope', () => {
   it('copies a window and counts time from its start', () => {
-    const s = new Series({ channel: 2, id: 5, extended: false, signal: 'V', messageName: 'Bat', unit: 'V' }, 100);
+    const s = new Series({ source: 'Bridge 1', channel: 2, id: 5, extended: false, signal: 'V', messageName: 'Bat', unit: 'V' }, 100);
     [10, 11, 12, 13, 14].forEach((t, i) => s.push(t, i));
     const r = recordingFromSeries([s], 11, 13, 'w')!;
     const v = r.signals['CAN2:Bat.V']!;
@@ -66,7 +66,7 @@ describe('recordings from the Scope', () => {
     expect(r.source).toBe('scope');
   });
   it('has nothing to keep from an empty window', () => {
-    const s = new Series({ channel: 1, id: 1, extended: false, signal: 'x', messageName: 'm', unit: '' }, 10);
+    const s = new Series({ source: 'Bridge 1', channel: 1, id: 1, extended: false, signal: 'x', messageName: 'm', unit: '' }, 10);
     expect(recordingFromSeries([s], 0, 1, 'w')).toBeNull();
   });
 });

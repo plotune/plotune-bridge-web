@@ -4,9 +4,12 @@ import { DbcError, type Dbc, type DbcMessage, type DecodedSignal } from './types
 
 export const DBC_STORAGE_KEY = 'bw.dbc';
 /** Remembered files together must stay well inside the browser's storage quota; larger sets stay for this session only. */
-const MAX_REMEMBERED_CHARS = 2_000_000;
+const MAX_REMEMBERED_CHARS = 3_000_000;
+const MAX_REMEMBERED_FILES = 32;
 
 export interface DbcAssignment {
+  /** Whose channel this is: a device's label ("Bridge 2"), or a log file ("log:<id>"). */
+  source: string;
   channel: number;
   fileName: string;
   dbc: Dbc;
@@ -28,13 +31,16 @@ export function safeFileName(name: string): string {
   return base.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 100) || 'database.dbc';
 }
 
+/** The source old remembered files belong to: before databases were linked to devices there was one set, used by every device. */
+export const LEGACY_SOURCE = 'Bridge 1';
+
 /**
- * One DBC per CAN channel, held in this page and remembered in the browser. Files are read locally and never uploaded.
- * The assignment is by channel number: CAN1 and CAN2 are independent, and every device on the page uses the same ones.
+ * One DBC per channel of a source, held in this page and remembered in the browser. Files are read locally and never uploaded.
+ * A source is a device (so two identical Bridges have their own CAN1 and CAN2) or a log file opened for analysis.
  */
 export class DbcRegistry {
   private items: DbcAssignment[] = [];
-  private raw = new Map<number, { fileName: string; text: string }>();
+  private raw = new Map<string, { source: string; channel: number; fileName: string; text: string }>();
   private readonly searchCache = new WeakMap<DbcMessage, string>();
   private readonly listeners = new Set<() => void>();
 
@@ -49,38 +55,69 @@ export class DbcRegistry {
     return () => this.listeners.delete(listener);
   };
 
-  for(channel: number): DbcAssignment | undefined {
-    return this.items.find((a) => a.channel === channel);
+  for(source: string, channel: number): DbcAssignment | undefined {
+    return this.items.find((a) => a.channel === channel && a.source === source);
   }
 
-  assign(channel: number, fileName: string, text: string): AssignResult {
+  /** Every assignment of one source. */
+  of(source: string): DbcAssignment[] {
+    return this.items.filter((a) => a.source === source);
+  }
+
+  private static key(source: string, channel: number): string {
+    return `${source}\u0000${channel}`;
+  }
+
+  private put(source: string, channel: number, fileName: string, text: string, dbc: Dbc): void {
+    const name = safeFileName(fileName);
+    this.raw.set(DbcRegistry.key(source, channel), { source, channel, fileName: name, text });
+    this.items = [...this.items.filter((a) => !(a.channel === channel && a.source === source)), { source, channel, fileName: name, dbc, find: indexMessages(dbc) }].sort((a, b) => (a.source === b.source ? a.channel - b.channel : a.source < b.source ? -1 : 1));
+  }
+
+  assign(source: string, channel: number, fileName: string, text: string): AssignResult {
     let dbc: Dbc;
     try {
       dbc = parseDbc(text);
     } catch (error) {
       return { ok: false, message: error instanceof DbcError ? error.message : 'This file could not be read as a DBC.' };
     }
-    const name = safeFileName(fileName);
-    this.raw.set(channel, { fileName: name, text });
-    this.items = [...this.items.filter((a) => a.channel !== channel), { channel, fileName: name, dbc, find: indexMessages(dbc) }].sort((a, b) => a.channel - b.channel);
+    this.put(source, channel, fileName, text, dbc);
     this.changed();
     return { ok: true, warnings: dbc.warnings };
   }
 
-  remove(channel: number): void {
-    this.raw.delete(channel);
-    this.items = this.items.filter((a) => a.channel !== channel);
+  /** Links the database already loaded on one channel to another channel too (the same file for CAN1 and CAN2, say). */
+  copy(from: { source: string; channel: number }, to: { source: string; channel: number }): boolean {
+    const f = this.raw.get(DbcRegistry.key(from.source, from.channel));
+    const a = this.for(from.source, from.channel);
+    if (!f || !a) return false;
+    this.put(to.source, to.channel, f.fileName, f.text, a.dbc);
+    this.changed();
+    return true;
+  }
+
+  remove(source: string, channel: number): void {
+    this.raw.delete(DbcRegistry.key(source, channel));
+    this.items = this.items.filter((a) => !(a.channel === channel && a.source === source));
     this.changed();
   }
 
+  /** Forgets every database of a source (a device that was removed, a log that was closed). */
+  removeSource(source: string): void {
+    for (const [k, v] of this.raw) if (v.source === source) this.raw.delete(k);
+    const before = this.items.length;
+    this.items = this.items.filter((a) => a.source !== source);
+    if (this.items.length !== before) this.changed();
+  }
+
   /** The message a frame belongs to on this channel, or undefined: unknown frames keep showing raw data. */
-  message(channel: number, id: number, extended: boolean): DbcMessage | undefined {
-    return this.for(channel)?.find(id, extended);
+  message(source: string, channel: number, id: number, extended: boolean): DbcMessage | undefined {
+    return this.for(source, channel)?.find(id, extended);
   }
 
   /** Lower-case message and signal names of a frame's message, for filtering. Empty when the frame is not in a database. */
-  searchText(channel: number, id: number, extended: boolean): string {
-    const message = this.message(channel, id, extended);
+  searchText(source: string, channel: number, id: number, extended: boolean): string {
+    const message = this.message(source, channel, id, extended);
     if (!message) return '';
     let text = this.searchCache.get(message);
     if (text === undefined) {
@@ -90,8 +127,8 @@ export class DbcRegistry {
     return text;
   }
 
-  decode(channel: number, id: number, extended: boolean, data: Uint8Array): { message: DbcMessage; signals: DecodedSignal[] } | undefined {
-    const message = this.message(channel, id, extended);
+  decode(source: string, channel: number, id: number, extended: boolean, data: Uint8Array): { message: DbcMessage; signals: DecodedSignal[] } | undefined {
+    const message = this.message(source, channel, id, extended);
     return message ? { message, signals: decodeMessage(message, data) } : undefined;
   }
 
@@ -102,11 +139,11 @@ export class DbcRegistry {
 
   private persist(): void {
     if (!this.storage) return;
-    const files = [...this.raw].map(([channel, f]) => ({ channel, fileName: f.fileName, text: f.text }));
+    const files = [...this.raw.values()].filter((f) => !f.source.startsWith('log:')).map((f) => ({ source: f.source, channel: f.channel, fileName: f.fileName, text: f.text }));
     const size = files.reduce((n, f) => n + f.text.length, 0);
     try {
       if (files.length === 0 || size > MAX_REMEMBERED_CHARS) this.storage.remove();
-      else this.storage.set(JSON.stringify({ version: 1, files }));
+      else this.storage.set(JSON.stringify({ version: 2, files }));
     } catch {
       // storage unavailable or full: the files stay for this session only
     }
@@ -117,27 +154,26 @@ export class DbcRegistry {
     try {
       const stored = this.storage.get();
       if (!stored) return;
-      const parsed: unknown = JSON.parse(stored);
-      const files = (parsed as { version?: number; files?: unknown })?.files;
-      if ((parsed as { version?: number })?.version !== 1 || !Array.isArray(files)) return;
-      for (const f of files.slice(0, 8)) {
-        const entry = f as { channel?: unknown; fileName?: unknown; text?: unknown };
+      const parsed = JSON.parse(stored) as { version?: number; files?: unknown };
+      const version = parsed?.version;
+      if ((version !== 1 && version !== 2) || !Array.isArray(parsed.files)) return;
+      for (const f of parsed.files.slice(0, MAX_REMEMBERED_FILES)) {
+        const entry = f as { source?: unknown; channel?: unknown; fileName?: unknown; text?: unknown };
         if (!Number.isInteger(entry.channel) || typeof entry.fileName !== 'string' || typeof entry.text !== 'string' || entry.text.length > MAX_DBC_BYTES) continue;
         const channel = entry.channel as number;
-        if (channel < 1 || channel > 8) continue;
-        this.assignQuietly(channel, entry.fileName, entry.text);
+        if (channel < 1 || channel > 64) continue;
+        // Files remembered before databases were linked to devices belong to the first device.
+        const source = typeof entry.source === 'string' && entry.source && !entry.source.startsWith('log:') ? entry.source.slice(0, 60) : LEGACY_SOURCE;
+        if (version === 1 || typeof entry.source === 'string') this.assignQuietly(source, channel, entry.fileName, entry.text);
       }
     } catch {
       // a damaged remembered value is ignored
     }
   }
 
-  private assignQuietly(channel: number, fileName: string, text: string): void {
+  private assignQuietly(source: string, channel: number, fileName: string, text: string): void {
     try {
-      const dbc = parseDbc(text);
-      const name = safeFileName(fileName);
-      this.raw.set(channel, { fileName: name, text });
-      this.items = [...this.items, { channel, fileName: name, dbc, find: indexMessages(dbc) }].sort((a, b) => a.channel - b.channel);
+      this.put(source, channel, fileName, text, parseDbc(text));
     } catch {
       // a remembered file that no longer parses is dropped
     }

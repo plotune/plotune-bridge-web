@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react';
 import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
 import { readDbcFile } from '../dbc/readFile';
-import { useHubState } from '../state/context';
-import { IconClose, IconUpload } from './icons';
+import { IconClose, IconCopy, IconUpload } from './icons';
 
-/** One channel's database: load, see the file name, remove. Read in the browser, never uploaded. */
-function DatabaseRow({ channel }: { channel: number }) {
+/** One channel's database: load, see the file name, reuse another channel's file, remove. Read in the browser, never uploaded. */
+function ChannelDatabase({ source, channel, detail }: { source: string; channel: number; detail?: string }) {
   const registry = useDbcRegistry();
-  const assigned = useDbcAssignments().find((a) => a.channel === channel);
+  const assigned = useDbcAssignments().find((a) => a.source === source && a.channel === channel);
+  const available = useDbcAssignments().filter((a) => a.source === source && a.channel !== channel);
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
@@ -15,7 +15,7 @@ function DatabaseRow({ channel }: { channel: number }) {
   async function onFile(file: File | undefined) {
     if (!file) return;
     const read = await readDbcFile(file);
-    const result = read.ok ? registry.assign(channel, file.name, read.text) : read;
+    const result = read.ok ? registry.assign(source, channel, file.name, read.text) : read;
     if (result.ok) {
       setError(null);
       setNotes(result.warnings);
@@ -26,19 +26,27 @@ function DatabaseRow({ channel }: { channel: number }) {
   }
   return (
     <div className="bw-db-row" data-testid={`db-row-${channel}`}>
-      <strong>{name}</strong>
+      <strong>{name}{detail ? <small className="bw-muted"> {detail}</small> : null}</strong>
       {assigned ? (
         <>
           <span className="bw-db-name" title={assigned.fileName}>{assigned.fileName}</span>
-          <small>{assigned.dbc.messages.length} {assigned.dbc.messages.length === 1 ? 'message' : 'messages'}</small>
-          <button type="button" className="bw-icon-button" aria-label={`Remove the database from ${name}`} title="Remove the database" onClick={() => { registry.remove(channel); setNotes([]); setError(null); }}>
+          <small>{assigned.dbc.messages.length} {assigned.dbc.messages.length === 1 ? 'message' : 'messages'} · {assigned.dbc.messages.reduce((n, m) => n + m.signals.length, 0).toLocaleString()} signals</small>
+          <button type="button" className="bw-icon-button" aria-label={`Remove the database from ${name}`} title="Remove the database" onClick={() => { registry.remove(source, channel); setNotes([]); setError(null); }}>
             <IconClose />
           </button>
         </>
       ) : (
-        <button type="button" className="bw-icon-button" aria-label={`Load a database (DBC) for ${name}`} title="Load a DBC file" onClick={() => input.current?.click()}>
-          <IconUpload />
-        </button>
+        <>
+          <span className="bw-muted bw-db-name">No database: frames show raw data</span>
+          {available.length > 0 && (
+            <button type="button" className="bw-icon-button" aria-label={`Use the database of CAN${available[0]!.channel} for ${name}`} title={`Use the same file as CAN${available[0]!.channel}`} onClick={() => registry.copy({ source, channel: available[0]!.channel }, { source, channel })}>
+              <IconCopy />
+            </button>
+          )}
+          <button type="button" className="bw-icon-button" aria-label={`Load a database (DBC) for ${name}`} title="Load a DBC file" onClick={() => input.current?.click()}>
+            <IconUpload />
+          </button>
+        </>
       )}
       <input ref={input} type="file" accept=".dbc,text/plain" hidden aria-hidden="true" tabIndex={-1} data-testid={`dbc-input-${channel}`} onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
       {error && <p className="bw-inline-error bw-db-wide" role="alert">{error}</p>}
@@ -52,17 +60,16 @@ function DatabaseRow({ channel }: { channel: number }) {
   );
 }
 
-/** A database (DBC) per channel names the messages and signals in the Trace. Listed in the Explorer. */
-export function DatabaseRows() {
-  const { slots } = useHubState();
-  const assigned = useDbcAssignments();
-  const fromDevices = slots.flatMap((s) => s.store.getState().channels.map((c) => c.channel));
-  const channels = [...new Set([1, 2, ...fromDevices, ...assigned.map((a) => a.channel)])].sort((a, b) => a - b);
+/**
+ * The databases (DBC) of one source: a device or a log file. Each channel has its own, so two identical devices, or a log with seven
+ * channels, are told apart by whose channel it is. The database names the messages and signals in the Trace, the Scope and the Analyzer.
+ */
+export function ChannelDatabases({ source, channels, detail }: { source: string; channels: number[]; detail?: (channel: number) => string }) {
   return (
-    <div className="bw-db-list" role="group" aria-label="Databases per channel">
-      <p className="bw-ex-empty">A DBC names messages and signals in the Trace. The file stays in this browser.</p>
+    <div className="bw-db-list" role="group" aria-label={`Databases of ${source}`}>
+      <p className="bw-fine">A database (DBC) names the messages and signals of a channel. The file stays in this browser.</p>
       {channels.map((channel) => (
-        <DatabaseRow key={channel} channel={channel} />
+        <ChannelDatabase key={channel} source={source} channel={channel} detail={detail?.(channel)} />
       ))}
     </div>
   );

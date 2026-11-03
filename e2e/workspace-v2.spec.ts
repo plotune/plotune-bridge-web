@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { configureBothChannels, connected, explorer, seedWorkspace, startCapture } from './helpers';
+import { closeDialog, configureBothChannels, connected, openDeviceSettings, seedWorkspace, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Canvases' });
@@ -115,8 +115,9 @@ test('the Scope sends its window to the Analyzer', async ({ page }) => {
   await connected(page, device.url);
   await configureBothChannels(page);
   await startCapture(page);
-  await (await explorer(page)).getByRole('button', { name: /^Databases/ }).click();
+  await openDeviceSettings(page);
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
+  await closeDialog(page);
   const scope = page.getByRole('region', { name: 'Scope' });
   await scope.getByLabel('Search signals').fill('counter');
   await scope.getByRole('group', { name: 'Choose signals to plot' }).getByRole('checkbox').first().check();

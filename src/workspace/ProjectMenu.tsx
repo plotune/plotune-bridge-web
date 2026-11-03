@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useProject, useProjectStore } from './context';
+import { IconMore } from '../components/icons';
 import { Modal, NameDialog, useContextMenu, useToast } from './ui';
 
 const ago = (t: number): string => {
@@ -75,9 +76,10 @@ export function ProjectMenu() {
       <button
         ref={button}
         type="button"
-        className="bw-button bw-small bw-project-button"
+        className="bw-icon-button bw-project-button"
         aria-haspopup="menu"
-        title="Saved workspace"
+        aria-label={`${project.name}, workspace menu`}
+        title={`${project.name} · ${saveFailed ? 'not saved' : 'saved in this browser'}`}
         onClick={() => { const r = button.current!.getBoundingClientRect(); menu.open(r.left, r.bottom + 4, [
           { heading: saveFailed ? 'Could not save in this browser' : 'Saved in this browser' },
           { label: 'Rename workspace…', onSelect: () => setDialog('rename') },
@@ -88,8 +90,8 @@ export function ProjectMenu() {
           { label: 'Export or import…', onSelect: () => setDialog('export') },
         ]); }}
       >
-        <span className="bw-project-name">{project.name}</span>
-        <span className={`bw-project-state ${saveFailed ? 'is-bad' : ''}`}>{saveFailed ? 'Not saved' : 'Saved'}</span>
+        <IconMore />
+        <span className={`bw-project-state ${saveFailed ? 'is-bad' : ''}`} aria-hidden="true" />
       </button>
       {menu.menu}
       {dialog === 'rename' && <NameDialog title="Rename workspace" label="Workspace name" initial={project.name} onSubmit={(v) => store.renameProject(v)} onClose={() => setDialog(null)} />}

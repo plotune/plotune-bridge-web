@@ -8,7 +8,7 @@ export const MAX_CSV_BYTES = 30_000_000;
 export const MAX_CSV_ROWS = 1_500_000;
 export const MAX_RECORDING_SIGNALS = 64;
 
-const looksBoolean = (v: Float64Array, unit: string): boolean => {
+export const looksBoolean = (v: Float64Array, unit: string): boolean => {
   if (unit !== '' || v.length === 0) return false;
   for (let i = 0; i < v.length; i += 1) if (v[i] !== 0 && v[i] !== 1) return false;
   return true;
