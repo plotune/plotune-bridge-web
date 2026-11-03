@@ -16,7 +16,7 @@ import { RecordControl } from './components/RecordControl';
 import { RecordingProvider } from './record/context';
 import { RecordingService } from './record/recorder';
 import { NoticeDock } from './components/NoticeDock';
-import { AnalysisProvider } from './analysis/context';
+import { AnalysisProvider, useAnalysis } from './analysis/context';
 import { ProjectProvider } from './workspace/context';
 import { DiagnosticsProvider } from './workspace/diagnostics';
 import { ProjectStore } from './workspace/project';
@@ -432,7 +432,8 @@ function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: stri
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const openSettings = useCallback((id?: string) => setSettingsFor(id ?? hub.active.id), [hub]);
   const { slots } = useHubState();
-  const extraCommands = useMemo(() => slots.map((slot) => ({ label: `Settings: ${slot.label}`, group: 'Device', run: () => setSettingsFor(slot.id) })), [slots]);
+  const { pickFile } = useAnalysis();
+  const extraCommands = useMemo(() => [...slots.map((slot) => ({ label: `Settings: ${slot.label}`, group: 'Device', run: () => setSettingsFor(slot.id) })), { label: 'Open a log or CSV file to analyse…', group: 'Analyze', run: pickFile }], [slots, pickFile]);
   return (
     <OpenSettingsContext.Provider value={openSettings}>
       <WorkspaceUiProvider onToggleExplorer={toggleExplorer} extraCommands={extraCommands}>

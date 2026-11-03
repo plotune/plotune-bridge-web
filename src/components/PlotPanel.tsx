@@ -1,7 +1,7 @@
 import { IconAnalyze, IconDownload, IconList, IconMinus, IconPause, IconPlus, IconReset, IconStart } from './icons';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
-import type { DbcRegistry } from '../dbc/registry';
+import { LEGACY_SOURCE, type DbcRegistry } from '../dbc/registry';
 import { readStored, writeStored } from '../lib/storage';
 import { recordingFromSeries } from '../analysis/csv';
 import { useAnalysisMaybe } from '../analysis/context';
@@ -12,11 +12,11 @@ import { zoomedRange } from '../plot/geometry';
 import { SeriesStore, signalId, type Series, type SignalKey } from '../plot/series';
 import { useHub } from '../state/context';
 import { Panel } from './Panel';
+import { SignalTree, type TreeGroup } from './SignalTree';
 
 export const PLOT_STORAGE_KEY = 'bw.plot';
 export const MAX_SIGNALS = SERIES_STYLES.length;
 export const WINDOWS = [10, 30, 60, 300] as const;
-const PICKER_LIMIT = 60;
 
 const windowLabel = (seconds: number) => (seconds < 60 ? `${seconds} s` : `${seconds / 60} min`);
 const formatValue = (value: number) => String(Number(value.toPrecision(7)));
@@ -32,10 +32,11 @@ export function restoreSelection(raw: string | null, registry: DbcRegistry): Sig
     for (const item of list.slice(0, MAX_SIGNALS)) {
       const k = item as Partial<SignalKey>;
       if (!Number.isInteger(k.channel) || !Number.isInteger(k.id) || typeof k.extended !== 'boolean' || typeof k.signal !== 'string') continue;
-      const message = registry.message(k.channel as number, k.id as number, k.extended);
+      const source = typeof k.source === 'string' && k.source ? k.source : LEGACY_SOURCE;
+      const message = registry.message(source, k.channel as number, k.id as number, k.extended);
       const signal = message?.signals.find((s) => s.name === k.signal);
       if (!message || !signal) continue;
-      out.push({ channel: k.channel as number, id: k.id as number, extended: k.extended, signal: signal.name, messageName: message.name, unit: signal.unit });
+      out.push({ source, channel: k.channel as number, id: k.id as number, extended: k.extended, signal: signal.name, messageName: message.name, unit: signal.unit });
     }
     return out;
   } catch {
@@ -43,54 +44,29 @@ export function restoreSelection(raw: string | null, registry: DbcRegistry): Sig
   }
 }
 
+/** The databases of every device and log, as groups of signals by message. */
 function SignalPicker({ selection, onChange }: { selection: SignalKey[]; onChange: (next: SignalKey[]) => void }) {
   const assignments = useDbcAssignments();
-  const [search, setSearch] = useState('');
-  const chosen = new Set(selection.map(signalId));
-  const needle = search.trim().toLowerCase();
-  const results: SignalKey[] = [];
-  let more = false;
-  outer: for (const a of assignments) {
-    for (const message of a.dbc.messages) {
-      for (const signal of message.signals) {
-        if (needle && !`can${a.channel} ${message.name} ${signal.name}`.toLowerCase().includes(needle)) continue;
-        if (results.length >= PICKER_LIMIT) {
-          more = true;
-          break outer;
-        }
-        results.push({ channel: a.channel, id: message.id, extended: message.extended, signal: signal.name, messageName: message.name, unit: signal.unit });
-      }
-    }
-  }
+  const groups = useMemo<TreeGroup[]>(() => assignments.flatMap((a) => a.dbc.messages.map((m) => ({
+    id: `${a.source}/${a.channel}:${m.extended ? 'x' : 's'}${m.id}`,
+    title: m.name,
+    subtitle: `${a.source} · CAN${a.channel}`,
+    signals: m.signals.map((sg) => ({ id: signalId({ source: a.source, channel: a.channel, id: m.id, extended: m.extended, signal: sg.name }), name: sg.name, unit: sg.unit })),
+  }))), [assignments]);
+  const byId = useMemo(() => new Map<string, { a: (typeof assignments)[number]; m: (typeof assignments)[number]['dbc']['messages'][number] }>(assignments.flatMap((a) => a.dbc.messages.map((m) => [`${a.source}/${a.channel}:${m.extended ? 'x' : 's'}${m.id}`, { a, m }] as [string, { a: typeof a; m: typeof m }]))), [assignments]);
+  const chosen = useMemo(() => new Set(selection.map(signalId)), [selection]);
   const full = selection.length >= MAX_SIGNALS;
+  const toggle = (group: TreeGroup, signal: { id: string; name: string; unit?: string }, on: boolean) => {
+    if (!on) return onChange(selection.filter((k) => signalId(k) !== signal.id));
+    const hit = byId.get(group.id);
+    if (!hit) return;
+    onChange([...selection, { source: hit.a.source, channel: hit.a.channel, id: hit.m.id, extended: hit.m.extended, signal: signal.name, messageName: hit.m.name, unit: signal.unit ?? '' }]);
+  };
   return (
-    <div className="bw-plot-picker" role="group" aria-label="Choose signals to plot">
-      <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search messages and signals (e.g. EngineSpeed)" aria-label="Search signals" />
-      <p className="bw-fine">
-        {selection.length} of {MAX_SIGNALS} chosen. Each signal gets its own lane and scale, with the unit from the database.
-      </p>
-      <ul className="bw-plot-results">
-        {results.map((key) => {
-          const id = signalId(key);
-          const checked = chosen.has(id);
-          return (
-            <li key={id}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!checked && full}
-                  onChange={(e) => onChange(e.target.checked ? [...selection, key] : selection.filter((s) => signalId(s) !== id))}
-                />{' '}
-                <span className="bw-mono">CAN{key.channel}</span> · {key.messageName} · <strong>{key.signal}</strong>
-                {key.unit ? <span className="bw-muted"> [{key.unit}]</span> : null}
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-      {results.length === 0 && <p className="bw-empty">No signal matches “{search}”.</p>}
-      {more && <p className="bw-fine">Only the first {PICKER_LIMIT} are listed. Type more of the name to narrow the list.</p>}
+    <div className="bw-plot-picker">
+      <p className="bw-fine">{selection.length} of {MAX_SIGNALS} chosen. Each signal gets its own lane and scale, with the unit from the database.</p>
+      <SignalTree groups={groups} chosen={chosen} onToggle={toggle} canAdd={!full} label="Choose signals to plot" />
+      {groups.length === 0 && <p className="bw-fine">No database is linked yet. Open a device’s settings (the sliders icon in the explorer) and load a DBC for a channel.</p>}
       {full && <p className="bw-fine">The most that can be plotted at once is {MAX_SIGNALS}. Clear one to choose another.</p>}
     </div>
   );
@@ -105,6 +81,8 @@ function Swatch({ index }: { index: number }) {
     </svg>
   );
 }
+
+const sourceLabel = (k: SignalKey): string => `${k.source} · CAN${k.channel} · `;
 
 export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: string } = {}) {
   const hub = useHub();
@@ -129,7 +107,7 @@ export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: stri
   // Selections the loaded databases no longer define are dropped; the rest is remembered in this browser.
   // `assignments` is the trigger: a database that was removed or replaced may no longer define a chosen signal.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const valid = useMemo(() => selection.filter((k) => registry.message(k.channel, k.id, k.extended)?.signals.some((s) => s.name === k.signal)), [selection, registry, assignments]);
+  const valid = useMemo(() => selection.filter((k) => registry.message(k.source, k.channel, k.id, k.extended)?.signals.some((s) => s.name === k.signal)), [selection, registry, assignments]);
   const effective = valid.length === selection.length ? selection : valid;
   const change = (next: SignalKey[]) => {
     setSelection(next);
@@ -139,7 +117,7 @@ export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: stri
   // Read the samples that arrived since the last render. A paused plot reads nothing, so what is on screen stays put.
   const series: Series[] = useMemo(() => {
     const list = store.sync(effective);
-    if (!paused) store.update(trace, registry, assignments);
+    if (!paused) store.update(trace, registry, assignments, (row) => hub.sourceOf(row));
     return list;
     // trace.version is the trigger: it changes whenever rows arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -333,7 +311,7 @@ export function PlotPanel({ storageKey = PLOT_STORAGE_KEY }: { storageKey?: stri
                 return (
                   <tr key={signalId(s.key)} data-signal={s.key.signal}>
                     <th scope="row">
-                      <Swatch index={i} /> CAN{s.key.channel} · {s.key.messageName} · {s.key.signal}
+                      <Swatch index={i} /> {sourceLabel(s.key)}{s.key.messageName} · {s.key.signal}
                     </th>
                     <td className="bw-mono">{point ? `${formatValue(point.value)}${s.key.unit ? ` ${s.key.unit}` : ''}` : 'no data yet'}</td>
                     <td className="bw-mono">{point ? formatValue(Number(point.time.toFixed(6))) : ''}</td>

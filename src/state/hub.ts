@@ -252,6 +252,16 @@ export class DeviceHub {
     this.set({ traceView: view === 'all' || this.slot(view) ? view : 'all' });
   }
 
+  /**
+   * The source a trace row's frames belong to, for looking up databases: the device's label. Rows of a merged trace carry it;
+   * rows of one device's own trace do not, and belong to the device being shown.
+   */
+  sourceOf(row: { device?: string }): string {
+    if (row.device) return row.device;
+    const { slots, traceView } = this.state;
+    return (traceView !== 'all' ? this.slot(traceView)?.label : undefined) ?? slots[0]?.label ?? this.active.label;
+  }
+
   /** The buffer the Trace panel reads: with one device that device's own trace, otherwise the merged one or the chosen device's. */
   traceBuffer(): TraceBuffer {
     const { slots, traceView } = this.state;

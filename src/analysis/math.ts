@@ -16,7 +16,9 @@ export interface Recording {
   id: string;
   name: string;
   created: number;
-  source: 'scope' | 'import';
+  source: 'scope' | 'import' | 'log';
+  /** For a log of CAN frames: what it holds. Its signals are decoded from the frames when they are added to a plot. */
+  log?: { format: string; frames: number; channels: [number, number][] };
   /** Seconds covered by the recording. */
   duration: number;
   signals: Record<string, SignalData>;

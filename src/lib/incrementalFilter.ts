@@ -20,7 +20,7 @@ export class IncrementalFilter {
    * Buffer indexes of the matching rows, oldest first. `namesKey` changes whenever `names` would answer differently.
    * `end` (an absolute position) freezes the view at an earlier point, for a paused trace; rows after it are not looked at.
    */
-  update(trace: TraceBuffer, filter: TraceFilter, names: ((frame: CanFrame) => string) | undefined, namesKey: unknown, end?: number): number[] {
+  update(trace: TraceBuffer, filter: TraceFilter, names: ((frame: CanFrame, device?: string) => string) | undefined, namesKey: unknown, end?: number): number[] {
     const signature = `${filter.text.trim().toLowerCase()}\u0000${filter.channel ?? ''}\u0000${filter.direction ?? ''}`;
     const evicted = trace.evicted;
     if (this.generation !== trace.generation || this.signature !== signature || this.namesKey !== namesKey) {

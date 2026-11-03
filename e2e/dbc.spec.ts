@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { configureBothChannels, connected, maximizePanel, openDatabases, putExplorerAway, startCapture } from './helpers';
+import { configureBothChannels, connected, maximizePanel, closeDialog, openDeviceSettings, putExplorerAway, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 // The mock device sends id 0x7E8 on CAN1 with data [counter, 0xAA].
@@ -17,13 +17,14 @@ test('a database names messages and signals in the trace, is remembered, and can
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);
 
   // A file that is not a database is refused in plain words and nothing changes.
-  await openDatabases(page);
+  await openDeviceSettings(page);
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'bad.dbc', mimeType: 'text/plain', buffer: Buffer.from('this is not a database') });
   await expect(page.getByRole('alert').filter({ hasText: 'No messages found' })).toBeVisible();
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);
 
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
   await expect(page.getByTestId('db-row-1').getByText('car.dbc')).toBeVisible();
+  await closeDialog(page);
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toBeVisible();
   const expander = trace.getByRole('button', { name: 'Show the signals of Resp' }).first();
   await expect(expander).toBeVisible();
@@ -45,15 +46,18 @@ test('a database names messages and signals in the trace, is remembered, and can
   // Remembered across a reload, without uploading anything.
   await page.reload();
   await connected(page, device.url);
-  await openDatabases(page);
+  await openDeviceSettings(page);
   await expect(page.getByTestId('db-row-1').getByText('car.dbc')).toBeVisible();
+  await closeDialog(page);
   device.generate(1, 20, 0x7e8);
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+  await openDeviceSettings(page);
 
   // Removing the database keeps every frame and goes back to raw rows.
   await page.getByRole('button', { name: 'Remove the database from CAN1' }).click();
-  await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);
   await expect(page.getByTestId('dbc-input-1')).toBeAttached();
+  await closeDialog(page);
+  await expect(trace.getByRole('columnheader', { name: 'Name' })).toHaveCount(0);
   await device.close();
 });
 
@@ -64,8 +68,9 @@ test('on a phone the Name column stays and the table scrolls sideways inside its
   await configureBothChannels(page);
   await startCapture(page);
   device.generate(1, 20, 0x7e8);
-  await openDatabases(page);
+  await openDeviceSettings(page);
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
+  await closeDialog(page);
   await putExplorerAway(page);
   const trace = page.getByRole('table', { name: 'Captured frames' });
   await expect(trace.getByRole('columnheader', { name: 'Name' })).toBeVisible();

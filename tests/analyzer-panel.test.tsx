@@ -97,7 +97,9 @@ describe('Analyzer', () => {
     const { project, pid } = setup(false);
     expect(screen.getByText(/No signals yet/)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Signal' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Speed/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Add signals' });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Speed/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Add 1 signal/ }));
     expect(screen.getByRole('rowheader', { name: 'Speed' })).toBeVisible();
     fireEvent.contextMenu(screen.getByRole('rowheader', { name: 'Speed' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));

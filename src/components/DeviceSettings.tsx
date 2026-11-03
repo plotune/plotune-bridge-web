@@ -6,7 +6,16 @@ import { StoreProvider, useHub, useHubState } from '../state/context';
 import { parseRemoteTarget } from '../transport/remote';
 import { ChannelsBody } from './ChannelsPanel';
 import { DeviceBody } from './DevicePanel';
+import { ChannelDatabases } from './DatabaseMenu';
+import { useWorkspace } from '../state/context';
 import { LinkBody } from './DiagnosticsPanels';
+
+/** The databases of the device's channels, named after the device so two identical Bridges are told apart. */
+function Databases({ source }: { source: string }) {
+  const state = useWorkspace();
+  const channels = state.channels.length > 0 ? state.channels.map((c) => c.channel) : [1, 2];
+  return <ChannelDatabases source={source} channels={channels} />;
+}
 
 /** The link settings follow the selected device, so the dialog selects the device it was opened for. */
 function Link() {
@@ -39,6 +48,10 @@ export function DeviceSettings({ deviceId, onClose }: { deviceId: string; onClos
             <section className="bw-settings-section" aria-label="Channels">
               <h3>Channels</h3>
               <ChannelsBody />
+            </section>
+            <section className="bw-settings-section" aria-label="Databases">
+              <h3>Databases</h3>
+              <Databases source={found.label} />
             </section>
             <section className="bw-settings-section" aria-label="Device">
               <h3>Device</h3>

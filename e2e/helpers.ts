@@ -26,12 +26,6 @@ export async function explorer(page: Page) {
   return side;
 }
 
-/** Opens the Databases section of the explorer, where a DBC is loaded for each channel. */
-export async function openDatabases(page: Page): Promise<void> {
-  const toggle = (await explorer(page)).getByRole('button', { name: /^Databases/ });
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-}
-
 /** On a phone the explorer floats over the canvas; this puts it away again. Wide screens keep it beside the canvas. */
 export async function putExplorerAway(page: Page): Promise<void> {
   const side = page.getByRole('complementary', { name: 'Explorer' });

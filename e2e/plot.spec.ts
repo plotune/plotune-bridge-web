@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { configureBothChannels, connected, openDatabases, putExplorerAway, showPanel, startCapture } from './helpers';
+import { configureBothChannels, connected, closeDialog, openDeviceSettings, putExplorerAway, showPanel, startCapture } from './helpers';
 import { MockDeviceServer } from './mockServer';
 
 // The mock device sends id 0x7E8 on CAN1 with data [counter, 0xAA] and 0x123 on CAN2.
@@ -11,9 +11,10 @@ async function openPlot(page: Page, device: MockDeviceServer) {
   await configureBothChannels(page);
   await startCapture(page);
   await expect(page.getByTestId('plot-canvas')).toHaveCount(0); // no database yet: the Scope has nothing to draw
-  await openDatabases(page);
+  await openDeviceSettings(page);
   await page.getByTestId('dbc-input-1').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
   await page.getByTestId('dbc-input-2').setInputFiles({ name: 'car.dbc', mimeType: 'text/plain', buffer: Buffer.from(DBC) });
+  await closeDialog(page);
   await putExplorerAway(page);
   // The Scope gets the whole workspace (a phone shows one panel at a time anyway), so its plot is in view and has room.
   const phone = await page.getByRole('navigation', { name: 'Panels on this canvas' }).isVisible();

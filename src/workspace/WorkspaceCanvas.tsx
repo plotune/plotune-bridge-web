@@ -199,15 +199,21 @@ export function CanvasTabs() {
             className={c.id === project.active ? 'active' : ''}
             aria-current={c.id === project.active ? 'page' : undefined}
             title={`${c.name} (double-click to rename)`}
+            aria-keyshortcuts="Delete"
             onClick={() => store.setActive(c.id)}
             onDoubleClick={() => setRenaming(c.id)}
             onContextMenu={(e) => { e.preventDefault(); open(e.clientX, e.clientY, c.id); }}
             onKeyDown={(e) => {
               if (e.key === 'F2') { e.preventDefault(); setRenaming(c.id); }
+              if (e.key === 'Delete') { e.preventDefault(); del(c.id); }
               if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); open(r.left, r.bottom, c.id); }
             }}
           >
             {c.name}
+            {/* A pointer shortcut: the keyboard deletes with Delete or from the menu, so this is not a second tab stop. */}
+            {project.canvases.length > 1 && (
+              <span className="bw-seg-close" aria-hidden="true" title={`Delete ${c.name}`} onClick={(e) => { e.stopPropagation(); del(c.id); }}>×</span>
+            )}
           </button>
         ))}
       </nav>

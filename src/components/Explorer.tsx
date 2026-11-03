@@ -1,7 +1,7 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import { useCloud } from '../cloud/context';
+import { useDbcRegistry } from '../dbc/context';
 import { useAnalysis, useRecordings } from '../analysis/context';
-import { useDbcAssignments } from '../dbc/context';
 import { useHub, useHubState } from '../state/context';
 import type { Slot } from '../state/hub';
 import { MAX_DEVICES } from '../state/hub';
@@ -9,29 +9,11 @@ import { parseRemoteTarget } from '../transport/remote';
 import { ProjectMenu } from '../workspace/ProjectMenu';
 import { useOpenSettings } from '../workspace/context';
 import { useSheet } from '../workspace/WorkspaceCanvas';
-import { DatabaseRows } from './DatabaseMenu';
 import { formatBitrate } from './ChannelsPanel';
-import { IconAnalyze, IconChevron, IconChevronRight, IconClose, IconPlus, IconPower, IconSettings } from './icons';
+import { IconAnalyze, IconChevron, IconChevronRight, IconClose, IconPlus, IconPower, IconSettings, IconUpload } from './icons';
 
 function phaseText(phase: string): string {
   return phase === 'connected' ? 'Connected' : phase === 'connecting' ? 'Connecting…' : phase === 'closed' ? 'Disconnected' : 'Not connected';
-}
-
-function Section({ title, count, action, children, open: initial = true }: { title: string; count?: string; action?: ReactNode; children: ReactNode; open?: boolean }) {
-  const [open, setOpen] = useState(initial);
-  return (
-    <div className="bw-ex-section" role="group" aria-label={title}>
-      <div className="bw-ex-head">
-        <button type="button" className="bw-ex-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? <IconChevron /> : <IconChevronRight />}
-          <span>{title}</span>
-          {count && <small>{count}</small>}
-        </button>
-        {action}
-      </div>
-      {open && <div className="bw-ex-body">{children}</div>}
-    </div>
-  );
 }
 
 /** One device. Its tools (settings, connect or disconnect, remove) are icons that show on hover, or always on a touch screen. */
@@ -39,6 +21,7 @@ function DeviceNode({ slot, active, several, away }: { slot: Slot; active: boole
   const hub = useHub();
   const cloud = useCloud();
   const openSettings = useOpenSettings();
+  const registry = useDbcRegistry();
   const { queueSettledFor } = useHubState();
   const state = slot.store.getState();
   // A remote device is named by the cloud, never by its remote:<project>/<device> address.
@@ -71,7 +54,7 @@ function DeviceNode({ slot, active, several, away }: { slot: Slot; active: boole
               <IconPower />
             </button>
           )}
-          <button type="button" className="bw-icon-button" onClick={() => hub.removeDevice(slot.id)} aria-label={`Remove ${slot.label}`} title="Remove this device">
+          <button type="button" className="bw-icon-button" onClick={() => { registry.removeSource(slot.label); hub.removeDevice(slot.id); }} aria-label={`Remove ${slot.label}`} title="Remove this device">
             <IconClose />
           </button>
         </span>
@@ -97,21 +80,49 @@ function DeviceNode({ slot, active, several, away }: { slot: Slot; active: boole
   );
 }
 
-function RecordingsList() {
+/** Data to analyse is a source like a device: a file is opened here, and a log has settings (which database each channel uses). */
+function RecordingsSection() {
   const recordings = useRecordings();
-  const { open } = useAnalysis();
-  if (recordings.length === 0) return <p className="bw-ex-empty">Windows you send from the Scope, and imported CSV files, appear here.</p>;
+  const { open, pickFile, logSettings, store } = useAnalysis();
+  const [openList, setOpenList] = useState(true);
   return (
-    <ul className="bw-ex-list">
-      {recordings.map((r) => (
-        <li key={r.id}>
-          <span title={r.name}>{r.name}<small>{r.duration.toFixed(1)} s</small></span>
-          <button type="button" className="bw-icon-button" onClick={() => open(r)} aria-label={`Open ${r.name} in an Analyzer`} title="Open in an Analyzer">
-            <IconAnalyze />
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="bw-ex-section" role="group" aria-label="Recordings">
+      <div className="bw-ex-head">
+        <button type="button" className="bw-ex-toggle" aria-expanded={openList} onClick={() => setOpenList(!openList)}>
+          {openList ? <IconChevron /> : <IconChevronRight />}
+          <span>Recordings</span>
+          {recordings.length > 0 && <small>{recordings.length}</small>}
+        </button>
+        <button type="button" className="bw-icon-button" onClick={pickFile} aria-label="Open a file" title="Open a file to analyse (CSV, ASC, BLF, candump)">
+          <IconUpload />
+        </button>
+      </div>
+      {openList && (
+        <div className="bw-ex-body">
+          {recordings.length === 0 ? (
+            <p className="bw-ex-empty">Open a log or CSV file, or send a window from the Scope.</p>
+          ) : (
+            <ul className="bw-ex-list">
+              {recordings.map((r) => (
+                <li key={r.id}>
+                  <span title={r.name}>{r.name}<small>{r.duration.toFixed(1)} s</small></span>
+                  <span className="bw-device-tools">
+                    {store.logs.has(r.id) && (
+                      <button type="button" className="bw-icon-button" onClick={() => logSettings(r.id)} aria-label={`Settings for ${r.name}`} title="Channels and databases of this log">
+                        <IconSettings />
+                      </button>
+                    )}
+                    <button type="button" className="bw-icon-button" onClick={() => open(r)} aria-label={`Open ${r.name} in an Analyzer`} title="Open in an Analyzer">
+                      <IconAnalyze />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -124,12 +135,10 @@ export function Explorer({ onAway }: { onAway: () => void }) {
   const sheet = useSheet();
   const away = () => { if (sheet) onAway(); };
   const { slots, activeId } = useHubState();
-  const assigned = useDbcAssignments();
   const connected = slots.filter((s) => s.store.getState().phase === 'connected').length;
   const add = useRef<HTMLButtonElement>(null);
   return (
     <aside className="bw-explorer" aria-label="Explorer">
-      <div className="bw-explorer-top"><ProjectMenu /></div>
       <div className="bw-explorer-scroll">
         <section className="bw-ex-section" aria-label="Devices">
           <div className="bw-ex-head">
@@ -146,13 +155,9 @@ export function Explorer({ onAway }: { onAway: () => void }) {
             </ul>
           )}
         </section>
-        <Section title="Databases" count={assigned.length > 0 ? String(assigned.length) : undefined} open={assigned.length > 0}>
-          <DatabaseRows />
-        </Section>
-        <Section title="Recordings" open={false}>
-          <RecordingsList />
-        </Section>
+        <RecordingsSection />
       </div>
+      <div className="bw-explorer-foot"><ProjectMenu /></div>
     </aside>
   );
 }

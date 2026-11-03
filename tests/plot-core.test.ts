@@ -17,11 +17,11 @@ BO_ 200 Big: 2 X
  SG_ Motor : 7|16@0+ (1,0) [0|65535] "" Y
 `;
 
-const key = (over: Partial<SignalKey> = {}): SignalKey => ({ channel: 1, id: 2024, extended: false, signal: 'Counter', messageName: 'Resp', unit: '', ...over });
+const key = (over: Partial<SignalKey> = {}): SignalKey => ({ source: 'Bridge 1', channel: 1, id: 2024, extended: false, signal: 'Counter', messageName: 'Resp', unit: '', ...over });
 const frame = (i: number, over: Partial<CanFrame> = {}): CanFrame => ({ channel: 1, id: 2024, extended: false, rtr: false, dlc: 2, data: Uint8Array.of(i & 255, 100), timestampNs: 1_000_000_000n + BigInt(i) * 10_000_000n, direction: 'rx', ...over });
 function setup() {
   const registry = new DbcRegistry();
-  registry.assign(1, 'a.dbc', DBC);
+  registry.assign('Bridge 1', 1, 'a.dbc', DBC);
   return { registry, trace: new TraceBuffer(200_000), store: new SeriesStore(1000) };
 }
 
@@ -31,7 +31,7 @@ describe('decodeSelected', () => {
     let seed = 7;
     const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) & 255;
     for (const id of [2024, 100, 200]) {
-      const message = registry.message(1, id, false)!;
+      const message = registry.message('Bridge 1', 1, id, false)!;
       for (let n = 0; n < 200; n += 1) {
         const data = Uint8Array.from({ length: 2 }, rnd);
         const names = new Set(message.signals.filter((_, i) => (n + i) % 2 === 0).map((s) => s.name));
@@ -61,12 +61,12 @@ describe('SeriesStore', () => {
     const { registry, trace, store } = setup();
     const [counter, level] = store.sync([key(), key({ signal: 'Level', unit: 'degC' })]);
     for (let i = 0; i < 5; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect(counter.length).toBe(5);
     expect([counter.timeAt(0), counter.timeAt(4), counter.valueAt(3)]).toEqual([0, 0.04, 3]);
     expect(level.valueAt(0)).toBe(100 * 0.5 - 10); // factor and offset from the database
     for (let i = 5; i < 8; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect(counter.length).toBe(8); // no duplicates
   });
 
@@ -78,7 +78,7 @@ describe('SeriesStore', () => {
     trace.push({ kind: 'frame', frame: frame(3, { rtr: true }) });
     trace.push({ kind: 'drop', channel: 1, count: 4 });
     trace.push({ kind: 'frame', frame: frame(4) });
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect(counter.length).toBe(1);
     expect(counter.valueAt(0)).toBe(4);
   });
@@ -88,7 +88,7 @@ describe('SeriesStore', () => {
     const [a, b] = store.sync([key({ id: 100, signal: 'A' }), key({ id: 100, signal: 'B' })]);
     trace.push({ kind: 'frame', frame: frame(0, { id: 100, data: Uint8Array.of(0, 7) }) });
     trace.push({ kind: 'frame', frame: frame(1, { id: 100, data: Uint8Array.of(1, 7) }) });
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect([a.length, a.valueAt(0), b.length, b.valueAt(0)]).toEqual([1, 7, 1, 14]);
   });
 
@@ -98,7 +98,7 @@ describe('SeriesStore', () => {
     const [counter] = store.sync([key()]);
     for (let i = 0; i < 300; i += 1) {
       trace.push({ kind: 'frame', frame: frame(i) });
-      if (i % 50 === 49) store.update(trace, registry, 'db');
+      if (i % 50 === 49) store.update(trace, registry, 'db', () => 'Bridge 1');
     }
     expect(trace.evicted).toBeGreaterThan(0);
     // Samples already read stay although the trace dropped those rows; rows evicted before a read are counted, never silent.
@@ -106,13 +106,13 @@ describe('SeriesStore', () => {
     expect(store.missed).toBeGreaterThan(0);
     store.sync([key()]);
     trace.clear();
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect(counter.length).toBe(0);
     expect(store.missed).toBe(0);
     for (let i = 0; i < 20; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     const [again, level] = store.sync([key(), key({ signal: 'Level' })]);
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect([again.length, level.length]).toEqual([20, 20]); // both complete, nothing duplicated
   });
 
@@ -122,7 +122,7 @@ describe('SeriesStore', () => {
     const [counter] = store.sync([key()]);
     for (let i = 0; i < 400; i += 1) {
       trace.push({ kind: 'frame', frame: frame(i) });
-      if (i % 20 === 19) store.update(trace, registry, 'db');
+      if (i % 20 === 19) store.update(trace, registry, 'db', () => 'Bridge 1');
     }
     expect(trace.evicted).toBeGreaterThan(0);
     expect([counter.length, store.missed]).toEqual([400, 0]);
@@ -134,9 +134,9 @@ describe('SeriesStore', () => {
     for (let i = 0; i < 10; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
     const end = trace.evicted + trace.length;
     for (let i = 10; i < 25; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
-    store.update(trace, registry, 'db', end);
+    store.update(trace, registry, 'db', () => 'Bridge 1', end);
     expect(counter.length).toBe(10);
-    store.update(trace, registry, 'db');
+    store.update(trace, registry, 'db', () => 'Bridge 1');
     expect(counter.length).toBe(25);
   });
 
@@ -144,8 +144,8 @@ describe('SeriesStore', () => {
     const { registry, trace, store } = setup();
     const [counter] = store.sync([key()]);
     for (let i = 0; i < 5; i += 1) trace.push({ kind: 'frame', frame: frame(i) });
-    store.update(trace, registry, 'db-1');
-    store.update(trace, registry, 'db-2');
+    store.update(trace, registry, 'db-1', () => 'Bridge 1');
+    store.update(trace, registry, 'db-2', () => 'Bridge 1');
     expect(counter.length).toBe(5);
   });
 });
