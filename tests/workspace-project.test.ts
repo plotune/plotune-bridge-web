@@ -150,3 +150,18 @@ describe('import and export', () => {
     expect(p.canvases[0]!.name).toBe('x');
   });
 });
+
+describe('adding panels', () => {
+  it('gives a panel with little to show less room than a table or a plot', () => {
+    const s = new ProjectStore(() => memory());
+    s.addPanel('trace');
+    s.addPanel('stats');
+    s.addPanel('plot');
+    const root = s.getState().project.canvases[0]!.root as { kind: string; sizes: number[]; children: { kind: string }[] };
+    expect(root.kind).toBe('split');
+    const find = (n: { kind: string; sizes?: number[]; children?: unknown[] }): number[][] => (n.kind === 'split' ? [n.sizes!, ...(n.children as { kind: string }[]).flatMap(find)] : []);
+    const all = find(root);
+    // trace (3) beside stats (1): stats gets a quarter.
+    expect(all.some((sz) => Math.abs(Math.min(...sz) - 0.25) < 0.01)).toBe(true);
+  });
+});

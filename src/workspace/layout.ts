@@ -98,16 +98,17 @@ export function removePanel(node: LayoutNode | null, panelId: string): LayoutNod
 }
 
 /** Puts a panel into a group (centre) or beside it (an edge, which splits the group). */
-export function insertPanel(node: LayoutNode | null, groupId: string, zone: DropZone, panelId: string): LayoutNode | null {
+export function insertPanel(node: LayoutNode | null, groupId: string, zone: DropZone, panelId: string, share = 0.5): LayoutNode | null {
   if (!node) return group([panelId]);
   if (node.kind === 'group') {
     if (node.id !== groupId) return node;
     if (zone === 'center') return { ...node, tabs: [...node.tabs, panelId], active: panelId };
     const added = group([panelId]);
     const first = zone === 'left' || zone === 'top';
-    return split(zone === 'left' || zone === 'right' ? 'row' : 'col', first ? [added, node] : [node, added], [0.5, 0.5]);
+    const s = Math.min(0.8, Math.max(0.2, share));
+    return split(zone === 'left' || zone === 'right' ? 'row' : 'col', first ? [added, node] : [node, added], first ? [s, 1 - s] : [1 - s, s]);
   }
-  return { ...node, children: node.children.map((c) => insertPanel(c, groupId, zone, panelId) as LayoutNode) };
+  return { ...node, children: node.children.map((c) => insertPanel(c, groupId, zone, panelId, share) as LayoutNode) };
 }
 
 /**
