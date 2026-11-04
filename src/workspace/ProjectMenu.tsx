@@ -48,7 +48,7 @@ function ExportImport({ onClose }: { onClose: () => void }) {
   const [json, setJson] = useState('');
   useEffect(() => {
     let current = true;
-    void exportWorkspace(store, registry).then((value) => { if (current) setJson(value); }, () => { if (current) setError('Workspace references could not be prepared. Try again.'); });
+    void exportWorkspace(store, registry).then((value) => { if (current) setJson(value); }, () => { if (current) { setJson(''); setError('Workspace references could not be prepared. Keep at most 64 database references, then try again.'); } });
     return () => { current = false; };
   }, [store, registry, project, assignments]);
   const doImport = (raw: string) => {

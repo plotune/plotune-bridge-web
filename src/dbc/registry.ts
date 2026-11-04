@@ -42,11 +42,49 @@ export const LEGACY_SOURCE = 'Bridge 1';
 export class DbcRegistry {
   private items: DbcAssignment[] = [];
   private raw = new Map<string, { source: string; channel: number; fileName: string; text: string }>();
+  private visible: DbcAssignment[] = [];
+  private expected: readonly DatabaseReference[] = [];
+  private validated = new Map<string, unknown>();
+  private referenceGeneration = 0;
+
+  /** Reject first; asynchronous hashing may only re-enable a binding from this exact generation. */
+  async applyReferences(refs: readonly DatabaseReference[]): Promise<void> {
+    this.expected = refs;
+    const generation = ++this.referenceGeneration;
+    this.validated.clear();
+    this.refresh();
+    await Promise.all(refs.map(async (ref) => {
+      const key = DbcRegistry.key(ref.source, ref.channel);
+      const file = this.raw.get(key);
+      if (!file || file.fileName !== ref.fileName) return;
+      try {
+        const hash = await fingerprint(file.text);
+        if (generation !== this.referenceGeneration || this.raw.get(key) !== file || hash !== ref.sha256) return;
+        this.validated.set(key, file);
+      } catch { /* unavailable crypto leaves the reference unresolved */ }
+    }));
+    if (generation === this.referenceGeneration) this.refresh();
+  }
+
+  recheckReferences(): Promise<void> { return this.applyReferences(this.expected); }
+
+  private allowed(source: string, channel: number): boolean {
+    const bound = this.expected.some((r) => r.source === source && r.channel === channel);
+    const key = DbcRegistry.key(source, channel);
+    return !bound || this.validated.get(key) === this.raw.get(key) && this.raw.has(key);
+  }
+
+  private refresh(): void {
+    this.visible = this.items.filter((a) => this.allowed(a.source, a.channel));
+    this.listeners.forEach((listener) => listener());
+  }
+
   private readonly searchCache = new WeakMap<DbcMessage, string>();
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly storage: DbcStorage | null = null) {
     this.restore();
+    this.refresh();
   }
 
   async references(): Promise<DatabaseReference[]> {
@@ -54,7 +92,7 @@ export class DbcRegistry {
     return Promise.all(files.map(async (f) => ({ source: f.source, channel: f.channel, fileName: f.fileName, sha256: await fingerprint(f.text) })));
   }
 
-  getSnapshot = (): readonly DbcAssignment[] => this.items;
+  getSnapshot = (): readonly DbcAssignment[] => this.visible;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -62,12 +100,12 @@ export class DbcRegistry {
   };
 
   for(source: string, channel: number): DbcAssignment | undefined {
-    return this.items.find((a) => a.channel === channel && a.source === source);
+    return this.visible.find((a) => a.channel === channel && a.source === source);
   }
 
   /** Every assignment of one source. */
   of(source: string): DbcAssignment[] {
-    return this.items.filter((a) => a.source === source);
+    return this.visible.filter((a) => a.source === source);
   }
 
   private static key(source: string, channel: number): string {
@@ -140,7 +178,8 @@ export class DbcRegistry {
 
   private changed(): void {
     this.persist();
-    this.listeners.forEach((listener) => listener());
+    if (this.expected.length) void this.recheckReferences();
+    else this.refresh();
   }
 
   private persist(): void {

@@ -50,3 +50,37 @@ describe('BWEB-010 r2 portable local workspace references', () => {
     expect(importWorkspace(store, before).ok).toBe(true);
   });
 });
+
+describe('PR71 review regressions', () => {
+  it('blocks mismatched decoding immediately, restores matching bindings and keeps unrelated channels usable', async () => {
+    const registry = new DbcRegistry();
+    registry.assign('Bridge 1', 1, 'bench.dbc', dbc);
+    registry.assign('Bridge 1', 2, 'other.dbc', dbc);
+    const [ref] = await registry.references();
+    registry.assign('Bridge 1', 1, 'bench.dbc', dbc.replace('(1,0)', '(5,0)'));
+    const checking = registry.applyReferences([ref!]);
+    expect(registry.decode('Bridge 1', 1, 100, false, Uint8Array.of(2))).toBeUndefined();
+    expect(registry.for('Bridge 1', 2)).toBeDefined();
+    await checking;
+    expect(registry.getSnapshot().some((a) => a.channel === 1)).toBe(false);
+    await relinkDatabase(registry, ref!, 'bench.dbc', dbc);
+    expect(registry.decode('Bridge 1', 1, 100, false, Uint8Array.of(2))?.signals[0]?.value).toBe(2);
+    await registry.applyReferences([]);
+    expect(registry.for('Bridge 1', 1)).toBeDefined();
+  });
+  it('normalizes selected names like the ordinary database picker', async () => {
+    const registry = new DbcRegistry();
+    const long = 'x'.repeat(105) + '.dbc';
+    registry.assign('Bridge 1', 1, long, dbc);
+    const [ref] = await registry.references();
+    expect((await relinkDatabase(new DbcRegistry(), ref!, long, dbc)).ok).toBe(true);
+  });
+  it('refuses an export whose merged reference list exceeds its own import limit', async () => {
+    const store = new ProjectStore(() => null);
+    const refs = Array.from({ length: 64 }, (_, i) => ({ source: 'Bridge 1', channel: i + 1, fileName: 'x.dbc', sha256: 'a'.repeat(64) }));
+    importWorkspace(store, JSON.stringify({ ...JSON.parse(store.exportJson()), databaseReferences: refs }));
+    const local = new DbcRegistry();
+    local.assign('Bridge 2', 1, 'new.dbc', dbc);
+    await expect(exportWorkspace(store, local)).rejects.toThrow(/64/);
+  });
+});

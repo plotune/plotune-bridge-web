@@ -104,8 +104,11 @@ No DBC text is included. Missing references survive export without a locally loa
 file. Imports validate the full reference list before changing the workspace.
 
 Export/import offers a local file picker for each imported reference. The file name
-and fingerprint must match before the database is assigned; ordinary panels remain
-usable and the browser keeps its existing local DBC persistence. Nothing is uploaded.
+and fingerprint must match before the database is assigned. An imported reference
+immediately suspends an existing mismatched decoder until the correct local file is
+selected; unrelated channels remain usable. Switching workspaces rechecks the active
+references without deleting local files. Nothing is uploaded. Export refuses more
+than 64 merged references rather than producing a file that cannot be imported.
 Legacy v2 workspaces without references remain readable. This slice retains the current
 source-label keys: device-UUID migration and project API synchronization are unfinished
 parts of #49/#50, not proven by this local reference workflow.

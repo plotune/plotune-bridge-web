@@ -17,6 +17,8 @@ test('BWEB-010 r2: another browser requests matching local files without transfe
 
   const context = await browser.newContext();
   try {
+    // A pre-existing local file must not silently satisfy an imported fingerprint.
+    await context.addInitScript((text) => localStorage.setItem('bw.dbc', JSON.stringify({ version: 2, files: [{ source: 'Bridge 1', channel: 1, fileName: 'bench.dbc', text }] })), dbc.replace('(1,0)', '(5,0)'));
     const other = await context.newPage();
     const uploads: string[] = [];
     other.on('request', (r) => { if (r.method() !== 'GET') uploads.push(r.url()); });
