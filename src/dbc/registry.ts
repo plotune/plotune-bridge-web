@@ -1,3 +1,4 @@
+import { fingerprint, type DatabaseReference } from './references';
 import { decodeMessage, indexMessages } from './decode';
 import { MAX_DBC_BYTES, parseDbc } from './parse';
 import { DbcError, type Dbc, type DbcMessage, type DecodedSignal } from './types';
@@ -46,6 +47,11 @@ export class DbcRegistry {
 
   constructor(private readonly storage: DbcStorage | null = null) {
     this.restore();
+  }
+
+  async references(): Promise<DatabaseReference[]> {
+    const files = [...this.raw.values()].filter((f) => !f.source.startsWith('log:'));
+    return Promise.all(files.map(async (f) => ({ source: f.source, channel: f.channel, fileName: f.fileName, sha256: await fingerprint(f.text) })));
   }
 
   getSnapshot = (): readonly DbcAssignment[] => this.items;

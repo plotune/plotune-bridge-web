@@ -1,3 +1,4 @@
+import { parseReferences, type DatabaseReference } from '../dbc/references';
 // A saved workspace (called a Project in the code): named canvases, each a dock layout of panels, and the panels' settings. It is
 // browser-owned convenience state: it never holds device addresses, tokens or captured data. It is not the Plotune account project
 // that devices are paired to; saving a workspace into that project is the V2.5 step (see docs/workspace-v2.md).
@@ -34,6 +35,7 @@ export interface Canvas {
   root: LayoutNode | null;
 }
 export interface Project {
+  databaseReferences?: DatabaseReference[];
   version: typeof PROJECT_VERSION;
   id: string;
   name: string;
@@ -105,6 +107,8 @@ function parsePanel(v: unknown): PanelInstance | null {
 /** Reads a project from storage or an imported file. Returns null when the file is not a project at all. */
 export function parseProject(input: unknown): Project | null {
   if (!record(input) || input.version !== PROJECT_VERSION || !Array.isArray(input.canvases) || !record(input.panels)) return null;
+  const references = input.databaseReferences === undefined ? undefined : parseReferences(input.databaseReferences);
+  if (references === null) return null;
   const panels: Record<string, PanelInstance> = {};
   for (const [pid, raw] of Object.entries(input.panels)) {
     if (!idLike(pid) || Object.keys(panels).length >= MAX_PANELS) continue;
@@ -127,7 +131,7 @@ export function parseProject(input: unknown): Project | null {
   if (canvases.length === 0) return null;
   for (const pid of Object.keys(panels)) if (!used.has(pid)) delete panels[pid];
   const active = typeof input.active === 'string' && ids.has(input.active) ? input.active : canvases[0]!.id;
-  return { version: PROJECT_VERSION, id: idLike(input.id) ? input.id : newId('pr'), name: cleanName(input.name, 'Imported project'), active, canvases, panels };
+  return { version: PROJECT_VERSION, id: idLike(input.id) ? input.id : newId('pr'), name: cleanName(input.name, 'Imported project'), active, canvases, panels, ...(references ? { databaseReferences: references } : {}) };
 }
 
 export interface ProjectState {
@@ -216,7 +220,7 @@ export class ProjectStore {
     for (const [id, p] of Object.entries(this.project.panels)) { const nid = newId('p'); rename.set(id, nid); panels[nid] = structuredClone(p); }
     const canvases = this.project.canvases.map((c) => ({ id: newId('c'), name: c.name, root: remap(c.root, (p) => rename.get(p) ?? p) }));
     const active = canvases[this.project.canvases.findIndex((c) => c.id === this.project.active)]?.id ?? canvases[0]!.id;
-    this.commit({ version: PROJECT_VERSION, id: newId('pr'), name: cleanName(name, `${this.project.name} copy`), active, canvases, panels }, true, { deleted: null });
+    this.commit({ ...this.project, version: PROJECT_VERSION, id: newId('pr'), name: cleanName(name, `${this.project.name} copy`), active, canvases, panels }, true, { deleted: null });
   }
   deleteProject(id: string): void {
     if (id === this.project.id) return;
