@@ -1,10 +1,21 @@
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
+import { useDbcRegistry } from '../dbc/context';
+import { createContext, useContext, useLayoutEffect, useSyncExternalStore, type ReactNode } from 'react';
 import type { Canvas } from './project';
 import type { ProjectState, ProjectStore } from './project';
 
 const Ctx = createContext<ProjectStore | null>(null);
 
 export function ProjectProvider({ store, children }: { store: ProjectStore; children: ReactNode }) {
+  const registry = useDbcRegistry();
+  useLayoutEffect(() => {
+    let references = store.getState().project.databaseReferences;
+    void registry.applyReferences(references ?? []);
+    const unsubscribe = store.subscribe(() => {
+      const next = store.getState().project.databaseReferences;
+      if (next !== references) { references = next; void registry.applyReferences(next ?? []); }
+    });
+    return () => { unsubscribe(); void registry.applyReferences([]); };
+  }, [store, registry]);
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
 export function useProjectStore(): ProjectStore {

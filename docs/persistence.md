@@ -93,3 +93,22 @@ No change to contract v0.1.0, transport protocol, WebRTC, device firmware or bac
 ## Saved workspaces (canvases and panels)
 
 `bw.projects` (version 2) holds the saved workspaces: named canvases, each a dock layout of panels, and the panels' settings. It is separate from `bw.workspace` and never holds a device address, a token or captured data. It is written by the first change, not by opening the page, and validated on read and on import (see `docs/workspace-v2.md`). `bw.plot` and `bw.plot.<panel id>` keep each Scope's chosen signals.
+
+## Portable database references (V2.5 delivery slice)
+
+Workspace export/import accepts optional `databaseReferences` in the existing v2
+workspace JSON: `{ source, channel, fileName, sha256 }` entries, at most 64 with
+unique source/channel pairs. The SHA-256 fingerprint covers UTF-8 encoding of the
+locally decoded DBC text (including its whitespace), not the original file's encoding.
+No DBC text is included. Missing references survive export without a locally loaded
+file. Imports validate the full reference list before changing the workspace.
+
+Export/import offers a local file picker for each imported reference. The file name
+and fingerprint must match before the database is assigned. An imported reference
+immediately suspends an existing mismatched decoder until the correct local file is
+selected; unrelated channels remain usable. Switching workspaces rechecks the active
+references without deleting local files. Nothing is uploaded. Export refuses more
+than 64 merged references rather than producing a file that cannot be imported.
+Legacy v2 workspaces without references remain readable. This slice retains the current
+source-label keys: device-UUID migration and project API synchronization are unfinished
+parts of #49/#50, not proven by this local reference workflow.

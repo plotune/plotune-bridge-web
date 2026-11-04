@@ -1,4 +1,7 @@
-import { useRef, useState } from 'react';
+import { useDbcAssignments, useDbcRegistry } from '../dbc/context';
+import { readDbcFile } from '../dbc/readFile';
+import { exportWorkspace, importWorkspace, relinkDatabase } from './references';
+import { useEffect, useRef, useState } from 'react';
 import { useProject, useProjectStore } from './context';
 import { IconMore } from '../components/icons';
 import { Modal, NameDialog, useContextMenu, useToast } from './ui';
@@ -39,18 +42,42 @@ function ExportImport({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const file = useRef<HTMLInputElement>(null);
-  const json = store.exportJson();
+  const registry = useDbcRegistry();
+  const assignments = useDbcAssignments();
+  const { project } = useProject();
+  const [json, setJson] = useState('');
+  useEffect(() => {
+    let current = true;
+    void exportWorkspace(store, registry).then((value) => { if (current) setJson(value); }, () => { if (current) { setJson(''); setError('Workspace references could not be prepared. Keep at most 64 database references, then try again.'); } });
+    return () => { current = false; };
+  }, [store, registry, project, assignments]);
   const doImport = (raw: string) => {
-    const r = store.importJson(raw);
-    if (r.ok) { toast.show(`Imported “${r.name}”`); onClose(); } else setError(r.reason);
+    const r = importWorkspace(store, raw);
+    if (r.ok) { toast.show(`Imported “${r.name}”`); setText(''); setError(''); if (!store.getState().project.databaseReferences?.length) onClose(); } else setError(r.reason);
   };
   return (
     <Modal title="Export or import" onClose={onClose} wide footer={<button type="button" className="bw-button" onClick={onClose}>Close</button>}>
+      <h3>Local database files</h3>
+      <p className="bw-fine">Workspace files contain database names, fingerprints and channel links, never the database contents. Choose the matching local files after import. Other panels remain available.</p>
+      {(project.databaseReferences ?? []).map((ref) => (
+        <label className="bw-field" key={`${ref.source}:${ref.channel}`}>
+          <span>{ref.source} · CAN{ref.channel}: {ref.fileName}</span>
+          <input type="file" accept=".dbc" aria-label={`Relink ${ref.fileName} for ${ref.source} CAN${ref.channel}`} onChange={(e) => {
+            const chosen = e.target.files?.[0]; e.target.value = '';
+            if (!chosen) return;
+            void readDbcFile(chosen).then(async (read) => {
+              const result = read.ok ? await relinkDatabase(registry, ref, chosen.name, read.text) : read;
+              if (!result.ok) setError(result.message);
+              else { setError(''); toast.show(`Linked ${ref.fileName}`); }
+            }).catch(() => setError('The file could not be linked. Choose the matching local file again.'));
+          }} />
+        </label>
+      ))}
       <h3>Export this workspace</h3>
       <textarea className="bw-json" readOnly rows={6} aria-label="Workspace file contents" value={json} />
       <div className="bw-actions">
-        <button type="button" className="bw-button" onClick={() => { void navigator.clipboard?.writeText(json).then(() => toast.show('Copied'), () => toast.show('Select the text and copy it')); }}>Copy</button>
-        <a className="bw-button" href={`data:application/json;charset=utf-8,${encodeURIComponent(json)}`} download={`${store.getState().project.name.replace(/[^\w.-]+/g, '-')}.bridge-workspace.json`}>Download</a>
+        <button type="button" className="bw-button" disabled={!json} onClick={() => { void navigator.clipboard?.writeText(json).then(() => toast.show('Copied'), () => toast.show('Select the text and copy it')); }}>Copy</button>
+        <a className="bw-button" aria-disabled={!json} href={json ? `data:application/json;charset=utf-8,${encodeURIComponent(json)}` : undefined} download={`${store.getState().project.name.replace(/[^\w.-]+/g, '-')}.bridge-workspace.json`}>Download</a>
       </div>
       <h3>Import a workspace</h3>
       <textarea className="bw-json" rows={5} aria-label="Paste a workspace file" placeholder="Paste a workspace file here" value={text} onChange={(e) => { setText(e.target.value); setError(''); }} />

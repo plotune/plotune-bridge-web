@@ -183,11 +183,12 @@ describe('workspaces', () => {
     expect(tabs()).toEqual(['Capture', 'Diagnostics', 'Analysis']);
   });
 
-  it('export shows the file, and import takes it back or explains why not', () => {
+  it('export shows the file, and import takes it back or explains why not', async () => {
     mount();
     fireEvent.click(screen.getByRole('button', { name: /My workspace/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Export or import…' }));
     const dialog = screen.getByRole('dialog', { name: 'Export or import' });
+    await waitFor(() => expect((within(dialog).getByLabelText('Workspace file contents') as HTMLTextAreaElement).value).toContain('canvases'));
     const exported = (within(dialog).getByLabelText('Workspace file contents') as HTMLTextAreaElement).value;
     expect(JSON.parse(exported).canvases).toHaveLength(3);
     const paste = within(dialog).getByLabelText('Paste a workspace file');
