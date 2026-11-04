@@ -9,6 +9,8 @@ export const MAX_CANVASES = 24;
 export const MAX_PANELS = 120;
 export const MAX_PROJECTS = 20;
 export const MAX_NAME = 48;
+/** How much room a panel type wants, relative to the others, when it is added beside or under one. */
+const WEIGHT: Record<PanelType, number> = { trace: 3, plot: 3, analyzer: 3, recordings: 1.5, uds: 2, xcp: 2, transmit: 1.5, stats: 1 };
 
 // Settings of one device (channels, the device itself, the diagnostic link) are not panels: they live in that device's settings
 // dialog, so two Bridges never share a panel that can only show one of them. An older saved workspace that still names those
@@ -70,7 +72,7 @@ export function buildTemplate(id: string): Built {
   const g = (...ids: string[]) => group(ids);
   switch (id) {
     case 'capture':
-      return { panels, root: split('col', [split('row', [g(mk('trace')), g(mk('plot'))], [0.6, 0.4]), split('row', [g(mk('stats')), g(mk('transmit'))], [0.4, 0.6])], [0.68, 0.32]) };
+      return { panels, root: split('col', [split('row', [g(mk('trace')), g(mk('plot'))], [0.6, 0.4]), split('row', [g(mk('stats')), g(mk('transmit'))], [0.3, 0.7])], [0.64, 0.36]) };
     case 'debug':
       return { panels, root: split('row', [g(mk('plot')), g(mk('trace'))], [0.62, 0.38]) };
     case 'transmit':
@@ -301,7 +303,11 @@ export class ProjectStore {
     const target = (groupId && groupById(c.root, groupId)) || null;
     // Named group: a tab in it. Otherwise the panel is tiled into the canvas, beside or under the group with the most room.
     const place = target ? { groupId: target.id, zone: 'center' as const } : autoPlace(c.root);
-    const root = c.root && place ? insertPanel(c.root, place.groupId, place.zone, pid) : group([pid]);
+    // A panel with little to show (counters, a form) gets less room than a table or a plot.
+    const targetGroup = place ? groupById(c.root, place.groupId) : null;
+    const targetType = targetGroup ? this.project.panels[targetGroup.active]?.type : undefined;
+    const share = place?.zone === 'center' || !targetType ? 0.5 : WEIGHT[type] / (WEIGHT[type] + WEIGHT[targetType]);
+    const root = c.root && place ? insertPanel(c.root, place.groupId, place.zone, pid, share) : group([pid]);
     this.commit({ ...this.project, canvases: this.project.canvases.map((x) => (x.id === c.id ? { ...x, root } : x)), panels: { ...this.project.panels, [pid]: { type, ...init } } });
     return pid;
   }
