@@ -258,9 +258,20 @@ export function CommandButton() {
 function EmptyCanvas() {
   const store = useProjectStore();
   const ui = useWorkspaceUi();
+  const { slots } = useHubState();
+  // Capture can be running while this canvas shows nothing; say so, and point at the one thing that shows the frames (U6).
+  const capturing = slots.some((slot) => {
+    const state = slot.store.getState();
+    return state.phase === 'connected' && state.capturing;
+  });
   const starters: PanelType[] = ['trace', 'plot', 'analyzer'];
   return (
     <div className="bw-empty-canvas" data-testid="empty-canvas">
+      {capturing && (
+        <p className="bw-empty-capture-hint" role="status" data-testid="capture-hint">
+          Capturing. Add a Trace to watch the frames.
+        </p>
+      )}
       <div className="bw-starters">
         {starters.map((t) => {
           const Icon = PANEL_ICONS[t];

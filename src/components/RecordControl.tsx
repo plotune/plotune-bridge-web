@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FORMATS, type RecordFormat } from '../record/formats';
+import { FORMATS, formatSpec, type RecordFormat } from '../record/formats';
 import { useRecording } from '../record/context';
 import { useHub } from '../state/context';
 import { IconRecord, IconStop } from './icons';
@@ -30,12 +30,24 @@ export function RecordControl() {
   };
 
   const last = service.last;
+  // U8: the status is ellipsised at 240 px. Keep the whole text on `title` so the full file name
+  // and its size can be read on hover (role=status already gives screen readers the whole string).
+  const recordingText = recorder
+    ? recorder.capped
+      ? `Stopped at the ${formatBytes(recorder.capBytes)} limit · ${recorder.frames.toLocaleString()} frames · save it now`
+      : `Recording · ${recorder.frames.toLocaleString()} frames · ${formatBytes(recorder.bytes)}${recorder.dropped > 0 ? ` · ${recorder.dropped.toLocaleString()} reported lost by the device` : ''}`
+    : null;
+  const savedText = !recorder && last
+    ? `Saved ${last.fileName} · ${last.frames.toLocaleString()} frames · ${formatBytes(last.bytes)}${last.dropped > 0 ? ` · the device reported ${last.dropped.toLocaleString()} lost frames${last.carriesDrops ? ' (noted in the file)' : '; this format cannot note that, ASC can'}` : ''}${last.capped ? ' · stopped at the size limit' : ''}`
+    : null;
   return (
     <>
       {!recorder && (
-        <select className="bw-format-select" value={format} onChange={(e) => setFormat(e.target.value as RecordFormat)} aria-label="Recording format" title="Recording format">
+        <select className="bw-format-select" value={format} onChange={(e) => setFormat(e.target.value as RecordFormat)} aria-label="Recording format" title={`Recording format: ${formatSpec(format).label}`}>
           {AVAILABLE_FORMATS.map((f) => (
-            <option key={f.id} value={f.id}>{f.label}</option>
+            // U4: the closed select is only 76 px, so show a short code. The full descriptive name
+            // stays available on each option's title and on the control's title.
+            <option key={f.id} value={f.id} title={f.label}>{f.shortLabel}</option>
           ))}
         </select>
       )}
@@ -50,16 +62,10 @@ export function RecordControl() {
       )}
       {recorder ? (
         // The counts change with every frame, so this is deliberately not a live region; the button names say what state it is in.
-        <span className="bw-fine bw-record-status" data-testid="record-status">
-          {recorder.capped
-            ? `Stopped at the ${formatBytes(recorder.capBytes)} limit · ${recorder.frames.toLocaleString()} frames · save it now`
-            : `Recording · ${recorder.frames.toLocaleString()} frames · ${formatBytes(recorder.bytes)}${recorder.dropped > 0 ? ` · ${recorder.dropped.toLocaleString()} reported lost by the device` : ''}`}
-        </span>
-      ) : last ? (
+        <span className="bw-fine bw-record-status" data-testid="record-status" title={recordingText!}>{recordingText}</span>
+      ) : savedText ? (
         // Shown once, when a recording ends: announced to assistive technology.
-        <span className="bw-fine bw-record-status" role="status" data-testid="record-status">
-          {`Saved ${last.fileName} · ${last.frames.toLocaleString()} frames · ${formatBytes(last.bytes)}${last.dropped > 0 ? ` · the device reported ${last.dropped.toLocaleString()} lost frames${last.carriesDrops ? ' (noted in the file)' : '; this format cannot note that, ASC can'}` : ''}${last.capped ? ' · stopped at the size limit' : ''}`}
-        </span>
+        <span className="bw-fine bw-record-status" role="status" data-testid="record-status" title={savedText}>{savedText}</span>
       ) : null}
     </>
   );

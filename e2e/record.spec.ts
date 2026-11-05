@@ -56,16 +56,17 @@ test('candump log and CSV are offered and written', async ({ page }, info) => {
   await connected(page, device.url);
   await configureBothChannels(page);
   await startCapture(page);
-  for (const [label, check] of [
-    ['candump log (.log)', (t: string) => /^\(\d+\.\d{6}\) can0 7E8#[0-9A-F]{2}AA$/m.test(t)],
-    ['CSV (spreadsheet)', (t: string) => t.startsWith('time_s,channel,id_hex,extended,direction,remote,dlc,data_hex\r\n') && /\r\n\d+\.\d{6},1,7E8,0,rx,0,2,[0-9A-F]{2}AA/.test(t)],
+  // The top-bar control shows short codes; select by the stable value, not the visible label (U4).
+  for (const [value, check] of [
+    ['candump', (t: string) => /^\(\d+\.\d{6}\) can0 7E8#[0-9A-F]{2}AA$/m.test(t)],
+    ['csv', (t: string) => t.startsWith('time_s,channel,id_hex,extended,direction,remote,dlc,data_hex\r\n') && /\r\n\d+\.\d{6},1,7E8,0,rx,0,2,[0-9A-F]{2}AA/.test(t)],
   ] as const) {
-    await page.getByLabel('Recording format').selectOption({ label });
+    await page.getByLabel('Recording format').selectOption(value);
     await page.getByRole('button', { name: 'Record', exact: true }).click();
     await expect(page.getByTestId('record-status')).toContainText(/Recording · [1-9]\d* frames/);
     await page.waitForTimeout(600);
-    const text = await saveRecording(page, info.outputPath(`rec-${label.slice(0, 3)}`));
-    expect(check(text), label).toBe(true);
+    const text = await saveRecording(page, info.outputPath(`rec-${value}`));
+    expect(check(text), value).toBe(true);
   }
   await device.close();
 });
@@ -78,7 +79,7 @@ test('a recording is not limited by the 20,000-row trace buffer', async ({ page 
   await connected(page, device.url);
   await configureBothChannels(page);
   // Recording starts before capture does, so it must hold every frame the trace ever sees.
-  await page.getByLabel('Recording format').selectOption({ label: 'candump log (.log)' });
+  await page.getByLabel('Recording format').selectOption('candump');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await startCapture(page);
   const header = page.getByTestId('trace-count');
@@ -120,7 +121,7 @@ test('BLF: a downloaded binary file with the Vector header and zlib containers',
   await connected(page, device.url);
   await configureBothChannels(page);
   await startCapture(page);
-  await page.getByLabel('Recording format').selectOption({ label: 'BLF (Vector binary)' });
+  await page.getByLabel('Recording format').selectOption('blf');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(page.getByTestId('record-status')).toContainText(/Recording · [1-9]\d* frames/);
   await page.waitForTimeout(800);

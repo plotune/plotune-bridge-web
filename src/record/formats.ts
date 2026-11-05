@@ -6,6 +6,8 @@ export type RecordFormat = 'asc' | 'blf' | 'candump' | 'csv';
 export interface FormatSpec {
   id: RecordFormat;
   label: string;
+  /** Short code for the 76 px top-bar control; `label` is the full descriptive name (title/docs). */
+  shortLabel: string;
   extension: string;
   mime: string;
   /** Whether the file can say that the device reported lost frames. */
@@ -29,6 +31,7 @@ const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 const asc: FormatSpec = {
   id: 'asc',
   label: 'ASC (Vector text)',
+  shortLabel: 'ASC',
   extension: 'asc',
   mime: 'text/plain',
   carriesDrops: true,
@@ -51,6 +54,7 @@ const asc: FormatSpec = {
 const candump: FormatSpec = {
   id: 'candump',
   label: 'candump log (.log)',
+  shortLabel: 'candump',
   extension: 'log',
   mime: 'text/plain',
   carriesDrops: false,
@@ -67,6 +71,7 @@ const candump: FormatSpec = {
 const blf: FormatSpec = {
   id: 'blf',
   label: 'BLF (Vector binary)',
+  shortLabel: 'BLF',
   extension: 'blf',
   mime: 'application/octet-stream',
   carriesDrops: false,
@@ -79,6 +84,7 @@ const blf: FormatSpec = {
 const csv: FormatSpec = {
   id: 'csv',
   label: 'CSV (spreadsheet)',
+  shortLabel: 'CSV',
   extension: 'csv',
   mime: 'text/csv',
   carriesDrops: false,
