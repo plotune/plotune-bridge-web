@@ -848,6 +848,33 @@ input[aria-invalid='true'] {
   overflow: auto;
   /* Visually hidden text inside is absolutely positioned: keep it clipped with the table instead of widening the page. */
   position: relative;
+  /* U2: a visible scroll affordance. Chromium's overlay scrollbars do not reserve space, so style
+     a thin classic bar and add an edge shadow while columns are hidden to the right. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+}
+.bw-table-wrap::-webkit-scrollbar { height: 8px; }
+.bw-table-wrap::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.28); border-radius: 4px; }
+/* U2: a real edge fade. It fades the rightmost few pixels of visible content while columns are
+   hidden, and disappears (data-more=false) once the user has scrolled to the end. An inset shadow
+   would be painted under the opaque td backgrounds, so a mask is used instead. */
+.bw-table-wrap[data-more='true'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), rgba(0, 0, 0, 0.15) 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), rgba(0, 0, 0, 0.15) 100%);
+}
+/* U2: a definite cue naming the columns that are off-screen. Hidden unless the JS flag says there
+   really is hidden content, so it never lies on a wide panel or at the scroll end. */
+.bw-table-scroll-hint {
+  display: none;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--color-chrome);
+  border-bottom: 1px solid var(--color-row-rule);
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.bw-table-wrap[data-more='true'] + .bw-table-scroll-hint {
+  display: block;
 }
 .bw-table {
   border-collapse: collapse;
