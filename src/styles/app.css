@@ -2114,7 +2114,11 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
 .bw-device:hover { background: var(--color-neutral-tint); }
 .bw-device.is-active { background: var(--color-panel); box-shadow: var(--shadow-panel); }
 .bw-device-row { display: flex; align-items: center; gap: 4px; }
-.bw-device-select { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 2px 0; background: transparent; border: 0; font-size: 13px; font-weight: 600; color: var(--color-ink); text-align: left; }
+/* BWEB-042 rev 1 / O10, WCAG 2.5.8 (AA): this button selects a device, so its own box must be at
+   least 24 x 24 CSS px. It measured 22.8 px high on desktop; 26 px matches the row's tool buttons.
+   axe's target-size rule passes it through the spacing exception, so this minimum needs a manual
+   measurement (see e2e/bweb-042.spec.ts), not only an automated scan. */
+.bw-device-select { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 2px 0; min-height: 26px; background: transparent; border: 0; font-size: 13px; font-weight: 600; color: var(--color-ink); text-align: left; }
 .bw-device-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bw-device-tools { display: inline-flex; opacity: 0; transition: opacity 0.12s; }
 .bw-device:hover .bw-device-tools, .bw-device:focus-within .bw-device-tools, .bw-device.is-active .bw-device-tools { opacity: 1; }
