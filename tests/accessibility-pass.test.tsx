@@ -107,7 +107,7 @@ describe('landmarks and live regions', () => {
   it('a remote attempt has one live region (its status), not a live card around it', async () => {
     const rig = setup();
     await openSignedIn(rig);
-    fireEvent.click(within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect' }));
+    fireEvent.click(within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect Bridge-A' }));
     const card = await screen.findByTestId('connecting');
     expect(card).not.toHaveAttribute('aria-live');
     expect(within(card).getByRole('status')).toHaveTextContent('Contacting the Plotune cloud');
@@ -118,7 +118,7 @@ describe('focus after a state change', () => {
   it('Connect in the device list moves focus to Cancel when the list is replaced, instead of losing it', async () => {
     const rig = setup();
     await openSignedIn(rig);
-    const connect = within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect' });
+    const connect = within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect Bridge-A' });
     connect.focus();
     fireEvent.click(connect);
     const cancel = await screen.findByRole('button', { name: 'Cancel' });
@@ -129,12 +129,12 @@ describe('focus after a state change', () => {
     const rig = setup();
     await openSignedIn(rig);
     const pane = within(screen.getByRole('main'));
-    fireEvent.click(pane.getByRole('button', { name: 'Add a device' }));
+    fireEvent.click(pane.getByRole('button', { name: 'Add a device with a pairing code' }));
     const group = await screen.findByRole('group', { name: 'Pairing code' });
-    const cancel = within(group).getByRole('button', { name: 'Cancel' });
+    const cancel = within(group).getByRole('button', { name: 'Cancel pairing' });
     cancel.focus();
     fireEvent.click(cancel);
-    const add = pane.getByRole('button', { name: 'Add a device' });
+    const add = pane.getByRole('button', { name: 'Add a device with a pairing code' });
     await waitFor(() => expect(add).toHaveFocus());
     expect(add).toBeEnabled();
   });
@@ -223,10 +223,10 @@ describe('one h1 per screen, one wording for sign-in, and no raw remote address 
     expect(screen.queryByRole('button', { name: 'Continue with Plotune' })).toBeNull();
     await signIn(rig);
     await screen.findByText('Bridge-A');
-    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Add a device' }));
+    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Add a device with a pairing code' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Connect a Bridge device' })).toBeVisible();
     expect(h1Count()).toBe(1);
-    fireEvent.click(within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect' }));
+    fireEvent.click(within(screen.getByRole('list', { name: 'Devices in this project' })).getByRole('button', { name: 'Connect Bridge-A' }));
     const connecting = await screen.findByTestId('connecting');
     expect(within(connecting).getByRole('heading', { level: 1, name: 'Connecting' })).toBeVisible();
     expect(h1Count()).toBe(1);

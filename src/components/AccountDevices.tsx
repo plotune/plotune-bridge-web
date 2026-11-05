@@ -155,7 +155,8 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
         <span className="bw-account-state">
           <IconCheck aria-hidden="true" /> Signed in
         </span>
-        <button type="button" className="bw-button bw-small" onClick={() => cloud.signOut()}>
+        {/* The account menu has its own "Sign out"; this one names the pane it belongs to (WCAG 2.4.6 / O2). */}
+        <button type="button" className="bw-button bw-small" onClick={() => cloud.signOut()} aria-label="Sign out of your Plotune account">
           Sign out
         </button>
       </div>
@@ -205,7 +206,8 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
         <section className="bw-devices" aria-labelledby="devices-heading">
           <div className="bw-devices-head">
             <h2 id="devices-heading">Devices{projectName ? ` in ${projectName}` : ''}</h2>
-            <button ref={addRef} type="button" className="bw-button bw-small" onClick={() => void startPairing()} disabled={pairBusy || waiting || !devicesLoaded}>
+            {/* The sidebar "+" is also "Add a device"; this one starts a pairing code (WCAG 2.4.6 / O2). */}
+            <button ref={addRef} type="button" className="bw-button bw-small" onClick={() => void startPairing()} disabled={pairBusy || waiting || !devicesLoaded} aria-label="Add a device with a pairing code">
               Add a device
             </button>
           </div>
@@ -252,7 +254,8 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
                 Waiting for your device…
               </p>
               <div className="bw-actions">
-                <button type="button" className="bw-button bw-small" onClick={() => { restoreAddFocus.current = true; setPairing(null); }}>
+                {/* The pane's own "Cancel" closes the pane; this one cancels the pairing code (WCAG 2.4.6 / O2). */}
+                <button type="button" className="bw-button bw-small" onClick={() => { restoreAddFocus.current = true; setPairing(null); }} aria-label="Cancel pairing">
                   Cancel
                 </button>
               </div>
@@ -276,8 +279,9 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
           {devicesError && (
             <Alert tone="error">
               {devicesError.message}{' '}
-              {/* Adding a device waits for a loaded list, so a failed load needs its own way to try again. */}
-              <button type="button" className="bw-button bw-small" onClick={() => void cloud.refreshDevices()} disabled={devicesLoading}>
+              {/* Adding a device waits for a loaded list, so a failed load needs its own way to try again.
+                  A connection-retry notice also says "Try again", so this names what it reloads (WCAG 2.4.6 / O2). */}
+              <button type="button" className="bw-button bw-small" onClick={() => void cloud.refreshDevices()} disabled={devicesLoading} aria-label="Try again: reload devices">
                 Try again
               </button>
             </Alert>
@@ -300,13 +304,22 @@ function SignedInPanel({ onAdvanced }: { onAdvanced: () => void }) {
                     : unreachable
                       ? `Not reachable · tried ${agoText(failedAt, now)}`
                       : `${device.deviceType} · Paired ${pairedAgo(device.pairedAt, now)}`;
+                // Several rows share the visible "Connect"/"Try again" label. The accessible name adds the device so each
+                // control's purpose is unique, while the visible label stays inside the name (WCAG 2.4.6 / 2.5.3, O2).
+                const deviceName = device.deviceId || 'Bridge device';
                 return (
                   <li key={device.deviceUuid} className="bw-device-row">
                     <div className="bw-device-info">
-                      <span className="bw-mono">{device.deviceId || 'Bridge device'}</span>
+                      <span className="bw-mono">{deviceName}</span>
                       <span className="bw-muted">{status}</span>
                     </div>
-                    <button type="button" className="bw-button bw-primary bw-small" onClick={() => connect(device.deviceUuid)} disabled={connecting || connected}>
+                    <button
+                      type="button"
+                      className="bw-button bw-primary bw-small"
+                      onClick={() => connect(device.deviceUuid)}
+                      disabled={connecting || connected}
+                      aria-label={unreachable ? `Try again: reconnect ${deviceName}` : `Connect ${deviceName}`}
+                    >
                       {unreachable ? 'Try again' : 'Connect'}
                     </button>
                   </li>

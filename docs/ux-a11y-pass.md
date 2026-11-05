@@ -120,6 +120,36 @@ Feedback (Doherty), measured at 1280 after the fixes with stub latency: pane ope
 
 Other laws, checked in code or the page, no finding: Hick (sign-in card has two choices; the signed-out pane has three); Miller (pane grouped as account bar, project, devices, footer); Peak-end (sign-out ends on Sign in with focus; the first connection goes through the permission explainer).
 
+## O2 — duplicate accessible names (resolved on `feat/web-bweb-042-o2`)
+
+Base `origin/main` `41c1728` (O3, O8, O9, O10 and BR-WEB-004 already merged). Each of the five duplicate-name claims
+was verified against the rendered accessibility tree (`computeAccessibleName`, jsdom) on the account/device-list pane
+*before* any edit. All five are real duplicates that co-exist on one screen; none was skipped:
+
+| Visible text | Co-existing controls (verified) | Resolution — the visible label stays inside the name (WCAG 2.5.3 / O2) |
+|---|---|---|
+| "Connect" | one per device row (2+ devices) | per row `aria-label="Connect <deviceId>"`, e.g. "Connect Bridge-A" |
+| "Add a device" | Explorer "+" icon (aria-label) + the pane's action button (visible text) | pane `aria-label="Add a device with a pairing code"`; the sidebar "+" keeps "Add a device" |
+| "Sign out" | account-menu menuitem + the pane button (menu open) | pane `aria-label="Sign out of your Plotune account"`; the menu item keeps "Sign out" |
+| "Cancel" | pairing code + the pane (pairing-code screen) | pairing `aria-label="Cancel pairing"`; the pane "Cancel" keeps its short name |
+| "Try again" | the failure notice + the unreachable device row | row `aria-label="Try again: reconnect <deviceId>"`; the notice "Try again" keeps its short name |
+
+The device-list load error also has a "Try again" whose purpose is reloading the list, not retrying a connection, so it
+is distinguished too: `aria-label="Try again: reload devices"`.
+
+Genuinely unambiguous in their own context, so kept short with no invented rename: the local-network address form's
+single "Connect", the connecting card's single "Cancel", the single "Try again" of a failure notice shown on its own
+(ConnectView / dock / pane notice), the Explorer "+" icon where it is the only "Add a device", and the account-menu
+"Sign out" menuitem where the menu is closed. On each of those screens the control is the only one with that visible
+text.
+
+Regression tests: `tests/bweb-042-o2.test.tsx` (6 tests; 5 fail against the old markup) asserts, on every screen where
+the duplicates co-exist, that all controls sharing a visible label have unique accessible names and that label-in-name
+holds. `e2e/bweb-042-o2.spec.ts` drives the signed-in device list in Chromium through a mocked sign-in, checks the same
+uniqueness in the browser, and runs explicit axe WCAG 2.2 AA scans of the two screens involved — the device
+list/account pane (0 violations / 27 passes / 0 incomplete) and the failure notice (0 violations / 29 passes /
+0 incomplete). Every unit and e2e test that queried an old name was updated to the corresponding new name.
+
 ## Not covered
 
 - Screen readers were not run. Only the accessibility tree (via axe and the census) was checked.
