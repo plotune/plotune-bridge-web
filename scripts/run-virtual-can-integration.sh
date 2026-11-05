@@ -63,30 +63,45 @@ start_virtual single 19141 10 default none
 start_bench bench 19201 19202
 start_bench hosted-origin 19301 19302 https://bridge.plotune.net
 
-python3 - "${PIDS[@]}" <<'PY'
-import socket, sys, time
-ports = (19101, 19111, 19121, 19141, 19201, 19202, 19301, 19302)
-pids = [int(v) for v in sys.argv[1:]]
-deadline = time.monotonic() + 30
-pending = set(ports)
-while pending and time.monotonic() < deadline:
-    for port in tuple(pending):
-        try:
-            with socket.create_connection(('127.0.0.1', port), timeout=0.2):
-                pending.remove(port)
-        except OSError:
-            pass
-    if pending:
-        import os
-        for pid in pids:
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                raise SystemExit(f'simulator launcher exited before readiness: pid {pid}')
-        time.sleep(0.2)
-if pending:
-    raise SystemExit(f'simulator endpoints did not become ready: {sorted(pending)}')
-PY
+node --input-type=module - "${PIDS[@]}" <<'JS'
+import WebSocket from 'ws';
+import { setTimeout as delay } from 'node:timers/promises';
+
+const ports = [19101, 19111, 19121, 19141, 19201, 19202, 19301, 19302];
+const pids = process.argv.slice(2).map(Number);
+const pending = new Set(ports);
+const deadline = Date.now() + 30_000;
+
+function probe(port) {
+  return new Promise((resolve) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    const timeout = setTimeout(() => socket.terminate(), 500);
+    socket.once('open', () => {
+      clearTimeout(timeout);
+      socket.close(1000, 'readiness probe');
+      resolve(true);
+    });
+    socket.once('error', () => {
+      clearTimeout(timeout);
+      resolve(false);
+    });
+  });
+}
+
+while (pending.size && Date.now() < deadline) {
+  await Promise.all([...pending].map(async (port) => {
+    if (await probe(port)) pending.delete(port);
+  }));
+  if (pending.size) {
+    for (const pid of pids) {
+      try { process.kill(pid, 0); }
+      catch { throw new Error(`simulator launcher exited before readiness: pid ${pid}`); }
+    }
+    await delay(200);
+  }
+}
+if (pending.size) throw new Error(`simulator endpoints did not become ready: ${[...pending].sort()}`);
+JS
 
 export BRIDGE_VIRTUAL_URL=ws://127.0.0.1:19101
 export BRIDGE_OVERFLOW_URL=ws://127.0.0.1:19111
@@ -139,7 +154,7 @@ fs.writeFileSync(path.join(evidenceDir, 'run.json'), JSON.stringify({
   started_at: report.stats.startTime,
   duration_ms: report.stats.duration,
   result: 'passed',
-  actor: 'Codex execution agent (/root/simulator_planning)',
+  actor: 'Codex execution agent',
   maturity: 'L3 software integration evidence',
   tests: report.stats.expected,
   skipped: report.stats.skipped,
