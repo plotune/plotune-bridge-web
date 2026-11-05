@@ -302,8 +302,8 @@ function PhoneLayoutEditor({ panelId, onClose }: { panelId: string; onClose: () 
       {dividers.map(({ split, index }, i) => <div className="bw-layout-divider" key={`${split.id}-${index}`}>
         <span>Divider {i + 1} · {split.dir === 'row' ? 'left / right' : 'top / bottom'} · {Math.round(split.sizes[index]! * 100)}%</span>
         <div className="bw-layout-actions">
-          <button type="button" className="bw-button" aria-label={`Shrink first panel at divider ${i + 1} (−5%)`} disabled={split.sizes[index]! <= 0.100001} onClick={() => store.resize(split.id, index, -0.05)}>−5%</button>
-          <button type="button" className="bw-button" aria-label={`Grow first panel at divider ${i + 1} (+5%)`} disabled={split.sizes[index + 1]! <= 0.100001} onClick={() => store.resize(split.id, index, 0.05)}>+5%</button>
+          <button type="button" className="bw-button" aria-label={`Shrink 5% at divider ${i + 1}`} disabled={split.sizes[index]! <= 0.100001} onClick={() => store.resize(split.id, index, -0.05)}>Shrink 5%</button>
+          <button type="button" className="bw-button" aria-label={`Grow 5% at divider ${i + 1}`} disabled={split.sizes[index + 1]! <= 0.100001} onClick={() => store.resize(split.id, index, 0.05)}>Grow 5%</button>
         </div>
       </div>)}
     </fieldset>}

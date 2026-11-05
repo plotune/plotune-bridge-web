@@ -115,13 +115,17 @@ describe('cloud remote transport: credentials and relay', () => {
 
 describe('cloud remote transport: stages', () => {
   it('passes the stage reports of the remote adapter on, so the connecting screen can show them', async () => {
-    const client = fakeClient();
+    // End in the fake cloud layer. Awaiting the real relay's open timeout made
+    // this unit test use the network and exceed Vitest's timeout on Node 24.
+    const client = fakeClient({ fetchIceServers: vi.fn(async () => { throw new CloudError('network'); }) });
     const transport = cloudRemoteFactory({ client, session: signedInSession() })('proj_1', 'dev-1');
     const stages: Array<string | null> = [];
     transport.onStage?.((stage) => stages.push(stage));
     // Opening starts the cloud stage synchronously; the reports reach the listener through this wrapper.
-    const opening = transport.open().catch(() => undefined);
+    const opening = transport.open().catch((error: unknown) => error);
     expect(stages[0]).toBe('cloud');
-    await opening;
+    const failure = await opening;
+    expect(failure).toBeInstanceOf(TransportOpenError);
+    expect((failure as TransportOpenError).info.reason).toBe('cloud-unavailable');
   });
 });
