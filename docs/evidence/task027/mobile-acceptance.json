@@ -1,0 +1,50 @@
+{
+  "recordedAtUtc": "2026-11-05T17:51:22Z",
+  "testStartedAtUtc": "2026-11-05T17:51:00Z",
+  "testCompletedAtUtc": "2026-11-05T17:51:22Z",
+  "testDurationSeconds": 15.1,
+  "testCommand": "E2E_PORT=4183 npx playwright test e2e/mobile-canvas.spec.ts",
+  "result": "PASS",
+  "passed": 6,
+  "failed": 0,
+  "appSourceCommit": "b2c6406b463dbec1d7ad024a32701954249f5ca4",
+  "acceptanceBaseCommit": "a7a88c25ca0ddca45b32c3246d15d1b1aff2af85",
+  "browser": "Chromium 141.0.7390.37 (Playwright headless)",
+  "viewports": ["320x568", "390x844", "1024x768", "1440x900"],
+  "coverage": [
+    "phone canvas create, select, rename, duplicate, reorder, delete, and reload persistence",
+    "phone panel add, rename, move into a split and tab group, resize, close, and reload persistence",
+    "phone picker/editor state clears when leaving the phone viewport",
+    "visible keyboard focus and focus return to the Trace starter after closing the final panel",
+    "44 px minimum targets in phone picker, create/rename dialogs, and panel editor",
+    "no page horizontal overflow at phone, tablet, and desktop viewports",
+    "two-panel tablet and desktop regressions",
+    "canvas changes while a mocked CAN capture continues and new trace frames arrive"
+  ],
+  "afterUiMeasurements": {
+    "pickerViewport320": {
+      "documentClientWidth": 320,
+      "documentScrollWidth": 320,
+      "buttons": "all visible buttons are 44 px tall",
+      "targetWidths": { "Close": 44, "Open canvas Canvas 1": 250, "Open canvas Calibration station north": 250, "Open canvas Calibration station east": 250, "New canvas": 121, "Rename canvas": 121, "Duplicate canvas": 250, "Move canvas left": 250, "Move canvas right": 250, "Delete canvas": 250 }
+    },
+    "panelEditorViewport390": {
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "buttons": "all visible buttons are 44 px tall",
+      "targetWidths": { "Close": 44, "Save panel name": 320, "Move panel": 320, "Shrink 5% at divider 1": 145, "Grow 5% at divider 1": 145, "Close panel": 320 }
+    }
+  },
+  "axe": {
+    "tags": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+    "phonePicker": { "violations": 0, "passes": 31, "incomplete": ["color-contrast on decorative caret span", "label-content-name-mismatch on icon-only Close control"] },
+    "phonePanelEditor320": { "violations": 0, "passes": 29, "incomplete": ["color-contrast on decorative caret span", "label-content-name-mismatch on icon-only Close control"] },
+    "phonePanelEditor390": { "violations": 0, "passes": 29, "incomplete": ["color-contrast on decorative caret and editor paragraph", "label-content-name-mismatch on icon-only Close control"] },
+    "desktop1440": { "violations": 0, "passes": 31, "incomplete": ["color-contrast on icon-only panel-close affordances"] },
+    "manualReview": "Axe marked the listed items incomplete rather than violations. The listed controls use decorative glyphs or short text; automated scans did not determine contrast or label matching. They remain manual review items, not claimed passes."
+  },
+  "screenshots": [
+    "after-canvas-picker-320.png",
+    "after-panel-editor-390.png"
+  ]
+}
