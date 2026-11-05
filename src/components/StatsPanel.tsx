@@ -40,20 +40,28 @@ export function StatsPanel() {
             </tr>
           </thead>
           <tbody>
-            {state.statistics.map((s) => (
-              <tr key={s.channel} data-channel={s.channel}>
-                <th scope="row">CAN{s.channel}</th>
-                {COLUMNS.map((c) => {
-                  const value = s[c.key as keyof typeof s] as number;
-                  const warn = (c.key === 'rxDropped' || c.key === 'rxOverflow' || c.key === 'txFailed' || c.key === 'busErrors') && value > 0;
-                  return (
-                    <td key={c.key} className={`bw-mono ${warn ? 'bw-text-warn' : ''}`} data-col={c.key}>
-                      {value.toLocaleString()}
-                    </td>
-                  );
-                })}
+            {/* BWEB-042 rev 1 / O9: a header-only table has no data cells for its column headers
+                (axe th-has-data-cells). Give the empty state one real data row instead. */}
+            {state.statistics.length === 0 ? (
+              <tr>
+                <td colSpan={COLUMNS.length + 1} className="bw-table-empty">No statistics yet.</td>
               </tr>
-            ))}
+            ) : (
+              state.statistics.map((s) => (
+                <tr key={s.channel} data-channel={s.channel}>
+                  <th scope="row">CAN{s.channel}</th>
+                  {COLUMNS.map((c) => {
+                    const value = s[c.key as keyof typeof s] as number;
+                    const warn = (c.key === 'rxDropped' || c.key === 'rxOverflow' || c.key === 'txFailed' || c.key === 'busErrors') && value > 0;
+                    return (
+                      <td key={c.key} className={`bw-mono ${warn ? 'bw-text-warn' : ''}`} data-col={c.key}>
+                        {value.toLocaleString()}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
