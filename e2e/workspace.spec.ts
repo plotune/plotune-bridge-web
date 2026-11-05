@@ -106,7 +106,7 @@ test.describe('connection problems are explained, never silent', () => {
     await connect(page, `127.0.0.1:${port}`);
     const notice = page.locator('[data-notice=unreachable]');
     await expect(notice).toContainText("Couldn't connect to the device");
-    await expect(notice).toContainText('http://127.0.0.1:4173'); // what the device must allow
+    await expect(notice).toContainText(new URL(page.url()).origin); // the actual preview origin the device must allow
     await expect(notice).toContainText('If you chose Block'); // the permission cause is offered
     const device = await new MockDeviceServer({ port }).ready();
     await page.getByRole('button', { name: 'Try again' }).click();
