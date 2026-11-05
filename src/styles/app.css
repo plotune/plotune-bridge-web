@@ -631,6 +631,12 @@ input[aria-invalid='true'] {
   border-left-width: 4px;
   border-radius: var(--radius-control);
 }
+/* BWEB-042 rev 1 / O3: an error notice takes focus after a failure. Programmatic focus does not
+   always match :focus-visible, so show the ring explicitly on this non-tab stop. */
+.bw-notice[tabindex='-1']:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
 .bw-notice-body {
   display: flex;
   flex-direction: column;
