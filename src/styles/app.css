@@ -2306,8 +2306,8 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
 
 /* Phone: big touch targets, one panel at a time, the thumb bar at the bottom. */
 @media (max-width: 700px) {
-  :root { --size-topbar: 52px; }
-  .bw-topbar { padding: 0 6px; gap: 2px; }
+  :root { --size-topbar: 104px; }
+  .bw-topbar { padding: 0 6px; gap: 2px; flex-wrap: wrap; }
   .bw-top-end > .bw-icon-button:not(.bw-capture):not(.bw-record), .bw-top-end > .bw-command-pill, .bw-top-end > .bw-top-divider, .bw-top-end .bw-record-status { display: none; }
   /* U4: keep the recording-format chooser reachable on a phone. Short codes ("ASC") fit the
      crowded top bar; give the select a 44 px touch target like the other phone controls. */
@@ -2323,12 +2323,28 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
   .bw-group { border-radius: 12px; }
   .bw-phone-switcher { align-items: center; gap: 6px; padding: 8px 4px calc(8px + env(safe-area-inset-bottom)); background: transparent; }
   .bw-phone-chips { display: flex; flex: 1; gap: 6px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-  .bw-phone-switcher .bw-phone-chips button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: rgba(0, 0, 0, 0.06); color: var(--nav-text); font-weight: 500; }
+  .bw-phone-switcher .bw-phone-chips button { min-height: 44px; flex-shrink: 0; padding: 0 16px; border: 0; border-radius: 999px; background: rgba(0, 0, 0, 0.06); color: var(--nav-text); font-weight: 500; }
   .bw-phone-switcher .bw-phone-chips button[aria-pressed='true'] { background: var(--color-action); color: var(--color-on-action); }
   .bw-phone-switcher > .bw-icon-button { width: 44px; height: 44px; min-height: 44px; flex: none; }
   .bw-explorer { width: min(340px, 88vw); }
   .bw-device-tools .bw-icon-button, .bw-ex-head .bw-icon-button { width: 40px; height: 40px; min-height: 40px; }
   .bw-starter { height: 48px; font-size: 15px; }
+}
+
+.bw-canvas-picker { order: 3; flex: 0 0 100%; min-width: 0; padding-bottom: 4px; }
+.bw-canvas-picker-trigger { width: 100%; min-width: 0; min-height: 44px; display: flex; justify-content: space-between; gap: 8px; }
+.bw-canvas-picker-trigger > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bw-canvas-picker-list { display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.bw-canvas-picker-list .bw-button { width: 100%; min-height: 44px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.bw-canvas-picker-list [aria-current='page'] { border-color: var(--color-action); font-weight: 650; }
+.bw-layout-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bw-layout-actions .bw-button { flex: 1 1 120px; min-height: 44px; }
+.bw-layout-dividers { min-width: 0; border: 1px solid var(--color-row-rule); border-radius: 8px; padding: 8px; }
+.bw-layout-divider { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+@media (max-width: 700px) {
+  .bw-phone-switcher > .bw-button { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+  .bw-modal .bw-button, .bw-modal input, .bw-modal select { min-height: 44px; }
+  .bw-modal-head .bw-icon-button { width: 44px; height: 44px; flex-shrink: 0; }
 }
 
 /* Canvas tabs: a close mark on the active tab, and on hover. */
