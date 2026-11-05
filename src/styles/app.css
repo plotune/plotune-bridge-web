@@ -1839,6 +1839,7 @@ h1[tabindex='-1']:focus {
   user-select: none;
 }
 .bw-tab[data-selected='true'] > button[role='tab'] { color: var(--color-ink); font-weight: 650; }
+.bw-tab[data-selected='true'] .bw-tab-close { opacity: 1; }
 .bw-tab[data-selected='true']::after {
   content: '';
   position: absolute;
@@ -1860,8 +1861,7 @@ h1[tabindex='-1']:focus {
   line-height: 1;
 }
 .bw-tab:hover .bw-tab-close,
-.bw-tab:focus-within .bw-tab-close,
-.bw-tab[data-selected='true'] .bw-tab-close { opacity: .7; }
+.bw-tab:focus-within .bw-tab-close { opacity: .7; }
 .bw-tab:hover .bw-tab-close { opacity: 1; }
 .bw-tab-close:hover { background: var(--icon-hover-bg); color: var(--color-ink); }
 .bw-group-tools { display: flex; align-items: center; gap: 2px; padding: 0 4px; }

@@ -33,6 +33,19 @@ async function assertTouchTargets44(container: Locator): Promise<void> {
   expect(small, 'all visible interactive buttons in this mobile state need 44 px targets').toEqual([]);
 }
 
+function contrastRatio(foreground: string, background: string): number {
+  const rgb = (value: string) => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+  const luminance = (value: string) => {
+    const channels = rgb(value).map((channel) => {
+      const linear = channel / 255;
+      return linear <= 0.04045 ? linear / 12.92 : ((linear + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
+
 async function logAxe(page: Page, state: string): Promise<void> {
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
   const incomplete = result.incomplete.map((item) => `${item.id} (${item.nodes.length} nodes: ${item.nodes.map((node) => `${node.target.join(' ')} — ${node.failureSummary?.split('\n')[0] ?? 'manual review'}`).join('; ')})`);
@@ -193,6 +206,18 @@ test('tablet keeps two panels side by side; desktop retains canvas tabs and dock
   await expect(stats).toBeVisible();
   await page.getByRole('button', { name: 'Choose canvas' }).count().then((count) => expect(count).toBe(0));
   await assertNoHorizontalOverflow(page);
+  const selectedCloseStates = await page.locator('.bw-tab[data-selected="true"] .bw-tab-close').evaluateAll((closes) => closes.map((close) => ({
+    opacity: getComputedStyle(close).opacity,
+    color: getComputedStyle(close).color,
+    background: getComputedStyle(close.closest('.bw-tab')!.querySelector('button[role="tab"]')!).backgroundColor,
+  })));
+  expect(selectedCloseStates.length).toBe(2);
+  const selectedCloseContrasts = selectedCloseStates.map((close) => contrastRatio(close.color, close.background));
+  console.log(`Selected tab close glyph contrast: ${selectedCloseContrasts.map((ratio) => `${ratio.toFixed(2)}:1`).join(', ')}`);
+  for (const [index, selectedClose] of selectedCloseStates.entries()) {
+    expect(selectedClose.opacity).toBe('1');
+    expect(selectedCloseContrasts[index]).toBeGreaterThanOrEqual(3);
+  }
   await logAxe(page, 'desktop two-panel canvas');
 });
 
