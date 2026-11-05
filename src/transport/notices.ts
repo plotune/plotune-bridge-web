@@ -16,6 +16,7 @@ export type NoticeKind =
   | 'permission-blocked'
   | 'timeout'
   | 'blocked-by-browser'
+  | 'mixed-content'
   | 'ended'
   | 'signed-out'
   | 'no-access'
@@ -58,20 +59,26 @@ export function explainOpenFailure(info: CloseInfo, ctx: NoticeContext): Notice 
   if (isRemoteTarget(ctx.targetUrl)) return explainRemoteOpenFailure(info);
   const tech = technical(info);
   const scheme = ctx.targetUrl.split(':', 1)[0];
-  if (info.reason === 'timeout') {
+  // The browser refused to construct the WebSocket at all, so no connection was ever attempted. Chromium raises a
+  // SecurityError when a secure (HTTPS) page is given a plain ws:// address for a non-loopback host (mixed content).
+  // This is a definitive browser rule that the browser DID reveal, so it is explained plainly. It must never be
+  // reported as a device fault, and nothing here claims an unknown cause. BR-WEB-006 rev 2.
+  if (info.reason === 'SecurityError') {
     return {
-      kind: 'timeout',
+      kind: 'mixed-content',
       severity: 'error',
-      title: 'The device did not answer',
-      summary: 'Nothing came back before the timeout. If your browser is showing a permission question, answer it and try again.',
+      title: 'This secure page cannot open a plain ws:// address',
+      summary: 'The browser refused to start this connection because this page was loaded over HTTPS and the address uses a plain, insecure ws:// connection to a device on your network. This is a browser rule, not a problem with your device.',
       steps: [
-        'Check that the device is powered and on the same network as this computer.',
-        'Check the address, including the port.',
-        'If your browser asked about local network access, choose Allow, then retry.',
+        'If your device offers a secure wss:// address, enter that instead.',
+        'Or open the workspace from a local origin (for example the local preview at http://127.0.0.1:4173), where a plain ws:// address is allowed.',
+        'An address on 127.0.0.1 or localhost is also allowed from a secure page.',
       ],
       technical: tech,
     };
   }
+  // A denied local-network permission is known and actionable. It takes priority over a generic timeout, so a user
+  // who blocked the prompt gets the site-settings guidance rather than "the device did not answer". BR-WEB-006 rev 2.
   if (ctx.permission === 'denied') {
     return {
       kind: 'permission-blocked',
@@ -82,6 +89,20 @@ export function explainOpenFailure(info: CloseInfo, ctx: NoticeContext): Notice 
         'Open the site settings for this page (the icon at the left of the address bar).',
         'Set "Local network" (or "Apps on device") to Allow.',
         'Come back and choose Try again. You may need to reload the page.',
+      ],
+      technical: tech,
+    };
+  }
+  if (info.reason === 'timeout') {
+    return {
+      kind: 'timeout',
+      severity: 'error',
+      title: 'The device did not answer',
+      summary: 'Nothing came back before the timeout. If your browser is showing a permission question, answer it and try again.',
+      steps: [
+        'Check that the device is powered and on the same network as this computer.',
+        'Check the address, including the port.',
+        'If your browser asked about local network access, choose Allow, then retry.',
       ],
       technical: tech,
     };

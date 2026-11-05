@@ -162,7 +162,9 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
           actions={
             state.notice.kind !== 'ended' && (
               <>
-                {state.target && state.notice.kind !== 'blocked-by-browser' && (
+                {/* A browser-blocked combination (unsupported browser, or a plain ws:// address on a secure page)
+                    cannot succeed by retrying; only "Change address" lets the user enter a supported one. */}
+                {state.target && state.notice.kind !== 'blocked-by-browser' && state.notice.kind !== 'mixed-content' && (
                   <button type="button" className="bw-button bw-primary" onClick={() => connect(state.target)}>
                     Try again
                   </button>

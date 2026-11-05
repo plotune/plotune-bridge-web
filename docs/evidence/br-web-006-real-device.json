@@ -1,0 +1,141 @@
+{
+  "requirement_ids": [
+    "BR-WEB-006 rev 2",
+    "BWEB-002 rev 1",
+    "BR-WEB-001 rev 2 (local half)"
+  ],
+  "level": "L3 integration (real device)",
+  "utc": "2026-11-05T10:48:22.092Z",
+  "base_url": "http://127.0.0.1:4173",
+  "device_url": "ws://192.168.1.10:9100",
+  "cloud_blocked_after_load": [
+    "https://api.plotune.net",
+    "https://stream.plotune.net",
+    "https://www.plotune.net",
+    "https://plotune.net"
+  ],
+  "steps": [
+    {
+      "name": "hello over ws://",
+      "detail": "device_id=plotune-bridge-can-7c0c5f578a74, contract=0.1.0, can_fd=false, bitrates=[125000,250000,500000,1000000]"
+    },
+    {
+      "name": "serve dist",
+      "detail": "http://127.0.0.1:4173/ (production build, relative asset base)"
+    },
+    {
+      "name": "headless Chromium",
+      "detail": "141.0.7390.37"
+    },
+    {
+      "name": "CDP Browser.grantPermissions(localNetworkAccess)",
+      "detail": "granted"
+    },
+    {
+      "name": "Cloud blocked after load",
+      "detail": "https://api.plotune.net, https://stream.plotune.net, https://www.plotune.net, https://plotune.net"
+    },
+    {
+      "name": "local connect",
+      "detail": "device-chip reports Connected"
+    },
+    {
+      "name": "local acquisition/control",
+      "detail": "CAN1 bit rate = 500000; Start capture -> Stop capture visible"
+    },
+    {
+      "name": "local workspace persisted with Cloud blocked",
+      "detail": "bw.workspace=true, bw.projects=true"
+    },
+    {
+      "name": "verdict",
+      "detail": "PASS"
+    }
+  ],
+  "device_hello": {
+    "type": "response",
+    "id": 1,
+    "ok": true,
+    "result": {
+      "contract_version": "0.1.0",
+      "session_id": "plotune-bridge-can-7c0c5f578a74-s6",
+      "device_id": "plotune-bridge-can-7c0c5f578a74",
+      "firmware": "plotune-bridge-can-fw-0.1.0",
+      "profile": "prototype1",
+      "can_fd": false,
+      "supported_bitrates": [
+        125000,
+        250000,
+        500000,
+        1000000
+      ],
+      "rx_queue_capacity": 256,
+      "clock": {
+        "monotonic_ns": 2959586668000,
+        "wall_clock_ns": null,
+        "wall_clock_synced": false
+      },
+      "channels": [
+        {
+          "channel": 1,
+          "name": "CAN1",
+          "bitrate": 500000,
+          "termination": false,
+          "bus_state": "error_active",
+          "streaming": false,
+          "rx_queue_depth": 0,
+          "rx_queue_capacity": 256,
+          "rx_overloaded": false,
+          "rx_high_water": false
+        }
+      ],
+      "limits": {
+        "tx_queue_depth": 32,
+        "rx_overload_depth": 192,
+        "net_tx_high_water_bytes": 24576,
+        "net_tx_stall_ms": 250,
+        "remote_backlog_bytes": 8192,
+        "remote_backlog_ms": 500,
+        "peer_min_internal_bytes": 147456,
+        "heap_floor_bytes": 40960,
+        "stack_used_pct_max": 75
+      }
+    }
+  },
+  "device": {
+    "identity": "plotune-bridge-can-7c0c5f578a74",
+    "firmware": "plotune-bridge-can-fw-0.1.0",
+    "contract_version": "0.1.0",
+    "can_fd": false,
+    "supported_bitrates": [
+      125000,
+      250000,
+      500000,
+      1000000
+    ],
+    "channels": [
+      {
+        "channel": 1,
+        "name": "CAN1",
+        "bitrate": 500000,
+        "termination": false,
+        "bus_state": "error_active",
+        "streaming": false,
+        "rx_queue_depth": 0,
+        "rx_queue_capacity": 256,
+        "rx_overloaded": false,
+        "rx_high_water": false
+      }
+    ]
+  },
+  "browser": "141.0.7390.37",
+  "local_network_access": "granted",
+  "local_state": {
+    "workspace_present": true,
+    "projects_present": true,
+    "workspace": "{\"version\":1,\"devices\":[{\"id\":\"d1\",\"label\":\"Bridge 1\",\"target\":\"ws://192.168.1.10:9100\",\"captureChannels\":[1],\"transmitChannel\":1}],\"activeId\":\"d1\",\"traceView\":\"all\",\"page\":\"capture\",\"hidden\":{\"capture\":[],\"diagnostics\":[],\"device\":[]},\"diagnostics\":{\"channel\":1,\"udsRequestId\":\"7E0\",\"udsResponseId\":\"7E8\",\"extended\":false,\"padding\":\"00\",\"timeoutMs\":1000,\"xcpRequestId\":\"600\",\"xcpResponseId\":\"601\",\"xcpPadTo8\":false},\"permissionExplained\":true}"
+  },
+  "screenshot": "docs/evidence/br-web-006-real-device.png",
+  "console_errors": [],
+  "verdict": "PASS"
+}
