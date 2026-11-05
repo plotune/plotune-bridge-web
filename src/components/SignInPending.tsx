@@ -7,6 +7,11 @@ import logo from '../assets/plotune-logo.png';
 export const STILL_WORKING_MS = 8_000;
 export const CONTINUE_WITHOUT_MS = 20_000;
 
+/** Copy for the two signing-in phases. Both are announced through the same polite status region below. */
+export const SIGNING_IN_MESSAGE = 'Signing you in with your Plotune account…';
+/** The honest wording for the brief pre-redirect window, before the browser leaves for plotune.net (BWEB-042 O7). */
+export const TAKING_TO_PLOTUNE_MESSAGE = 'Taking you to Plotune to sign in…';
+
 /** The two timers this component uses. Tests pass fake timers; the app uses the browser's. */
 export interface PendingTimers {
   setTimeout(fn: () => void, ms: number): unknown;
@@ -18,7 +23,7 @@ const browserTimers: PendingTimers = {
   clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
 };
 
-export function SignInPending({ onContinueWithout, timers = browserTimers }: { onContinueWithout: () => void; timers?: PendingTimers }) {
+export function SignInPending({ onContinueWithout, message = SIGNING_IN_MESSAGE, timers = browserTimers }: { onContinueWithout: () => void; message?: string; timers?: PendingTimers }) {
   // 0: first line only; 1: "still working" added; 2: the fallback button is offered as well.
   const [stage, setStage] = useState(0);
 
@@ -36,7 +41,7 @@ export function SignInPending({ onContinueWithout, timers = browserTimers }: { o
       <img className="bw-signing-in-logo" src={logo} alt="" />
       <h1 id="signing-in-title">Plotune Bridge</h1>
       <p role="status" aria-live="polite">
-        <span className="bw-spinner" aria-hidden="true" /> Signing you in with your Plotune account…
+        <span className="bw-spinner" aria-hidden="true" /> {message}
       </p>
       {stage >= 1 && <p className="bw-muted">Still working. This can take a few seconds on a slow connection.</p>}
       {stage >= 2 && (

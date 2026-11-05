@@ -5,6 +5,7 @@ import type { CloudStatus } from './cloud/context';
 import type { CloudClient } from './cloud/client';
 import type { CloudSession } from './cloud/session';
 import type { SsoBrowser } from './cloud/sso';
+import type { PaintScheduler } from './cloud/paint';
 import { AccountDevices } from './components/AccountDevices';
 import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
@@ -441,7 +442,7 @@ function Shell({ browser, pageOrigin }: { browser: BrowserInfo; pageOrigin: stri
         <Topbar showControls={cloud.status !== 'signing-in'} explorerOpen={explorerOpen} />
         <RememberedReconnect />
         {cloud.status === 'signing-in' ? (
-          <SignInPending onContinueWithout={cloud.continueWithoutSignIn} />
+          <SignInPending onContinueWithout={cloud.continueWithoutSignIn} message={cloud.pendingMessage ?? undefined} />
         ) : (
           <Workspace browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} startLocal={startLocal} setStartLocal={setStartLocal} explorerOpen={explorerOpen} closeExplorer={closeExplorer} settingsFor={settingsFor} closeSettings={() => setSettingsFor(null)} />
         )}
@@ -458,18 +459,20 @@ export interface AppProps {
   cloudClient?: CloudClient;
   cloudSession?: CloudSession;
   cloudSso?: SsoBrowser;
+  /** Tests inject a scheduler they can step deterministically; the app paints with real animation frames. */
+  cloudPaintScheduler?: PaintScheduler;
   /** Tests inject a registry without storage. The app remembers loaded databases in this browser. */
   dbc?: DbcRegistry;
   /** Tests inject a project store without storage. The app saves projects in this browser. */
   project?: ProjectStore;
 }
 
-export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso, dbc, project }: AppProps) {
+export function App({ hub, browser, pageOrigin = location.origin, cloudClient, cloudSession, cloudSso, cloudPaintScheduler, dbc, project }: AppProps) {
   const [projects] = useState(() => project ?? new ProjectStore());
   const [registry] = useState(() => dbc ?? new DbcRegistry(browserDbcStorage()));
   const [recording] = useState(() => new RecordingService());
   return (
-    <CloudProvider client={cloudClient} session={cloudSession} sso={cloudSso}>
+    <CloudProvider client={cloudClient} session={cloudSession} sso={cloudSso} paintScheduler={cloudPaintScheduler}>
       <HubProvider hub={hub}>
         <DbcProvider registry={registry}>
           <RecordingProvider service={recording}>
