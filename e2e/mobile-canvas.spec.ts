@@ -206,19 +206,35 @@ test('tablet keeps two panels side by side; desktop retains canvas tabs and dock
   await expect(stats).toBeVisible();
   await page.getByRole('button', { name: 'Choose canvas' }).count().then((count) => expect(count).toBe(0));
   await assertNoHorizontalOverflow(page);
-  const selectedCloseStates = await page.locator('.bw-tab[data-selected="true"] .bw-tab-close').evaluateAll((closes) => closes.map((close) => ({
+  const readSelectedCloseStates = () => page.locator('.bw-tab[data-selected="true"] .bw-tab-close').evaluateAll((closes) => closes.map((close) => ({
     opacity: getComputedStyle(close).opacity,
     color: getComputedStyle(close).color,
     background: getComputedStyle(close.closest('.bw-tab')!.querySelector('button[role="tab"]')!).backgroundColor,
   })));
-  expect(selectedCloseStates.length).toBe(2);
-  const selectedCloseContrasts = selectedCloseStates.map((close) => contrastRatio(close.color, close.background));
-  console.log(`Selected tab close glyph contrast: ${selectedCloseContrasts.map((ratio) => `${ratio.toFixed(2)}:1`).join(', ')}`);
-  for (const [index, selectedClose] of selectedCloseStates.entries()) {
-    expect(selectedClose.opacity).toBe('1');
-    expect(selectedCloseContrasts[index]).toBeGreaterThanOrEqual(3);
-  }
-  await logAxe(page, 'desktop two-panel canvas');
+  const assertSelectedCloseContrast = async (state: string) => {
+    const selectedCloseStates = await readSelectedCloseStates();
+    expect(selectedCloseStates.length).toBe(2);
+    const selectedCloseContrasts = selectedCloseStates.map((close) => contrastRatio(close.color, close.background));
+    console.log(`${state} selected tab close glyph contrast: ${selectedCloseContrasts.map((ratio) => `${ratio.toFixed(2)}:1`).join(', ')}`);
+    for (const [index, selectedClose] of selectedCloseStates.entries()) {
+      expect(selectedClose.opacity).toBe('1');
+      expect(selectedCloseContrasts[index]).toBeGreaterThanOrEqual(3);
+    }
+  };
+  await assertSelectedCloseContrast('default');
+  const focusedTab = page.locator('.bw-tab[data-selected="true"] button[role="tab"]').first();
+  await focusedTab.focus();
+  await assertSelectedCloseContrast('keyboard focus');
+  await focusedTab.hover();
+  await assertSelectedCloseContrast('keyboard focus plus hover');
+  await page.mouse.move(0, 0);
+  await assertSelectedCloseContrast('keyboard focus without hover');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await focusedTab.hover();
+  await assertSelectedCloseContrast('hover without keyboard focus');
+  await page.mouse.move(0, 0);
+  await assertSelectedCloseContrast('selected default');
+  await logAxe(page, 'desktop two-panel canvas with keyboard focus');
 });
 
 test('phone canvas edits leave a mocked CAN capture running and its trace available', async ({ page }) => {

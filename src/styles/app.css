@@ -1861,7 +1861,7 @@ h1[tabindex='-1']:focus {
   line-height: 1;
 }
 .bw-tab:hover .bw-tab-close,
-.bw-tab:focus-within .bw-tab-close { opacity: .7; }
+.bw-tab:focus-within:not([data-selected='true']) .bw-tab-close { opacity: .7; }
 .bw-tab:hover .bw-tab-close { opacity: 1; }
 .bw-tab-close:hover { background: var(--icon-hover-bg); color: var(--color-ink); }
 .bw-group-tools { display: flex; align-items: center; gap: 2px; padding: 0 4px; }
