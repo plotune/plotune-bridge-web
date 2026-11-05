@@ -1,0 +1,22 @@
+{
+  "recordedAtUtc": "2026-11-05T18:02:47Z",
+  "appSourceCommit": "07ebf293a824bd3ca7a466072967bf2b22cf2d29",
+  "finding": "The selected desktop tab close glyph was composited at 0.7 opacity and measured below the 3:1 non-text contrast threshold.",
+  "change": "Selected tab close glyphs now render at full opacity; a browser regression assertion checks both the opacity and computed foreground/background contrast.",
+  "verification": {
+    "command": "E2E_PORT=4185 npx playwright test e2e/mobile-canvas.spec.ts --grep 'tablet keeps'",
+    "result": "PASS",
+    "passed": 1,
+    "failed": 0,
+    "viewport": "1440x900 (desktop; test also checks two-panel tablet layout)",
+    "browser": "Chromium 141.0.7390.37 (Playwright headless)",
+    "selectedCloseGlyphContrast": ["3.35:1", "3.35:1"],
+    "axe": {
+      "tags": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+      "violations": 0,
+      "passes": 31,
+      "incomplete": 0
+    }
+  },
+  "scope": "This closes the reported selected-tab contrast issue. It is not a full manual WCAG audit."
+}
