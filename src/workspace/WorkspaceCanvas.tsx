@@ -5,7 +5,7 @@ import { useHub, useHubState } from '../state/context';
 import { CommandPalette, type Command } from './CommandPalette';
 import { useActiveCanvas, useProject, useProjectStore } from './context';
 import { Dock } from './Dock';
-import { groupById, groupOf, panelsIn, type DropZone, type LayoutNode, type SplitNode } from './layout';
+import { groupById, groupOf, panelsIn, type DropZone, type GroupNode, type LayoutNode, type SplitNode } from './layout';
 import { PANEL_DEFS, PANEL_ICONS, panelTitle } from './panels';
 import { MAX_CANVASES, PANEL_TYPES, TEMPLATES, type PanelType } from './project';
 import { ALT, MOD, combo, isEditable } from './shortcuts';
@@ -194,7 +194,7 @@ export function CanvasTabs() {
   const active = project.canvases.find((c) => c.id === project.active)!;
   if (phone) return (
     <nav className="bw-canvas-picker" aria-label="Canvases">
-      <button type="button" className="bw-button bw-canvas-picker-trigger" aria-label="Choose canvas" aria-haspopup="dialog" aria-expanded={choosing} onClick={() => setChoosing(true)}>
+      <button type="button" className="bw-button bw-canvas-picker-trigger" aria-label={`Choose canvas: ${active.name}`} aria-haspopup="dialog" aria-expanded={choosing} onClick={() => setChoosing(true)}>
         <span>{active.name}</span><span aria-hidden="true">▾</span>
       </button>
       {choosing && <Modal title="Canvases" onClose={() => setChoosing(false)}>
@@ -298,7 +298,13 @@ function PhoneLayoutEditor({ panelId, onClose }: { panelId: string; onClose: () 
       </div>)}
     </fieldset>}
     <p role="status">{message}</p>
-    <button type="button" className="bw-button" onClick={() => { onClose(); store.closePanel(panelId); }}>Close panel</button>
+    <button type="button" className="bw-button" onClick={() => {
+      onClose();
+      store.closePanel(panelId);
+      // The editor trigger disappears when the last panel closes. Focus the next
+      // usable action after React has rendered the remaining panel or empty canvas.
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('.bw-phone-switcher [aria-label="Edit panel layout"], [data-testid="empty-canvas"] button')?.focus());
+    }}>Close panel</button>
   </Modal>;
 }
 
@@ -371,28 +377,35 @@ export function CanvasView() {
   const { project } = useProject();
   const ui = useWorkspaceUi();
   const phone = usePhone();
-  const [editing, setEditing] = useState(false);
   const all = useMemo(() => panelsIn(canvas.root), [canvas.root]);
   const currentPhone = phone && all.includes(ui.phonePanel ?? '') ? ui.phonePanel! : all[0] ?? null;
   const phoneGroup = phone && canvas.root && currentPhone ? { kind: 'group' as const, id: 'phone', tabs: [currentPhone], active: currentPhone } : null;
   if (!canvas.root) return <EmptyCanvas />;
   if (phoneGroup) {
-    return (
+    return <PhoneCanvas key={canvas.id} root={phoneGroup} panelIds={all} currentPanel={currentPhone!} />;
+  }
+  return <Dock root={canvas.root} panels={project.panels} focusedGroup={ui.focusedGroup} onFocusGroup={ui.setFocusedGroup} />;
+}
+
+/** Local editing state ends when this phone view or its canvas is left. */
+function PhoneCanvas({ root, panelIds, currentPanel }: { root: GroupNode; panelIds: string[]; currentPanel: string }) {
+  const { project } = useProject();
+  const ui = useWorkspaceUi();
+  const [editing, setEditing] = useState(false);
+  return (
       <>
-        <Dock root={phoneGroup} panels={project.panels} focusedGroup={null} onFocusGroup={() => undefined} />
+        <Dock root={root} panels={project.panels} focusedGroup={null} onFocusGroup={() => undefined} />
         <nav className="bw-phone-switcher" aria-label="Panels on this canvas">
           <button type="button" className="bw-icon-button" onClick={ui.toggleExplorer} aria-label="Explorer" title="Explorer"><IconSidebar /></button>
           <div className="bw-phone-chips">
-            {all.map((pid) => (
-              <button key={pid} type="button" aria-pressed={pid === currentPhone} onClick={() => ui.setPhonePanel(pid)}>{project.panels[pid] ? (project.panels[pid]!.name ?? PANEL_DEFS[project.panels[pid]!.type].title) : ''}</button>
+            {panelIds.map((pid) => (
+              <button key={pid} type="button" aria-pressed={pid === currentPanel} onClick={() => ui.setPhonePanel(pid)}>{project.panels[pid] ? (project.panels[pid]!.name ?? PANEL_DEFS[project.panels[pid]!.type].title) : ''}</button>
             ))}
           </div>
           <button type="button" className="bw-icon-button" onClick={() => ui.openGallery()} aria-label="Add panel" title="Add panel"><IconPanelAdd /></button>
           <button type="button" className="bw-button" onClick={() => setEditing(true)} aria-label="Edit panel layout">Edit</button>
         </nav>
-        {editing && currentPhone && <PhoneLayoutEditor key={currentPhone} panelId={currentPhone} onClose={() => setEditing(false)} />}
+        {editing && <PhoneLayoutEditor key={currentPanel} panelId={currentPanel} onClose={() => setEditing(false)} />}
       </>
-    );
-  }
-  return <Dock root={canvas.root} panels={project.panels} focusedGroup={ui.focusedGroup} onFocusGroup={ui.setFocusedGroup} />;
+  );
 }

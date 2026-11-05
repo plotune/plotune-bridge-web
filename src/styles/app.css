@@ -2311,14 +2311,14 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
   .bw-top-end > .bw-icon-button:not(.bw-capture):not(.bw-record), .bw-top-end > .bw-command-pill, .bw-top-end > .bw-top-divider, .bw-top-end .bw-record-status { display: none; }
   /* U4: keep the recording-format chooser reachable on a phone. Short codes ("ASC") fit the
      crowded top bar; give the select a 44 px touch target like the other phone controls. */
-  .bw-top-end .bw-format-select { min-height: 44px; height: 44px; max-width: 84px; }
+  .bw-top-end .bw-format-select { min-height: 44px; height: 44px; width: 60px; max-width: 60px; padding-left: 4px; padding-right: 4px; }
   .bw-top-end .bw-capture-timer { display: none; }
   .bw-canvas-tabs { flex: 1; min-width: 0; }
   .bw-segmented { flex: 0 1 auto; }
   .bw-segmented button { min-height: 32px; }
   .bw-topbar .bw-icon-button { width: 44px; height: 44px; min-height: 44px; }
 
-  .bw-topbar-account-button { max-width: 96px; }
+  .bw-topbar-account-button { max-width: 64px; min-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bw-main { padding: 0 6px 0; gap: 6px; }
   .bw-group { border-radius: 12px; }
   .bw-phone-switcher { align-items: center; gap: 6px; padding: 8px 4px calc(8px + env(safe-area-inset-bottom)); background: transparent; }
