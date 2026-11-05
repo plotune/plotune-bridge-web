@@ -230,6 +230,17 @@ export function TracePanel() {
   const frames = trace.frameCount;
   const shownFrames = entries ? entries.filter((e) => !e.signal && trace.at(e.index).kind === 'frame').length : frames;
   const droppedTotal = Object.values(state.droppedReported).reduce((a, b) => a + b, 0);
+  // BWEB-042 rev 1 / O9: the empty state is a real ARIA row, so the body rowgroup always owns a row
+  // (axe aria-required-children) and a screen reader finds the message when navigating the table.
+  const emptyMessage = active && frames > 0 && shownFrames === 0
+    ? 'No frames match this filter.'
+    : frames === 0
+      ? state.capturing
+        ? 'Waiting for frames…'
+        : slots.length === 0
+          ? 'No frames yet. Add a device when you’re ready to capture.'
+          : 'No frames yet. Set a bit rate on a channel you want to use, then choose Start capture.'
+      : null;
   return (
     <Panel
       id="trace"
@@ -350,12 +361,17 @@ export function TracePanel() {
           }}
           tabIndex={0}
         >
-          <div className="bw-trace-canvas" style={{ height: total * ROW_HEIGHT }}>
+          {/* The canvas only sizes the virtualised rows. role="presentation" keeps this wrapper out of
+              the ARIA table tree so its rows are owned by the rowgroup (BWEB-042 rev 1 / O9). */}
+          <div className="bw-trace-canvas" style={{ height: total * ROW_HEIGHT }} role="presentation">
             {rows}
           </div>
+          {emptyMessage && (
+            <div className="bw-empty bw-trace-empty" role="row" data-testid="trace-empty">
+              <span role="cell">{emptyMessage}</span>
+            </div>
+          )}
         </div>
-        {active && frames > 0 && shownFrames === 0 && <p className="bw-empty bw-trace-empty">No frames match this filter.</p>}
-        {frames === 0 && <p className="bw-empty bw-trace-empty">{state.capturing ? 'Waiting for frames…' : slots.length === 0 ? 'No frames yet. Add a device when you’re ready to capture.' : 'No frames yet. Set a bit rate on a channel you want to use, then choose Start capture.'}</p>}
       </div>
     </Panel>
   );
