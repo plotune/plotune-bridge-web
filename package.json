@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:virtual": "playwright test --config playwright.virtual.config.ts",
+    "test:virtual:can": "scripts/run-virtual-can-integration.sh",
     "contract:sync": "node scripts/sync-contract.mjs",
     "contract:verify": "node scripts/sync-contract.mjs --verify",
     "screenshots": "playwright test --config playwright.screenshots.config.ts"

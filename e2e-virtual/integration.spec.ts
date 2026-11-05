@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import WebSocket from 'ws';
-import { connected, openLocalAddressForm } from '../e2e/helpers';
+import { closeDialog, connected, configureBothChannels, openDeviceSettings, openLocalAddressForm } from '../e2e/helpers';
 import { GeneratorControl } from './generatorControl';
 
 const env = {
@@ -26,8 +26,7 @@ test.describe('nexus virtual device over WebSocket (2 channels, seeded generator
     await connected(page, env.virtual!);
     await stopIfCapturing(page);
     await expect(page.getByTestId('device-chip')).toContainText('virtual-bridge-can-0001');
-    await page.getByLabel('CAN1 bit rate').selectOption('500000');
-    await page.getByLabel('CAN2 bit rate').selectOption('500000');
+    await configureBothChannels(page, '500000');
     await page.getByRole('button', { name: 'Start capture' }).click();
 
     const rows = page.locator('[role=row][data-channel]');
@@ -78,14 +77,14 @@ test.describe('two real virtual devices in one workspace', () => {
     for (const n of [1, 2]) {
       await page.getByRole('button', { name: `Select Bridge ${n}` }).click();
       await stopIfCapturing(page);
-      await page.getByLabel('CAN1 bit rate').selectOption('500000');
-      await page.getByLabel('CAN2 bit rate').selectOption('500000');
+      await configureBothChannels(page, '500000', `Bridge ${n}`);
     }
     await page.getByRole('button', { name: 'Start capture' }).click();
     const rows = page.locator('[role=row][data-channel]');
     await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(10);
-    const devices = await rows.evaluateAll((els) => els.map((e) => e.querySelector('.bw-c-dev')?.textContent ?? ''));
-    expect(new Set(devices)).toEqual(new Set(['Bridge 1', 'Bridge 2']));
+    const rowsByDevice = await rows.allTextContents();
+    expect(rowsByDevice.some((row) => row.includes('Bridge 1'))).toBe(true);
+    expect(rowsByDevice.some((row) => row.includes('Bridge 2'))).toBe(true);
 
     // The send panel acts on the selected device (Bridge 2 is selected): only its loopback answers.
     await page.getByLabel('ID (hex)').fill('5A5');
@@ -106,8 +105,7 @@ test.describe('device with a tiny buffer and a fast generator', () => {
   test('reports the frames the device had to drop, per channel, in the trace header, the markers and the counters', async ({ page }) => {
     await connected(page, env.overflow!);
     await stopIfCapturing(page);
-    await page.getByLabel('CAN1 bit rate').selectOption('1000000');
-    await page.getByLabel('CAN2 bit rate').selectOption('1000000');
+    await configureBothChannels(page, '1000000');
     await page.getByRole('button', { name: 'Start capture' }).click();
     await expect(page.locator('#panel-trace')).toContainText(/[1-9][\d,]* frames dropped/, { timeout: 15_000 });
     const stats = page.getByTestId('stats-table');
@@ -130,7 +128,9 @@ test.describe('Step 3a bench: synthetic ECU behind the paired Bridge endpoint', 
     const control = await GeneratorControl.open(env.benchControl!);
     await control.enableEcu();
     await connected(page, env.bench!);
-    await expect(page.getByLabel('CAN1 bit rate')).toHaveValue('1000000');
+    const settings = await openDeviceSettings(page);
+    await expect(settings.getByLabel('CAN1 bit rate')).toHaveValue('1000000');
+    await closeDialog(page);
     await expect(page.getByRole('button', { name: 'Stop capture' })).toBeVisible(); // the bench leaves capture armed; the page shows it
 
     const periodic = page.locator('[role=row][data-channel="1"]').filter({ hasText: /CAN1\s*180/ });
@@ -140,8 +140,12 @@ test.describe('Step 3a bench: synthetic ECU behind the paired Bridge endpoint', 
 
     await page.getByRole('button', { name: 'Diagnostics' }).click();
     const fill = (name: string, value: string) => page.getByRole('textbox', { name, exact: true }).fill(value);
-    await page.getByRole('textbox', { name: /^Request ID \(hex\)/ }).fill('700');
-    await page.getByRole('textbox', { name: /^Response ID \(hex\)/ }).fill('708');
+    await page.getByRole('button', { name: 'Diagnostic link settings' }).first().click();
+    const linkSettings = page.getByRole('dialog');
+    await linkSettings.getByRole('button', { name: 'Edit settings' }).click();
+    await linkSettings.getByRole('textbox', { name: /^Request ID \(hex\)/ }).fill('700');
+    await linkSettings.getByRole('textbox', { name: /^Response ID \(hex\)/ }).fill('708');
+    await closeDialog(page);
     const udsLog = page.getByTestId('log-diagnostic-log');
     await page.getByRole('button', { name: 'Start session' }).click();
     await expect(udsLog).toContainText('Session 03 active · P2 50 ms · P2* 5000 ms');
@@ -215,11 +219,13 @@ test.describe('independent channel and reload against a fresh virtual Bridge', (
 
   test('CAN1 captures/sends with CAN2 unset; reload reads the still-armed device without reconfiguration', async ({ page }) => {
     await connected(page, env.single!);
-    await expect(page.getByLabel('CAN2 bit rate')).toHaveValue('');
-    await page.getByLabel('CAN1 bit rate').selectOption('500000');
+    let settings = await openDeviceSettings(page);
+    await expect(settings.getByLabel('CAN2 bit rate')).toHaveValue('');
+    await settings.getByLabel('CAN1 bit rate').selectOption('500000');
+    await closeDialog(page);
     await page.getByRole('button', { name: 'Start capture', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Stop capture' })).toBeVisible();
-    await expect(page.getByTestId('channel-2')).toContainText('Idle');
+    await expect(page.getByText('No bit rate', { exact: true })).toBeVisible();
     await expect(page.getByTestId('action-error')).toHaveCount(0);
     await expect.poll(() => page.locator('[role=row][data-channel="1"]').count()).toBeGreaterThan(5);
     await expect(page.locator('[role=row][data-channel="2"]')).toHaveCount(0);
@@ -230,19 +236,16 @@ test.describe('independent channel and reload against a fresh virtual Bridge', (
     await page.getByLabel('Send channel').selectOption('2');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await page.getByLabel('Send channel').selectOption('1');
-    await page.screenshot({ path: 'docs/screenshots/independent-can1.png' });
-    await page.getByRole('button', { name: 'Maximize Channels' }).click();
-    await page.screenshot({ path: 'docs/screenshots/independent-channels.png' });
-    await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Device', exact: true }).click();
     await page.reload();
-    await expect(page.locator('main')).toHaveAttribute('data-page', 'device');
+    await expect(page.getByRole('navigation', { name: 'Canvases' }).getByRole('button', { name: 'Capture', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByTestId('device-chip')).toContainText('Disconnected');
-    await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
+    await page.locator('main').getByRole('button', { name: 'Reconnect', exact: true }).click();
     await expect(page.getByTestId('device-chip')).toContainText('Connected');
-    await page.getByRole('button', { name: 'Capture', exact: true }).click();
-    await expect(page.getByLabel('CAN1 bit rate')).toHaveValue('500000');
-    await expect(page.getByLabel('CAN2 bit rate')).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Stop capture' })).toBeVisible();
+    settings = await openDeviceSettings(page);
+    await expect(settings.getByLabel('CAN1 bit rate')).toHaveValue('500000');
+    await expect(settings.getByLabel('CAN2 bit rate')).toHaveValue('');
+    await closeDialog(page);
     await expect(page.getByRole('button', { name: 'Stop capture' })).toBeVisible();
     await page.getByRole('button', { name: 'Stop capture' }).click();
   });
