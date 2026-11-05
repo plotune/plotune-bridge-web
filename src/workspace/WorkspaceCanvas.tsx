@@ -175,7 +175,6 @@ export function CanvasTabs() {
   const toast = useToast();
   const menu = useContextMenu('Canvas');
   const phone = usePhone();
-  const [choosing, setChoosing] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const del = useCallback((id: string) => {
     const name = project.canvases.find((c) => c.id === id)?.name ?? 'canvas';
@@ -191,30 +190,7 @@ export function CanvasTabs() {
     { label: 'Delete canvas', onSelect: () => del(id) },
   ]);
   const renamingCanvas = project.canvases.find((c) => c.id === renaming);
-  const active = project.canvases.find((c) => c.id === project.active)!;
-  if (phone) return (
-    <nav className="bw-canvas-picker" aria-label="Canvases">
-      <button type="button" className="bw-button bw-canvas-picker-trigger" aria-label={`Choose canvas: ${active.name}`} aria-haspopup="dialog" aria-expanded={choosing} onClick={() => setChoosing(true)}>
-        <span>{active.name}</span><span aria-hidden="true">▾</span>
-      </button>
-      {choosing && <Modal title="Canvases" onClose={() => setChoosing(false)}>
-        <ul className="bw-canvas-picker-list">
-          {project.canvases.map((c) => <li key={c.id}>
-            <button type="button" className="bw-button" aria-label={`Open canvas ${c.name}`} aria-current={c.id === project.active ? 'page' : undefined} onClick={() => { store.setActive(c.id); setChoosing(false); }}>{c.name}</button>
-          </li>)}
-        </ul>
-        <div className="bw-layout-actions">
-          <button type="button" className="bw-button" onClick={() => { setChoosing(false); ui.openNewCanvas(); }} disabled={project.canvases.length >= MAX_CANVASES}>New canvas</button>
-          <button type="button" className="bw-button" onClick={() => { setChoosing(false); setRenaming(active.id); }}>Rename canvas</button>
-          <button type="button" className="bw-button" onClick={() => { store.duplicateCanvas(active.id); setChoosing(false); }} disabled={project.canvases.length >= MAX_CANVASES}>Duplicate canvas</button>
-          <button type="button" className="bw-button" onClick={() => store.moveCanvas(active.id, -1)} disabled={project.canvases[0]?.id === active.id}>Move canvas left</button>
-          <button type="button" className="bw-button" onClick={() => store.moveCanvas(active.id, 1)} disabled={project.canvases.at(-1)?.id === active.id}>Move canvas right</button>
-          <button type="button" className="bw-button" onClick={() => del(active.id)} disabled={project.canvases.length === 1}>Delete canvas</button>
-        </div>
-      </Modal>}
-      {renamingCanvas && <NameDialog title="Rename canvas" label="Canvas name" initial={renamingCanvas.name} onSubmit={(v) => store.renameCanvas(renamingCanvas.id, v)} onClose={() => { setRenaming(null); setChoosing(true); }} />}
-    </nav>
-  );
+  if (phone) return <PhoneCanvasPicker onDelete={del} />;
   return (
     <div className="bw-canvas-tabs">
       <nav className="bw-segmented" aria-label="Canvases">
@@ -249,6 +225,40 @@ export function CanvasTabs() {
       {menu.menu}
       {renamingCanvas && <NameDialog title="Rename canvas" label="Canvas name" initial={renamingCanvas.name} onSubmit={(v) => store.renameCanvas(renamingCanvas.id, v)} onClose={() => setRenaming(null)} />}
     </div>
+  );
+}
+
+/** Unmount picker dialogs when leaving the phone layout. */
+function PhoneCanvasPicker({ onDelete }: { onDelete: (id: string) => void }) {
+  const store = useProjectStore();
+  const { project } = useProject();
+  const ui = useWorkspaceUi();
+  const [choosing, setChoosing] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const renamingCanvas = project.canvases.find((c) => c.id === renaming);
+  const active = project.canvases.find((c) => c.id === project.active)!;
+  return (
+    <nav className="bw-canvas-picker" aria-label="Canvases">
+      <button type="button" className="bw-button bw-canvas-picker-trigger" aria-label={`Choose canvas: ${active.name}`} aria-haspopup="dialog" aria-expanded={choosing} onClick={() => setChoosing(true)}>
+        <span>{active.name}</span><span aria-hidden="true">▾</span>
+      </button>
+      {choosing && <Modal title="Canvases" onClose={() => setChoosing(false)}>
+        <ul className="bw-canvas-picker-list">
+          {project.canvases.map((c) => <li key={c.id}>
+            <button type="button" className="bw-button" aria-label={`Open canvas ${c.name}`} aria-current={c.id === project.active ? 'page' : undefined} onClick={() => { store.setActive(c.id); setChoosing(false); }}>{c.name}</button>
+          </li>)}
+        </ul>
+        <div className="bw-layout-actions">
+          <button type="button" className="bw-button" onClick={() => { setChoosing(false); ui.openNewCanvas(); }} disabled={project.canvases.length >= MAX_CANVASES}>New canvas</button>
+          <button type="button" className="bw-button" onClick={() => { setChoosing(false); setRenaming(active.id); }}>Rename canvas</button>
+          <button type="button" className="bw-button" onClick={() => { store.duplicateCanvas(active.id); setChoosing(false); }} disabled={project.canvases.length >= MAX_CANVASES}>Duplicate canvas</button>
+          <button type="button" className="bw-button" onClick={() => store.moveCanvas(active.id, -1)} disabled={project.canvases[0]?.id === active.id}>Move canvas left</button>
+          <button type="button" className="bw-button" onClick={() => store.moveCanvas(active.id, 1)} disabled={project.canvases.at(-1)?.id === active.id}>Move canvas right</button>
+          <button type="button" className="bw-button" onClick={() => onDelete(active.id)} disabled={project.canvases.length === 1}>Delete canvas</button>
+        </div>
+      </Modal>}
+      {renamingCanvas && <NameDialog title="Rename canvas" label="Canvas name" initial={renamingCanvas.name} onSubmit={(v) => store.renameCanvas(renamingCanvas.id, v)} onClose={() => { setRenaming(null); setChoosing(true); }} />}
+    </nav>
   );
 }
 
@@ -292,8 +302,8 @@ function PhoneLayoutEditor({ panelId, onClose }: { panelId: string; onClose: () 
       {dividers.map(({ split, index }, i) => <div className="bw-layout-divider" key={`${split.id}-${index}`}>
         <span>Divider {i + 1} · {split.dir === 'row' ? 'left / right' : 'top / bottom'} · {Math.round(split.sizes[index]! * 100)}%</span>
         <div className="bw-layout-actions">
-          <button type="button" className="bw-button" aria-label={`Shrink first panel at divider ${i + 1}`} disabled={split.sizes[index]! <= 0.100001} onClick={() => store.resize(split.id, index, -0.05)}>−5%</button>
-          <button type="button" className="bw-button" aria-label={`Grow first panel at divider ${i + 1}`} disabled={split.sizes[index + 1]! <= 0.100001} onClick={() => store.resize(split.id, index, 0.05)}>+5%</button>
+          <button type="button" className="bw-button" aria-label={`Shrink first panel at divider ${i + 1} (−5%)`} disabled={split.sizes[index]! <= 0.100001} onClick={() => store.resize(split.id, index, -0.05)}>−5%</button>
+          <button type="button" className="bw-button" aria-label={`Grow first panel at divider ${i + 1} (+5%)`} disabled={split.sizes[index + 1]! <= 0.100001} onClick={() => store.resize(split.id, index, 0.05)}>+5%</button>
         </div>
       </div>)}
     </fieldset>}
