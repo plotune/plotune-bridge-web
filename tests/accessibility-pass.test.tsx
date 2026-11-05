@@ -100,7 +100,8 @@ describe('landmarks and live regions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a device' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with Plotune' }));
     await waitFor(() => expect(rig.sso.redirect).toHaveBeenCalled());
-    expect(screen.getByRole('status')).toHaveTextContent('Signing you in');
+    // An interactive sign-in is taking the user to plotune.net, so the honest pre-redirect copy is announced (O7).
+    expect(screen.getByRole('status')).toHaveTextContent('Taking you to Plotune to sign in');
     expect(screen.queryByRole('button', { name: 'Start capture' })).toBeNull();
   });
 

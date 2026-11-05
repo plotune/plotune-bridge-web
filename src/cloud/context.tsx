@@ -24,6 +24,8 @@ import {
   type SignInPrompt,
   type SsoBrowser,
 } from './sso';
+import { browserPaintScheduler, type PaintScheduler } from './paint';
+import { TAKING_TO_PLOTUNE_MESSAGE } from '../components/SignInPending';
 
 export const SELECTED_PROJECT_KEY = 'bw.cloud.project';
 const MAX_ID_LENGTH = 128;
@@ -39,6 +41,8 @@ export type CloudStatus = 'signed-out' | 'signing-in' | 'signed-in';
 
 export interface CloudContextValue {
   status: CloudStatus;
+  /** The signing-in screen copy, or null for the default "Signing you in" wording (BWEB-042 O7). */
+  pendingMessage: string | null;
   /** The username from the last successful sign-in, while signed in. */
   username: string | null;
   /** A fixed notice about a failed or abandoned sign-in, or null. */
@@ -116,12 +120,17 @@ export interface CloudProviderProps {
   client?: CloudClient;
   session?: CloudSession;
   sso?: SsoBrowser;
+  /** Injected by tests to step the paint deterministically; the app uses the browser's animation frames. */
+  paintScheduler?: PaintScheduler;
 }
 
-export function CloudProvider({ children, client = defaultClient, session = cloudSession, sso = defaultSso }: CloudProviderProps) {
+export function CloudProvider({ children, client = defaultClient, session = cloudSession, sso = defaultSso, paintScheduler = browserPaintScheduler }: CloudProviderProps) {
   // The token is read from the session on every render; subscribing keeps the status current when it expires or is cleared.
   const signedIn = useSyncExternalStore(session.subscribe, () => session.getToken() !== null);
   const [redirecting, setRedirecting] = useState(false);
+  // The copy for the brief pre-redirect window; null keeps the "Signing you in" wording for the automatic attempt and
+  // the return from plotune.net. Kept separate from `redirecting` so an automatic attempt never claims we are leaving.
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [exchanging, setExchanging] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [signInNotice, setSignInNotice] = useState<string | null>(null);
@@ -208,21 +217,29 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   /**
    * Sends the browser to plotune.net with a fresh PKCE challenge and state. Returns false when nothing was sent: the
    * verifier and state could not be kept for the return trip, or the browser refused to make the random values.
+   * `takingToPlotune` marks the brief pre-redirect window so the pending screen uses its honest wording (BWEB-042 O7).
    */
   const redirectToPlotune = useCallback(
-    async (prompt?: SignInPrompt): Promise<boolean> => {
+    async (prompt?: SignInPrompt, options?: { takingToPlotune?: boolean }): Promise<boolean> => {
       try {
         const pkce = await createPkce();
         const state = randomState();
         if (!savePending(sso.storage, { verifier: pkce.verifier, state })) return false;
+        // Commit an honest, announced pending state, then let the browser actually paint it before we navigate away.
+        // A refused redirect (no storage, unsupported origin) returns before this point, so it never shows a spinner.
+        setPendingMessage(options?.takingToPlotune ? TAKING_TO_PLOTUNE_MESSAGE : null);
         setRedirecting(true);
+        await paintScheduler.afterPaint();
         sso.redirect(buildAuthorizeUrl({ challenge: pkce.challenge, state, prompt }));
         return true;
       } catch {
+        // The navigation could not be started, or was cancelled/handled in-page: recover, never a stuck spinner.
+        setPendingMessage(null);
+        setRedirecting(false);
         return false;
       }
     },
-    [sso],
+    [sso, paintScheduler],
   );
 
   const startSignIn = useCallback(
@@ -237,7 +254,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       clearSignedOutThisTab(sso.storage);
       clearSilentFailed(sso.storage);
       setSignInNotice(null);
-      const started = await redirectToPlotune(prompt);
+      const started = await redirectToPlotune(prompt, { takingToPlotune: true });
       if (!started) setSignInNotice(sso.storage === null ? SIGN_IN_NEEDS_STORAGE : SIGN_IN_NOT_COMPLETED);
     },
     [sso, redirectToPlotune],
@@ -324,7 +341,10 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   // A page restored from the back/forward cache may still show "signing in" from a redirect that was abandoned.
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) setRedirecting(false);
+      if (event.persisted) {
+        setRedirecting(false);
+        setPendingMessage(null);
+      }
     };
     window.addEventListener('pageshow', onPageShow);
     return () => window.removeEventListener('pageshow', onPageShow);
@@ -335,6 +355,8 @@ export function CloudProvider({ children, client = defaultClient, session = clou
     markSignedOutThisTab(sso.storage);
     setUsername(null);
     setSignInNotice(null);
+    setPendingMessage(null);
+    setRedirecting(false);
     setProjectState({ items: [], loading: false, error: null });
     deviceRequest.current = null;
     setDeviceState({ items: [], loading: false, error: null, projectId: null, loaded: false });
@@ -346,6 +368,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
     callbackRun.current += 1;
     clearPending(sso.storage);
     markSilentFailed(sso.storage);
+    setPendingMessage(null);
     setRedirecting(false);
     setExchanging(false);
     setBootPending(false);
@@ -382,6 +405,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
   const value = useMemo<CloudContextValue>(
     () => ({
       status,
+      pendingMessage,
       username: signedIn ? username : null,
       signInNotice,
       dismissSignInNotice,
@@ -403,7 +427,7 @@ export function CloudProvider({ children, client = defaultClient, session = clou
       refreshDevices,
       createPairingCode,
     }),
-    [status, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, generationTick, readSessionGeneration, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
+    [status, pendingMessage, username, signInNotice, dismissSignInNotice, startSignIn, signOut, signInAvailable, generationTick, readSessionGeneration, continueWithoutSignIn, signedIn, projectState, selectedProjectId, selectProject, deviceState, refreshDevices, createPairingCode],
   );
 
   return <CloudContext.Provider value={value}>{children}</CloudContext.Provider>;
