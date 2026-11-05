@@ -190,7 +190,7 @@ export function ConnectView({ browser, pageOrigin }: { browser: BrowserInfo; pag
               </button>
             </div>
             <p id="address-hint" className="bw-hint">
-              For example 192.168.1.50:9101. Use a wss:// address if your device offers a secure one.
+              The port is required. For example 192.168.1.50:9101, or wss://192.168.1.50:9443 if your device offers a secure address.
             </p>
           </form>
           <details className="bw-details" open={!state.notice}>

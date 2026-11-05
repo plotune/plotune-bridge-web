@@ -80,10 +80,51 @@ describe('device address parsing', () => {
   ])('%s', (input, url, scheme, loopback) => {
     expect(parseTarget(input)).toMatchObject({ ok: true, url, scheme, loopback });
   });
-  it.each(['', '   ', 'http://x', 'ftp://x', 'ws://', 'ws://user:pw@host:1', 'not a url ::'])('rejects %j', (input) => {
+  it.each(['', '   ', 'http://x', 'ftp://x', 'ws://', 'ws://user:pw@host:1', 'not a url ::', '192.168.1.50', 'ws://192.168.1.50', 'wss://192.168.1.50'])('rejects %j', (input) => {
     const p = parseTarget(input);
     expect(p.ok).toBe(false);
     expect(p.error).toBeTruthy();
+  });
+});
+
+// BWEB-042 rev 1 / O8 — Postel's law: a bare host (or a ws:// / wss:// address with no port) used to silently
+// become ws://host:80. Direct targets now require an explicit port; there is no default and no special case.
+describe('O8: direct targets require an explicit port', () => {
+  const MISSING_PORT = 'Add the port, for example 192.168.1.50:9101.';
+  it.each([
+    '192.168.1.50',       // bare host: used to silently become ws://host:80
+    'bridge.local',
+    'ws://192.168.1.50',  // ws:// with no port
+    'wss://192.168.1.50', // wss:// with no port: same single rule, no 443 default invented
+    'ws://localhost',
+    'wss://[::1]',
+    'localhost',
+  ])('rejects %j with the port hint', (input) => {
+    const p = parseTarget(input);
+    expect(p.ok).toBe(false);
+    expect(p.error).toBe(MISSING_PORT);
+    expect(p.url).toBe('');
+    expect(p.scheme).toBeNull();
+  });
+  it('accepts an explicit port on ws://, wss:// and a bare host', () => {
+    expect(parseTarget('192.168.1.50:9101')).toMatchObject({ ok: true, url: 'ws://192.168.1.50:9101', scheme: 'ws' });
+    expect(parseTarget('wss://192.168.1.50:9443')).toMatchObject({ ok: true, url: 'wss://192.168.1.50:9443', scheme: 'wss' });
+    expect(parseTarget('ws://[::1]:9101')).toMatchObject({ ok: true, url: 'ws://[::1]:9101', loopback: true });
+    expect(parseTarget('ws://localhost:9101')).toMatchObject({ ok: true, loopback: true });
+  });
+  it('keeps an explicitly typed default port so the result is itself valid (idempotent)', () => {
+    const ws = parseTarget('192.168.1.50:80');
+    expect(ws).toMatchObject({ ok: true, url: 'ws://192.168.1.50:80' });
+    expect(parseTarget(ws.url)).toMatchObject({ ok: true, url: 'ws://192.168.1.50:80' });
+    const wss = parseTarget('wss://192.168.1.50:443');
+    expect(wss).toMatchObject({ ok: true, url: 'wss://192.168.1.50:443' });
+    expect(parseTarget(wss.url)).toMatchObject({ ok: true, url: 'wss://192.168.1.50:443' });
+  });
+  it('a :digits in the path is not a port', () => {
+    expect(parseTarget('ws://192.168.1.50/path:9101').ok).toBe(false);
+  });
+  it('does not apply the direct-address port rule to remote targets', () => {
+    expect(parseTarget('remote:proj_1/dev-1')).toMatchObject({ ok: true, remote: true });
   });
 });
 

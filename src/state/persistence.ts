@@ -35,7 +35,12 @@ const record = (v: unknown): v is Record<string, unknown> => v !== null && typeo
 const pages = Object.keys(PANEL_IDS) as PageId[];
 export const isPage = (v: unknown): v is PageId => pages.includes(v as PageId);
 
-/** Only ordinary root device addresses and well-formed remote targets are remembered. Custom paths, queries and fragments may contain secrets. */
+/**
+ * Only ordinary root device addresses and well-formed remote targets are remembered. Custom paths, queries and
+ * fragments may contain secrets. A direct address without a port now fails `parseTarget` (O8), so an old saved
+ * bare/`ws://` address simply returns null here rather than throwing: `decode` falls back to a clean shell, and
+ * the validation error is shown when the address is re-entered with its port. No crash on legacy data.
+ */
 export function rememberableTarget(input: unknown): string | null {
   if (typeof input !== 'string' || input.length > 2048) return null;
   const target = parseTarget(input);

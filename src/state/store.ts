@@ -217,10 +217,13 @@ export class WorkspaceStore {
         notice: {
           kind: 'blocked-by-browser',
           severity: 'error',
-          title: 'This address cannot be opened from this browser',
+          // A parse/validation failure (for example a missing port) is about the address, not the browser; keep the
+          // message consistent with the hint and with parseTarget's error. The kind stays blocked-by-browser so the
+          // form offers only "Change address" (a useless "Try again" of the same bad address is not shown).
+          title: target.ok ? 'This address cannot be opened from this browser' : 'Check the device address',
           summary: policy.reason ?? 'The address is not valid.',
           steps: [],
-          technical: `browser: ${this.env.browser.name} (${this.env.browser.family}) · page secure: ${this.env.pageIsSecure}`,
+          technical: target.ok ? `browser: ${this.env.browser.name} (${this.env.browser.family}) · page secure: ${this.env.pageIsSecure}` : '',
         },
       });
       return;
