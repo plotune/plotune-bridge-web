@@ -2233,7 +2233,10 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
 @media (max-width: 700px) {
   :root { --size-topbar: 52px; }
   .bw-topbar { padding: 0 6px; gap: 2px; }
-  .bw-top-end > .bw-icon-button:not(.bw-capture):not(.bw-record), .bw-top-end > .bw-command-pill, .bw-top-end > .bw-top-divider, .bw-top-end select, .bw-top-end .bw-record-status { display: none; }
+  .bw-top-end > .bw-icon-button:not(.bw-capture):not(.bw-record), .bw-top-end > .bw-command-pill, .bw-top-end > .bw-top-divider, .bw-top-end .bw-record-status { display: none; }
+  /* U4: keep the recording-format chooser reachable on a phone. Short codes ("ASC") fit the
+     crowded top bar; give the select a 44 px touch target like the other phone controls. */
+  .bw-top-end .bw-format-select { min-height: 44px; height: 44px; max-width: 84px; }
   .bw-top-end .bw-capture-timer { display: none; }
   .bw-canvas-tabs { flex: 1; min-width: 0; }
   .bw-segmented { flex: 0 1 auto; }
