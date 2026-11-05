@@ -199,7 +199,7 @@ describe('signed-in account pane', () => {
     const rig = setup();
     openAccountPane();
     await signIn(rig);
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Bridge-A' }));
     expect(rig.transportFactory).toHaveBeenCalledWith('remote:proj-1/dev-1');
   });
 
@@ -212,7 +212,7 @@ describe('signed-in account pane', () => {
     });
     openAccountPane();
     await signIn(rig);
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Bridge-A' }));
     expect(await screen.findByText('This device is not paired to the project')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByText('This device is not paired to the project')).toBeNull();
@@ -224,7 +224,7 @@ describe('signed-in account pane', () => {
     openAccountPane();
     await signIn(rig);
     await screen.findByText('Bridge-A');
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out of your Plotune account' }));
     expect(screen.getByRole('heading', { name: 'Sign in to connect your Bridge' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Sign in with Plotune' })).toBeVisible();
     expect(screen.queryByText('Bridge-A')).toBeNull();
@@ -260,7 +260,7 @@ describe('adding a device with a pairing code', () => {
   async function startPairing(rig: Rig): Promise<void> {
     await signIn(rig);
     await screen.findByText('Bridge-A');
-    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device' }));
+    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device with a pairing code' }));
     await screen.findByText('plt_pair_first');
   }
 
@@ -270,7 +270,7 @@ describe('adding a device with a pairing code', () => {
     vi.mocked(rig.client.listDevices).mockImplementation(() => new Promise<CloudDevice[]>((resolve) => { release = resolve; }));
     openAccountPane();
     await signIn(rig);
-    const add = pairPane().getByRole('button', { name: 'Add a device' });
+    const add = pairPane().getByRole('button', { name: 'Add a device with a pairing code' });
     await waitFor(() => expect(add).toBeDisabled());
     fireEvent.click(add);
     expect(rig.client.createPairingToken).not.toHaveBeenCalled();
@@ -289,12 +289,12 @@ describe('adding a device with a pairing code', () => {
     vi.mocked(rig.client.listDevices).mockRejectedValueOnce(new CloudError('network'));
     openAccountPane();
     await signIn(rig);
-    const add = pairPane().getByRole('button', { name: 'Add a device' });
-    const retry = await screen.findByRole('button', { name: 'Try again' });
+    const add = pairPane().getByRole('button', { name: 'Add a device with a pairing code' });
+    const retry = await screen.findByRole('button', { name: 'Try again: reload devices' });
     expect(add).toBeDisabled();
     fireEvent.click(retry);
     await screen.findByText('Bridge-A');
-    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again: reload devices' })).toBeNull();
     await waitFor(() => expect(add).toBeEnabled());
   });
 
@@ -308,7 +308,7 @@ describe('adding a device with a pairing code', () => {
     vi.mocked(rig.client.listDevices).mockImplementation(
       () => new Promise<CloudDevice[]>((resolve) => { calls += 1; setTimeout(() => resolve([BRIDGE_A, BRIDGE_B]), 4000); }),
     );
-    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device' }));
+    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device with a pairing code' }));
     await screen.findByText('plt_pair_first');
     await tick(3000);
     await tick(3000);
@@ -364,9 +364,9 @@ describe('adding a device with a pairing code', () => {
     const rig = setup();
     openAccountPane();
     await startPairing(rig);
-    fireEvent.click(within(screen.getByRole('group', { name: 'Pairing code' })).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Pairing code' })).getByRole('button', { name: 'Cancel pairing' }));
     expect(screen.queryByText('plt_pair_first')).toBeNull();
-    expect(pairPane().getByRole('button', { name: 'Add a device' })).toBeEnabled();
+    expect(pairPane().getByRole('button', { name: 'Add a device with a pairing code' })).toBeEnabled();
   });
 
   it('a project without owner or admin rights gets a clear message instead of a code', async () => {
@@ -378,7 +378,7 @@ describe('adding a device with a pairing code', () => {
     openAccountPane();
     await signIn(rig);
     await screen.findByText('Bridge-A');
-    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device' }));
+    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device with a pairing code' }));
     expect(await screen.findByText('Only project owners and admins can add devices.')).toBeVisible();
     expect(screen.queryByText(/plt_pair_/)).toBeNull();
   });
@@ -437,7 +437,7 @@ describe('the project ID for the device setup page', () => {
     openAccountPane();
     await signIn(rig);
     await screen.findByText('Bridge-A');
-    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device' }));
+    fireEvent.click(pairPane().getByRole('button', { name: 'Add a device with a pairing code' }));
     await screen.findByText('plt_pair_first');
     expect(screen.getByText('Enter this project ID and the code on your device.')).toBeVisible();
     expect(screen.getAllByRole('button', { name: 'Copy project ID' })).toHaveLength(1);
@@ -471,9 +471,9 @@ describe('device list states for a paired device', () => {
     openAccountPane();
     await signIn(rig);
     const list = await screen.findByRole('list', { name: 'Devices in this project' });
-    fireEvent.click(within(list).getByRole('button', { name: 'Connect' }));
+    fireEvent.click(within(list).getByRole('button', { name: 'Connect Bridge-A' }));
     expect(await within(await listedRow()).findByText(/Not reachable · tried just now/)).toBeVisible();
-    expect(within(await listedRow()).getByRole('button', { name: 'Try again' })).toBeEnabled();
+    expect(within(await listedRow()).getByRole('button', { name: 'Try again: reconnect Bridge-A' })).toBeEnabled();
     expect(within(await listedRow()).queryByText(/Paired/)).toBeNull();
   });
 
@@ -482,11 +482,11 @@ describe('device list states for a paired device', () => {
     openAccountPane();
     await signIn(rig);
     const list = await screen.findByRole('list', { name: 'Devices in this project' });
-    fireEvent.click(within(list).getByRole('button', { name: 'Connect' }));
+    fireEvent.click(within(list).getByRole('button', { name: 'Connect Bridge-A' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
     const row = await listedRow();
     expect(within(row).getByText(/Paired/)).toBeVisible();
-    expect(within(row).getByRole('button', { name: 'Connect' })).toBeVisible();
+    expect(within(row).getByRole('button', { name: 'Connect Bridge-A' })).toBeVisible();
     expect(screen.queryByText(/Not reachable/)).toBeNull();
   });
 
@@ -495,10 +495,10 @@ describe('device list states for a paired device', () => {
     openAccountPane();
     await signIn(rig);
     const list = await screen.findByRole('list', { name: 'Devices in this project' });
-    fireEvent.click(within(list).getByRole('button', { name: 'Connect' }));
+    fireEvent.click(within(list).getByRole('button', { name: 'Connect Bridge-A' }));
     expect(await within(await listedRow()).findByText(/Not reachable/)).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out of your Plotune account' }));
     await signIn(rig);
     expect(within(await listedRow()).getByText(/Paired/)).toBeVisible();
     expect(screen.queryByText(/Not reachable/)).toBeNull();
