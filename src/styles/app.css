@@ -1139,11 +1139,26 @@ input[aria-invalid='true'] {
   .bw-panel.is-maximized {
     left: 12px;
   }
+  /* U1: on a narrow screen keep every Trace column at a readable width and scroll the table
+     sideways inside its panel (the same pattern the has-name table already used), instead of
+     squeezing ID / Type / Data into slivers. Before this, Type was hidden and Data clipped to
+     "D…" on a 390 px phone, so the primary content of a CAN tool could not be read. */
+  .bw-trace {
+    overflow-x: auto;
+    scrollbar-width: thin; /* a visible cue that the payload columns are off to the right */
+    scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+  }
+  .bw-trace::-webkit-scrollbar { height: 8px; }
+  .bw-trace::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.28); border-radius: 4px; }
+  .bw-trace-head,
+  .bw-trace-scroll {
+    min-width: 620px;
+  }
   .bw-trace-head,
   .bw-trace-row,
   .bw-trace.has-device .bw-trace-head,
   .bw-trace.has-device .bw-trace-row {
-    grid-template-columns: 84px 64px 84px 38px 32px minmax(0, 1fr);
+    grid-template-columns: 104px 72px 88px 92px 44px 40px minmax(0, 1fr);
     padding: 0 10px;
     column-gap: 8px;
   }
@@ -1163,8 +1178,19 @@ input[aria-invalid='true'] {
     flex-wrap: wrap;
     row-gap: 8px;
   }
+  /* U3: the panel tools used to wrap into a broken shape, with the full-screen icon orphaned on a
+     third line at the far left. Keep them on one tidy row that scrolls sideways if it must. */
   .bw-panel-tools {
-    flex-wrap: wrap;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-left: 0;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .bw-panel-tools > * {
+    flex: none;
   }
   .bw-device-tag {
     max-width: 100%;
@@ -1172,23 +1198,17 @@ input[aria-invalid='true'] {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .bw-trace-head .bw-c-type,
-  .bw-trace-row .bw-c-type {
-    display: none;
-  }
-  /* With a database the Name column stays; the table then scrolls sideways inside its panel, never the page. */
-  .bw-trace.has-name {
-    overflow-x: auto;
-  }
+  /* With a database the Name column stays; it needs one more column and a little more width.
+     Type is no longer hidden, so every narrow table keeps all of its columns. */
   .bw-trace.has-name .bw-trace-head,
   .bw-trace.has-name .bw-trace-scroll {
-    min-width: 640px;
+    min-width: 760px;
   }
   .bw-trace.has-name .bw-trace-head,
   .bw-trace.has-name .bw-trace-row,
   .bw-trace.has-name.has-device .bw-trace-head,
   .bw-trace.has-name.has-device .bw-trace-row {
-    grid-template-columns: 84px 64px 84px 150px 38px 32px minmax(0, 1fr);
+    grid-template-columns: 104px 72px 88px 150px 92px 44px 40px minmax(0, 1fr);
   }
   .bw-form-row {
     flex-direction: column;
@@ -1208,6 +1228,24 @@ input[aria-invalid='true'] {
   border-bottom: 1px solid var(--color-row-rule);
   color: var(--color-ink);
   font-size: 11px;
+}
+
+/* U1: a definite sideways-scroll cue on a phone. Chromium uses overlay scrollbars that do not
+   reserve space, so `scrollbar-width: thin` alone is not a reliable hint. Hidden on wide screens
+   where the whole table fits. */
+.bw-trace-scroll-hint {
+  display: none;
+}
+@media (max-width: 640px) {
+  .bw-trace-scroll-hint {
+    display: block;
+    margin: 0;
+    padding: 6px 10px;
+    background: var(--color-chrome);
+    border-bottom: 1px solid var(--color-row-rule);
+    color: var(--color-muted);
+    font-size: 11px;
+  }
 }
 
 /* The workspace is available before a device is added. */

@@ -329,6 +329,8 @@ export function TracePanel() {
           Rows are in the order they arrived here. Each device's time is relative to its own first frame; device clocks are not synchronised.
         </p>
       )}
+      {/* U1: on a phone the table scrolls sideways; overlay scrollbars may be invisible, so say so. */}
+      <p className="bw-trace-scroll-hint" data-testid="trace-scroll-hint">Scroll the table sideways for Dir, Len and Data →</p>
       <div className={`bw-trace ${showDevice ? 'has-device' : ''} ${named ? 'has-name' : ''}`} role="table" aria-label="Captured frames" aria-rowcount={total}>
         <div role="rowgroup">
           <div className="bw-trace-head" role="row">
