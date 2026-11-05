@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { IconReset } from './icons';
 import { useStore, useWorkspace } from '../state/context';
 import { Badge } from './Badge';
@@ -18,6 +19,21 @@ export function StatsPanel() {
   const state = useWorkspace();
   const dropped = state.statistics.reduce((n, s) => n + s.rxDropped, 0);
   const status = !state.statistics.length ? <Badge tone="neutral">No data yet</Badge> : dropped > 0 || state.lostBatches > 0 ? <Badge tone="warn">Frames missing</Badge> : <Badge tone="good">No frames missing</Badge>;
+  // U2: the table is wider than the panel on a phone (and in a narrow desktop panel). Chromium's
+  // overlay scrollbars do not reserve space, so the extra columns looked absent. Flag when there
+  // really are hidden columns to the right; CSS then shows a definite hint, edge shadow and scrollbar.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [moreRight, setMoreRight] = useState(false);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => setMoreRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 8);
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    observer?.observe(el);
+    return () => { el.removeEventListener('scroll', update); observer?.disconnect(); };
+  }, [state.statistics.length]);
   return (
     <Panel
       id="stats"
@@ -29,7 +45,7 @@ export function StatsPanel() {
         </button>
       }
     >
-      <div className="bw-table-wrap" role="region" aria-label="Statistics by channel" tabIndex={0}>
+      <div className="bw-table-wrap" ref={wrapRef} data-more={moreRight ? 'true' : undefined} role="region" aria-label="Statistics by channel" tabIndex={0}>
         <table className="bw-table" data-testid="stats-table">
           <thead>
             <tr>
@@ -65,6 +81,8 @@ export function StatsPanel() {
           </tbody>
         </table>
       </div>
+      {/* U2: shown only while columns are actually hidden to the right (see the CSS sibling rule). */}
+      <p className="bw-table-scroll-hint" data-testid="stats-scroll-hint">Scroll sideways for Sent, Send failed and Bus errors →</p>
       <p className="bw-fine">Counts are totals kept by the device since it started or since you last reset them, including time when no page was connected.</p>
       <p className="bw-fine" data-testid="transit-line">
         Lost in transit (between device and this page): {state.lostBatches.toLocaleString()} {state.lostBatches === 1 ? 'batch' : 'batches'}. Frames reported dropped in the trace:{' '}

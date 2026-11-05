@@ -848,6 +848,33 @@ input[aria-invalid='true'] {
   overflow: auto;
   /* Visually hidden text inside is absolutely positioned: keep it clipped with the table instead of widening the page. */
   position: relative;
+  /* U2: a visible scroll affordance. Chromium's overlay scrollbars do not reserve space, so style
+     a thin classic bar and add an edge shadow while columns are hidden to the right. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+}
+.bw-table-wrap::-webkit-scrollbar { height: 8px; }
+.bw-table-wrap::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.28); border-radius: 4px; }
+/* U2: a real edge fade. It fades the rightmost few pixels of visible content while columns are
+   hidden, and disappears (data-more=false) once the user has scrolled to the end. An inset shadow
+   would be painted under the opaque td backgrounds, so a mask is used instead. */
+.bw-table-wrap[data-more='true'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), rgba(0, 0, 0, 0.15) 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), rgba(0, 0, 0, 0.15) 100%);
+}
+/* U2: a definite cue naming the columns that are off-screen. Hidden unless the JS flag says there
+   really is hidden content, so it never lies on a wide panel or at the scroll end. */
+.bw-table-scroll-hint {
+  display: none;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--color-chrome);
+  border-bottom: 1px solid var(--color-row-rule);
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.bw-table-wrap[data-more='true'] + .bw-table-scroll-hint {
+  display: block;
 }
 .bw-table {
   border-collapse: collapse;
@@ -1139,11 +1166,26 @@ input[aria-invalid='true'] {
   .bw-panel.is-maximized {
     left: 12px;
   }
+  /* U1: on a narrow screen keep every Trace column at a readable width and scroll the table
+     sideways inside its panel (the same pattern the has-name table already used), instead of
+     squeezing ID / Type / Data into slivers. Before this, Type was hidden and Data clipped to
+     "D…" on a 390 px phone, so the primary content of a CAN tool could not be read. */
+  .bw-trace {
+    overflow-x: auto;
+    scrollbar-width: thin; /* a visible cue that the payload columns are off to the right */
+    scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+  }
+  .bw-trace::-webkit-scrollbar { height: 8px; }
+  .bw-trace::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.28); border-radius: 4px; }
+  .bw-trace-head,
+  .bw-trace-scroll {
+    min-width: 620px;
+  }
   .bw-trace-head,
   .bw-trace-row,
   .bw-trace.has-device .bw-trace-head,
   .bw-trace.has-device .bw-trace-row {
-    grid-template-columns: 84px 64px 84px 38px 32px minmax(0, 1fr);
+    grid-template-columns: 104px 72px 88px 92px 44px 40px minmax(0, 1fr);
     padding: 0 10px;
     column-gap: 8px;
   }
@@ -1163,8 +1205,19 @@ input[aria-invalid='true'] {
     flex-wrap: wrap;
     row-gap: 8px;
   }
+  /* U3: the panel tools used to wrap into a broken shape, with the full-screen icon orphaned on a
+     third line at the far left. Keep them on one tidy row that scrolls sideways if it must. */
   .bw-panel-tools {
-    flex-wrap: wrap;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-left: 0;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .bw-panel-tools > * {
+    flex: none;
   }
   .bw-device-tag {
     max-width: 100%;
@@ -1172,23 +1225,17 @@ input[aria-invalid='true'] {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .bw-trace-head .bw-c-type,
-  .bw-trace-row .bw-c-type {
-    display: none;
-  }
-  /* With a database the Name column stays; the table then scrolls sideways inside its panel, never the page. */
-  .bw-trace.has-name {
-    overflow-x: auto;
-  }
+  /* With a database the Name column stays; it needs one more column and a little more width.
+     Type is no longer hidden, so every narrow table keeps all of its columns. */
   .bw-trace.has-name .bw-trace-head,
   .bw-trace.has-name .bw-trace-scroll {
-    min-width: 640px;
+    min-width: 760px;
   }
   .bw-trace.has-name .bw-trace-head,
   .bw-trace.has-name .bw-trace-row,
   .bw-trace.has-name.has-device .bw-trace-head,
   .bw-trace.has-name.has-device .bw-trace-row {
-    grid-template-columns: 84px 64px 84px 150px 38px 32px minmax(0, 1fr);
+    grid-template-columns: 104px 72px 88px 150px 92px 44px 40px minmax(0, 1fr);
   }
   .bw-form-row {
     flex-direction: column;
@@ -1208,6 +1255,24 @@ input[aria-invalid='true'] {
   border-bottom: 1px solid var(--color-row-rule);
   color: var(--color-ink);
   font-size: 11px;
+}
+
+/* U1: a definite sideways-scroll cue on a phone. Chromium uses overlay scrollbars that do not
+   reserve space, so `scrollbar-width: thin` alone is not a reliable hint. Hidden on wide screens
+   where the whole table fits. */
+.bw-trace-scroll-hint {
+  display: none;
+}
+@media (max-width: 640px) {
+  .bw-trace-scroll-hint {
+    display: block;
+    margin: 0;
+    padding: 6px 10px;
+    background: var(--color-chrome);
+    border-bottom: 1px solid var(--color-row-rule);
+    color: var(--color-muted);
+    font-size: 11px;
+  }
 }
 
 /* The workspace is available before a device is added. */
@@ -1828,6 +1893,16 @@ h1[tabindex='-1']:focus {
   padding: 24px;
 }
 .bw-empty-canvas h2 { font-size: 18px; }
+/* U6: capture can be running while the canvas is empty; this says so where the user is looking. */
+.bw-empty-capture-hint {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--color-neutral-tint);
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
 .bw-bar-source { padding: 6px 12px; border-bottom: 1px solid var(--color-row-rule); font-size: 12px; display: flex; gap: 8px; align-items: center; }
 
 .bw-drag-ghost {
@@ -2233,7 +2308,10 @@ select.bw-format-select:hover { background-color: var(--icon-hover-bg); }
 @media (max-width: 700px) {
   :root { --size-topbar: 52px; }
   .bw-topbar { padding: 0 6px; gap: 2px; }
-  .bw-top-end > .bw-icon-button:not(.bw-capture):not(.bw-record), .bw-top-end > .bw-command-pill, .bw-top-end > .bw-top-divider, .bw-top-end select, .bw-top-end .bw-record-status { display: none; }
+  .bw-top-end > .bw-icon-button:not(.bw-capture):not(.bw-record), .bw-top-end > .bw-command-pill, .bw-top-end > .bw-top-divider, .bw-top-end .bw-record-status { display: none; }
+  /* U4: keep the recording-format chooser reachable on a phone. Short codes ("ASC") fit the
+     crowded top bar; give the select a 44 px touch target like the other phone controls. */
+  .bw-top-end .bw-format-select { min-height: 44px; height: 44px; max-width: 84px; }
   .bw-top-end .bw-capture-timer { display: none; }
   .bw-canvas-tabs { flex: 1; min-width: 0; }
   .bw-segmented { flex: 0 1 auto; }
