@@ -1,0 +1,38 @@
+
+> plotune-bridge-web@0.1.0 test:virtual
+> playwright test --config playwright.virtual.config.ts --reporter=line,json
+
+[1A[2K[2m[WebServer] [22m(node:16773) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1A[2K[2m[WebServer] [22m[plugin builtin:vite-reporter] [33;1m
+[2m[WebServer] [22m(!) Some chunks are larger than 500 kB after minification. Consider:
+[2m[WebServer] [22m- Using dynamic import() to code-split the application
+[2m[WebServer] [22m- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[2m[WebServer] [22m- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[0m
+
+[1A[2K[2m[WebServer] [22m(node:16795) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1A[2K[2m[WebServer] [22m(node:16808) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 7 tests using 1 worker
+
+[1A[2K(node:16827) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:16827) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K[1/7] [chromium] › e2e-virtual/integration.spec.ts:25:3 › nexus virtual device over WebSocket (2 channels, seeded generator, loopback) › captures both channels with monotonic device timestamps, and a sent frame is echoed as Tx and looped back as Rx
+[1A[2K[2/7] [chromium] › e2e-virtual/integration.spec.ts:70:3 › nexus virtual device over WebSocket (2 channels, seeded generator, loopback) › a second window takes the device over (real replace-on-connect, close 4001) and the first does not fight back
+[1A[2K[3/7] [chromium] › e2e-virtual/integration.spec.ts:91:3 › two real virtual devices in one workspace › both stream into one trace, every row names its device, and a frame sent to one device is echoed only by that device
+[1A[2K[4/7] [chromium] › e2e-virtual/integration.spec.ts:147:3 › device with a tiny buffer and a fast generator › reports the frames the device had to drop, per channel, in the trace header, the markers and the counters
+[1A[2K[5/7] [chromium] › e2e-virtual/integration.spec.ts:175:3 › Step 3a bench: synthetic ECU behind the paired Bridge endpoint › periodic traffic, multi-frame ISO-TP, UDS security access and XCP all work against the real responder
+[1A[2K[6/7] [chromium] › e2e-virtual/integration.spec.ts:307:3 › a hosted page must be allowed by the device (real servers) › by default a device refuses the hosted origin with 403; once it lists the origin the handshake succeeds
+[1A[2K[7/7] [chromium] › e2e-virtual/integration.spec.ts:316:3 › independent channel and reload against a fresh virtual Bridge › CAN1 captures/sends with CAN2 unset; reload reads the still-armed device without reconfiguration
+[1A[2K  7 passed (25.7s)

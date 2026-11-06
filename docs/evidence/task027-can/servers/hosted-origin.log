@@ -1,0 +1,24 @@
+{"generator": "ws://127.0.0.1:19301", "bridge": "ws://127.0.0.1:19302", "dut_channel": 1, "model": "software-only"}
+opening handshake failed
+Traceback (most recent call last):
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/bench/.venv/lib/python3.13/site-packages/websockets/sync/server.py", line 590, in conn_handler
+    connection.handshake(
+    ~~~~~~~~~~~~~~~~~~~~^
+        process_request,
+        ^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        deadline.timeout(),
+        ^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/bench/.venv/lib/python3.13/site-packages/websockets/sync/server.py", line 189, in handshake
+    raise self.protocol.handshake_exc
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/bench/.venv/lib/python3.13/site-packages/websockets/server.py", line 138, in accept
+    ) = self.process_request(request)
+        ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/bench/.venv/lib/python3.13/site-packages/websockets/server.py", line 269, in process_request
+    self.origin = self.process_origin(headers)
+                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/bench/.venv/lib/python3.13/site-packages/websockets/server.py", line 307, in process_origin
+    raise InvalidOrigin(origin)
+websockets.exceptions.InvalidOrigin: invalid Origin header: https://evil.example

@@ -5,8 +5,8 @@ import { useHub, useHubState } from '../state/context';
 import { CommandPalette, type Command } from './CommandPalette';
 import { useActiveCanvas, useProject, useProjectStore } from './context';
 import { Dock } from './Dock';
-import { groupById, panelsIn } from './layout';
-import { PANEL_DEFS, PANEL_ICONS } from './panels';
+import { groupById, groupOf, panelsIn, type DropZone, type GroupNode, type LayoutNode, type SplitNode } from './layout';
+import { PANEL_DEFS, PANEL_ICONS, panelTitle } from './panels';
 import { MAX_CANVASES, PANEL_TYPES, TEMPLATES, type PanelType } from './project';
 import { ALT, MOD, combo, isEditable } from './shortcuts';
 import { Modal, NameDialog, useContextMenu, useToast } from './ui';
@@ -174,6 +174,7 @@ export function CanvasTabs() {
   const ui = useWorkspaceUi();
   const toast = useToast();
   const menu = useContextMenu('Canvas');
+  const phone = usePhone();
   const [renaming, setRenaming] = useState<string | null>(null);
   const del = useCallback((id: string) => {
     const name = project.canvases.find((c) => c.id === id)?.name ?? 'canvas';
@@ -189,6 +190,7 @@ export function CanvasTabs() {
     { label: 'Delete canvas', onSelect: () => del(id) },
   ]);
   const renamingCanvas = project.canvases.find((c) => c.id === renaming);
+  if (phone) return <PhoneCanvasPicker onDelete={del} />;
   return (
     <div className="bw-canvas-tabs">
       <nav className="bw-segmented" aria-label="Canvases">
@@ -224,6 +226,96 @@ export function CanvasTabs() {
       {renamingCanvas && <NameDialog title="Rename canvas" label="Canvas name" initial={renamingCanvas.name} onSubmit={(v) => store.renameCanvas(renamingCanvas.id, v)} onClose={() => setRenaming(null)} />}
     </div>
   );
+}
+
+/** Unmount picker dialogs when leaving the phone layout. */
+function PhoneCanvasPicker({ onDelete }: { onDelete: (id: string) => void }) {
+  const store = useProjectStore();
+  const { project } = useProject();
+  const ui = useWorkspaceUi();
+  const [choosing, setChoosing] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const renamingCanvas = project.canvases.find((c) => c.id === renaming);
+  const active = project.canvases.find((c) => c.id === project.active)!;
+  return (
+    <nav className="bw-canvas-picker" aria-label="Canvases">
+      <button type="button" className="bw-button bw-canvas-picker-trigger" aria-label={`Choose canvas: ${active.name}`} aria-haspopup="dialog" aria-expanded={choosing} onClick={() => setChoosing(true)}>
+        <span>{active.name}</span><span aria-hidden="true">▾</span>
+      </button>
+      {choosing && <Modal title="Canvases" onClose={() => setChoosing(false)}>
+        <ul className="bw-canvas-picker-list">
+          {project.canvases.map((c) => <li key={c.id}>
+            <button type="button" className="bw-button" aria-label={`Open canvas ${c.name}`} aria-current={c.id === project.active ? 'page' : undefined} onClick={() => { store.setActive(c.id); setChoosing(false); }}>{c.name}</button>
+          </li>)}
+        </ul>
+        <div className="bw-layout-actions">
+          <button type="button" className="bw-button" onClick={() => { setChoosing(false); ui.openNewCanvas(); }} disabled={project.canvases.length >= MAX_CANVASES}>New canvas</button>
+          <button type="button" className="bw-button" onClick={() => { setChoosing(false); setRenaming(active.id); }}>Rename canvas</button>
+          <button type="button" className="bw-button" onClick={() => { store.duplicateCanvas(active.id); setChoosing(false); }} disabled={project.canvases.length >= MAX_CANVASES}>Duplicate canvas</button>
+          <button type="button" className="bw-button" onClick={() => store.moveCanvas(active.id, -1)} disabled={project.canvases[0]?.id === active.id}>Move canvas left</button>
+          <button type="button" className="bw-button" onClick={() => store.moveCanvas(active.id, 1)} disabled={project.canvases.at(-1)?.id === active.id}>Move canvas right</button>
+          <button type="button" className="bw-button" onClick={() => onDelete(active.id)} disabled={project.canvases.length === 1}>Delete canvas</button>
+        </div>
+      </Modal>}
+      {renamingCanvas && <NameDialog title="Rename canvas" label="Canvas name" initial={renamingCanvas.name} onSubmit={(v) => store.renameCanvas(renamingCanvas.id, v)} onClose={() => { setRenaming(null); setChoosing(true); }} />}
+    </nav>
+  );
+}
+
+/** Explicit touch/keyboard alternatives to dragging tabs and dividers. Edits the saved dock,
+ * while the phone continues to show one panel at a time. No device command is issued. */
+function PhoneLayoutEditor({ panelId, onClose }: { panelId: string; onClose: () => void }) {
+  const store = useProjectStore();
+  const canvas = useActiveCanvas();
+  const { project } = useProject();
+  const panel = project.panels[panelId]!;
+  const [name, setName] = useState(panelTitle(panel));
+  const [target, setTarget] = useState('');
+  const [zone, setZone] = useState<DropZone>('center');
+  const [message, setMessage] = useState('');
+  const others = panelsIn(canvas.root).filter((id) => id !== panelId);
+  const targetGroup = groupOf(canvas.root, target);
+  const sourceGroup = groupOf(canvas.root, panelId);
+  const canMove = !!targetGroup && !!sourceGroup && (targetGroup.id !== sourceGroup.id || zone !== 'center');
+  const dividers: { split: SplitNode; index: number }[] = [];
+  const walk = (node: LayoutNode | null) => {
+    if (!node || node.kind === 'group') return;
+    node.children.slice(0, -1).forEach((_, index) => dividers.push({ split: node, index }));
+    node.children.forEach(walk);
+  };
+  walk(canvas.root);
+  return <Modal title="Edit panel layout" onClose={onClose}>
+    <p>Editing <strong>{panelTitle(panel)}</strong>. The saved layout is also used on larger screens.</p>
+    <label className="bw-labelled"><span>Panel name</span><input value={name} maxLength={48} onChange={(e) => setName(e.target.value)} /></label>
+    <button type="button" className="bw-button" disabled={!name.trim() || name.trim() === panelTitle(panel)} onClick={() => { store.updatePanel(panelId, { name }); setMessage('Panel renamed.'); }}>Save panel name</button>
+    {others.length > 0 && <>
+      <label className="bw-labelled"><span>Move beside panel</span><select value={target} onChange={(e) => setTarget(e.target.value)}>
+        <option value="">Choose a panel</option>
+        {others.map((id, index) => <option key={id} value={id}>{panelTitle(project.panels[id]!)} ({index + 1})</option>)}
+      </select></label>
+      <label className="bw-labelled"><span>Position</span><select value={zone} onChange={(e) => setZone(e.target.value as DropZone)}>
+        <option value="center">As a tab</option><option value="left">Left</option><option value="right">Right</option><option value="top">Above</option><option value="bottom">Below</option>
+      </select></label>
+      <button type="button" className="bw-button" disabled={!canMove} onClick={() => { if (targetGroup) { store.movePanel(panelId, targetGroup.id, zone); setMessage('Panel moved.'); } }}>Move panel</button>
+    </>}
+    {dividers.length > 0 && <fieldset className="bw-layout-dividers"><legend>Resize saved layout</legend>
+      {dividers.map(({ split, index }, i) => <div className="bw-layout-divider" key={`${split.id}-${index}`}>
+        <span>Divider {i + 1} · {split.dir === 'row' ? 'left / right' : 'top / bottom'} · {Math.round(split.sizes[index]! * 100)}%</span>
+        <div className="bw-layout-actions">
+          <button type="button" className="bw-button" aria-label={`Shrink 5% at divider ${i + 1}`} disabled={split.sizes[index]! <= 0.100001} onClick={() => store.resize(split.id, index, -0.05)}>Shrink 5%</button>
+          <button type="button" className="bw-button" aria-label={`Grow 5% at divider ${i + 1}`} disabled={split.sizes[index + 1]! <= 0.100001} onClick={() => store.resize(split.id, index, 0.05)}>Grow 5%</button>
+        </div>
+      </div>)}
+    </fieldset>}
+    <p role="status">{message}</p>
+    <button type="button" className="bw-button" onClick={() => {
+      onClose();
+      store.closePanel(panelId);
+      // The editor trigger disappears when the last panel closes. Focus the next
+      // usable action after React has rendered the remaining panel or empty canvas.
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('.bw-phone-switcher [aria-label="Edit panel layout"], [data-testid="empty-canvas"] button')?.focus());
+    }}>Close panel</button>
+  </Modal>;
 }
 
 /** The top bar's three canvas tools: the explorer, add a panel, and the command search. */
@@ -300,20 +392,30 @@ export function CanvasView() {
   const phoneGroup = phone && canvas.root && currentPhone ? { kind: 'group' as const, id: 'phone', tabs: [currentPhone], active: currentPhone } : null;
   if (!canvas.root) return <EmptyCanvas />;
   if (phoneGroup) {
-    return (
+    return <PhoneCanvas key={canvas.id} root={phoneGroup} panelIds={all} currentPanel={currentPhone!} />;
+  }
+  return <Dock root={canvas.root} panels={project.panels} focusedGroup={ui.focusedGroup} onFocusGroup={ui.setFocusedGroup} />;
+}
+
+/** Local editing state ends when this phone view or its canvas is left. */
+function PhoneCanvas({ root, panelIds, currentPanel }: { root: GroupNode; panelIds: string[]; currentPanel: string }) {
+  const { project } = useProject();
+  const ui = useWorkspaceUi();
+  const [editing, setEditing] = useState(false);
+  return (
       <>
-        <Dock root={phoneGroup} panels={project.panels} focusedGroup={null} onFocusGroup={() => undefined} />
+        <Dock root={root} panels={project.panels} focusedGroup={null} onFocusGroup={() => undefined} />
         <nav className="bw-phone-switcher" aria-label="Panels on this canvas">
           <button type="button" className="bw-icon-button" onClick={ui.toggleExplorer} aria-label="Explorer" title="Explorer"><IconSidebar /></button>
           <div className="bw-phone-chips">
-            {all.map((pid) => (
-              <button key={pid} type="button" aria-pressed={pid === currentPhone} onClick={() => ui.setPhonePanel(pid)}>{project.panels[pid] ? (project.panels[pid]!.name ?? PANEL_DEFS[project.panels[pid]!.type].title) : ''}</button>
+            {panelIds.map((pid) => (
+              <button key={pid} type="button" aria-pressed={pid === currentPanel} onClick={() => ui.setPhonePanel(pid)}>{project.panels[pid] ? (project.panels[pid]!.name ?? PANEL_DEFS[project.panels[pid]!.type].title) : ''}</button>
             ))}
           </div>
           <button type="button" className="bw-icon-button" onClick={() => ui.openGallery()} aria-label="Add panel" title="Add panel"><IconPanelAdd /></button>
+          <button type="button" className="bw-button" onClick={() => setEditing(true)} aria-label="Edit panel layout">Edit</button>
         </nav>
+        {editing && <PhoneLayoutEditor key={currentPanel} panelId={currentPanel} onClose={() => setEditing(false)} />}
       </>
-    );
-  }
-  return <Dock root={canvas.root} panels={project.panels} focusedGroup={ui.focusedGroup} onFocusGroup={ui.setFocusedGroup} />;
+  );
 }

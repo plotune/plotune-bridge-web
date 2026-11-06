@@ -1,0 +1,12 @@
+virtual Bridge CAN (prototype2, contract v0.1.0) listening on ws://127.0.0.1:19101 (one JSON text frame per message)
+unexpected internal error
+Traceback (most recent call last):
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/virtual-device/.venv/lib/python3.13/site-packages/websockets/sync/connection.py", line 835, in recv_events
+    self.protocol.receive_data(data)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/virtual-device/.venv/lib/python3.13/site-packages/websockets/protocol.py", line 267, in receive_data
+    self.reader.feed_data(data)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/workspace/plotune-nexus/plotune-bridge/plotune-bridge-can/virtual-device/.venv/lib/python3.13/site-packages/websockets/streams.py", line 129, in feed_data
+    raise EOFError("stream ended")
+EOFError: stream ended

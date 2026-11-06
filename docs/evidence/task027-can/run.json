@@ -1,0 +1,79 @@
+{
+  "started_at": "2026-11-05T17:58:40.726Z",
+  "duration_ms": 25681.118000000002,
+  "result": "passed",
+  "actor": "Codex execution agent",
+  "maturity": "L3 software integration evidence",
+  "tests": 7,
+  "skipped": 0,
+  "failures": 0,
+  "flaky": 0,
+  "scenario_results": [
+    {
+      "title": "captures both channels with monotonic device timestamps, and a sent frame is echoed as Tx and looped back as Rx",
+      "status": "expected"
+    },
+    {
+      "title": "a second window takes the device over (real replace-on-connect, close 4001) and the first does not fight back",
+      "status": "expected"
+    },
+    {
+      "title": "both stream into one trace, every row names its device, and a frame sent to one device is echoed only by that device",
+      "status": "expected"
+    },
+    {
+      "title": "reports the frames the device had to drop, per channel, in the trace header, the markers and the counters",
+      "status": "expected"
+    },
+    {
+      "title": "periodic traffic, multi-frame ISO-TP, UDS security access and XCP all work against the real responder",
+      "status": "expected"
+    },
+    {
+      "title": "by default a device refuses the hosted origin with 403; once it lists the origin the handshake succeeds",
+      "status": "expected"
+    },
+    {
+      "title": "CAN1 captures/sends with CAN2 unset; reload reads the still-armed device without reconfiguration",
+      "status": "expected"
+    }
+  ],
+  "command": "npm run test:virtual:can",
+  "web_preview_port": 4182,
+  "nexus_source_commit": "3c8357956a847e66f8e70da5d2ab0b7c91221065",
+  "runtime": {
+    "node": "v24.22.1",
+    "playwright": "1.56.1",
+    "browser": "Chromium 141.0.7390.37"
+  },
+  "endpoints": {
+    "primary": "ws://127.0.0.1:19101",
+    "overflow": "ws://127.0.0.1:19111",
+    "second": "ws://127.0.0.1:19121",
+    "fresh": "ws://127.0.0.1:19141",
+    "bench_control": "ws://127.0.0.1:19201",
+    "bench_bridge": "ws://127.0.0.1:19202",
+    "hosted_origin_bridge": "ws://127.0.0.1:19302"
+  },
+  "fixture": {
+    "seed": 0,
+    "classical_can_only": true,
+    "primary_rate_hz": 10,
+    "overflow_rate_hz": 10000,
+    "overflow_queue_capacity": 4,
+    "bench_bitrate_bps": 1000000
+  },
+  "requirements": [
+    "BR-WEB-001 rev2 local only",
+    "BR-WEB-002 rev1",
+    "BR-WEB-003 rev1",
+    "BR-WEB-004 rev2",
+    "BR-WEB-006 rev2 local origin only",
+    "BWEB-043 rev2 partial UX"
+  ],
+  "limitations": [
+    "software models only; no physical timing/electrical or hardware evidence",
+    "CAN FD unsupported: can_fd=false; no live FD validation",
+    "browser native local-network permission prompt not automated"
+  ]
+}

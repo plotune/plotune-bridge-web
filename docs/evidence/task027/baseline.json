@@ -1,0 +1,34 @@
+{
+  "recordedAtUtc": "2026-11-05T17:43:01Z",
+  "appCommit": "a7a88c25ca0ddca45b32c3246d15d1b1aff2af85",
+  "branch": "delivery/mobile-acceptance",
+  "browser": "Playwright Chromium headless (local shared browser cache)",
+  "scenario": "Create five canvases at desktop width; rename four with long names; resize to phone viewport.",
+  "results": [
+    {
+      "viewport": "320x568",
+      "documentClientWidth": 320,
+      "documentScrollWidth": 325,
+      "canvasNavigationBox": { "x": 88, "y": 7.5, "width": 4, "height": 36 },
+      "canvasTabTargets": [
+        { "name": "Canvas 1", "x": 90, "y": 10, "width": 75, "height": 32 },
+        { "name": "Calibration 1 with a long production name", "x": 166, "y": 10, "width": 180, "height": 32 },
+        { "name": "Calibration 4 with a long production name", "x": 709, "y": 10, "width": 180, "height": 32 }
+      ],
+      "finding": "Five pixel horizontal overflow. Tabs after the first extend beyond the viewport. A separate pointer attempt to activate New canvas was intercepted by the recording format select."
+    },
+    {
+      "viewport": "390x844",
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "canvasNavigationBox": { "x": 88, "y": 7.5, "width": 13, "height": 36 },
+      "canvasTabTargets": [
+        { "name": "Canvas 1", "x": 90, "y": 10, "width": 75, "height": 32 },
+        { "name": "Calibration 1 with a long production name", "x": 166, "y": 10, "width": 180, "height": 32 },
+        { "name": "Calibration 4 with a long production name", "x": 709, "y": 10, "width": 180, "height": 32 }
+      ],
+      "finding": "Page width fits, but the canvas navigation remains unusable visually because the tab list extends to x=889."
+    }
+  ],
+  "axe": "Not run on this baseline capture."
+}
