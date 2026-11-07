@@ -7,11 +7,6 @@ import { formatSpec, type FormatSpec, type RecordFormat } from './formats';
 /** Browsers without streaming to disk keep the recording in memory, so it is bounded. */
 export const DEFAULT_CAP_BYTES = 64 * 1024 * 1024;
 
-export interface RecorderOptions {
-  /** True when the connected device advertises CAN FD; CSV uses it to choose its columns. */
-  canFd?: boolean;
-}
-
 /**
  * Writes every frame it is given, in order, in one file format. It reads the stream itself, not the trace, so it does not
  * lose frames when the trace's bounded buffer wraps. Frames the device reported lost are counted, and written into
@@ -29,11 +24,11 @@ export class Recorder implements StreamTap {
   private lastNs: bigint | null = null;
   private readonly chunks: string[] = [];
   private readonly objects: Uint8Array[] = [];
-  private readonly canFd: boolean;
+  /** False until this recording sees its first CAN FD frame; the CSV header/rows are upgraded then. */
+  private canFd = false;
 
-  constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES, options: RecorderOptions = {}) {
+  constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES) {
     this.spec = formatSpec(format);
-    this.canFd = options.canFd === true;
     if (!this.spec.binary) this.write(this.spec.header(startedAt, this.canFd));
   }
 
@@ -44,6 +39,7 @@ export class Recorder implements StreamTap {
 
   frame(frame: CanFrame): void {
     if (!this.running) return;
+    if (frame.fd === true && !this.canFd) this.upgradeForFd();
     this.origin ??= frame.timestampNs;
     this.lastNs = frame.timestampNs;
     if (this.spec.binary) {
@@ -58,6 +54,22 @@ export class Recorder implements StreamTap {
     this.dropped += count;
     const time = this.origin === null || this.lastNs === null ? '0.000000' : formatRelativeNs(this.lastNs, this.origin);
     this.write(this.spec.dropLine(channel, count, time));
+  }
+
+  /**
+   * A recording may start on a Classical device and later see an FD frame after a reconnect.
+   * CSV cannot know the columns at start, so the first FD frame rewrites the header and every
+   * earlier row: prior rows get 0,0,0. A recording that never sees an FD frame is byte-identical
+   * to the previous Classic output. Other text formats use the frame's own FD fields.
+   */
+  private upgradeForFd(): void {
+    this.canFd = true;
+    if (!this.spec.upgradeFd) return;
+    const before = this.chunks.join('');
+    const after = this.spec.upgradeFd(before);
+    this.bytes += after.length - before.length;
+    this.chunks.length = 0;
+    this.chunks.push(after);
   }
 
   /** Counts `size` bytes unless they would pass the cap; at the cap the recording stops and says so. */
@@ -127,8 +139,7 @@ export class RecordingService {
 
   start(store: WorkspaceStore, format: RecordFormat, now = new Date()): void {
     void this.finish();
-    const canFd = store.getState?.().descriptor?.canFd === true;
-    const recorder = new Recorder(format, now, DEFAULT_CAP_BYTES, { canFd });
+    const recorder = new Recorder(format, now);
     store.taps.add(recorder);
     this.store = store;
     this.current = recorder;

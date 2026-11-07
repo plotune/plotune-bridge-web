@@ -46,11 +46,24 @@ describe('BLF writer (also read with python-can 4.6.1 and compared with its own 
     expect(hex(o)).toBe(
       [
         '4c4f424a', '2000', '0100', '88000000', '65000000', '02000000', '0000', '0000', '4e61bc0000000000',
-        '02', '0f', '40', '00', 'f110da98', '00000000', '00300000', '00000000', '00000000', '00000000', '00000000', '00000000',
-        '0100', '00', '00',
+        '02', '0f', '40', '00', 'f110da98', '00000000', '00300000', '00000000', '00000000', '00000000', '00000000',
+        '0000', '01', '00', '00000000',
         '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f',
       ].join(''),
     );
+  });
+
+  it('puts the uint16 bit count, uint8 direction, uint8 extDataOffset and uint32 crc at the CAN_FD_MSG_64 offsets', () => {
+    const tx = blfCanFdMessage64(f({ fd: true, dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i), direction: 'tx' }), 0n);
+    const rx = blfCanFdMessage64(f({ fd: true, dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i), direction: 'rx' }), 0n);
+    const view = new DataView(tx.buffer);
+    expect(view.getUint16(64, true)).toBe(0); // bit count
+    expect(tx[66]).toBe(1); // Tx
+    expect(tx[67]).toBe(0); // extDataOffset
+    expect(view.getUint32(68, true)).toBe(0); // crc
+    expect(rx[66]).toBe(0); // Rx
+    expect(rx.subarray(72, 84)).toEqual(Uint8Array.from({ length: 12 }, (_, i) => i));
+    expect(tx.subarray(84, 136)).toEqual(new Uint8Array(52)); // payload is zero-padded
   });
 
   it('maps ESI and the receive direction into the FD64 flags', () => {
@@ -58,7 +71,10 @@ describe('BLF writer (also read with python-can 4.6.1 and compared with its own 
     const v = new DataView(o.buffer);
     expect([o[33], o[34], o[35]]).toEqual([9, 12, 0]); // dlc, valid bytes, tx count
     expect(v.getUint32(44, true)).toBe(0x5000); // FD + ESI
-    expect(v.getUint16(68, true)).toBe(0); // receive
+    expect(v.getUint16(64, true)).toBe(0); // bit count
+    expect(o[66]).toBe(0); // receive
+    expect(o[67]).toBe(0); // extDataOffset
+    expect(v.getUint32(68, true)).toBe(0); // crc
   });
 
   it('writes the file header and a zlib container whose content is exactly the objects', async () => {

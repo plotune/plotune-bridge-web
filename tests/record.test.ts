@@ -80,8 +80,8 @@ describe('formats (byte exact; ASC and candump were also read back with python-c
     ].join('\n'));
   });
 
-  it('CSV adds fd,brs,esi columns when the device supports CAN FD', () => {
-    const r = new Recorder('csv', START, undefined, { canFd: true });
+  it('CSV upgrades to fd,brs,esi when the first FD frame arrives, including earlier Classic rows', () => {
+    const r = new Recorder('csv', START);
     r.frame(f());
     fdFixture(r);
     expect(r.text()).toBe([
@@ -93,11 +93,19 @@ describe('formats (byte exact; ASC and candump were also read back with python-c
     ].join('\r\n'));
   });
 
-  it('recording service chooses CSV columns from the connected device capability', () => {
+  it('keeps FD flags when a recording starts on a Classical device and FD frames arrive after a reconnect', () => {
     const service = new RecordingService();
-    const store = { taps: new Set<unknown>(), getState: () => ({ descriptor: { canFd: true } }) } as unknown as WorkspaceStore;
+    const store = { taps: new Set<unknown>(), getState: () => ({ descriptor: { canFd: false } }) } as unknown as WorkspaceStore;
     service.start(store, 'csv', START);
-    expect(service.current!.text()).toContain('time_s,channel,id_hex,extended,direction,remote,dlc,data_hex,fd,brs,esi\r\n');
+    const recorder = service.current!;
+    recorder.frame(f()); // first frame is Classical
+    recorder.frame(f({ fd: true, brs: true, esi: false, dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i) }));
+    expect(recorder.text()).toBe([
+      'time_s,channel,id_hex,extended,direction,remote,dlc,data_hex,fd,brs,esi',
+      '0.000000,1,123,0,rx,0,4,11223344,0,0,0',
+      '0.000000,1,123,0,rx,0,9,000102030405060708090A0B,1,1,0',
+      '',
+    ].join('\r\n'));
   });
 });
 

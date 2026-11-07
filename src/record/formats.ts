@@ -14,10 +14,12 @@ export interface FormatSpec {
   carriesDrops: boolean;
   /** Binary formats are built by their own writer (see blf.ts); `header` and `line` are not used. */
   binary?: boolean;
-  /** `canFd` lets a text format choose CAN FD columns; Classic-only recordings keep their old output. */
+  /** `canFd` is true once the recording has seen a CAN FD frame; CSV upgrades its columns then. */
   header(startedAt: Date, canFd?: boolean): string;
   /** `time` is the device clock in seconds since the first recorded frame, as "s.uuuuuu". */
   line(frame: CanFrame, time: string, canFd?: boolean): string;
+  /** Rewrites text already written before the first FD frame (CSV upgrades its header and rows). */
+  upgradeFd?(text: string): string;
   dropLine(channel: number, count: number, time: string): string;
 }
 
@@ -105,6 +107,10 @@ const csv: FormatSpec = {
   line(frame, time, canFd = false) {
     const base = `${time},${frame.channel},${frame.id.toString(16).toUpperCase()},${frame.extended ? 1 : 0},${frame.direction},${frame.rtr ? 1 : 0},${frame.dlc},${bytesToHex(frame.data).toUpperCase()}`;
     return canFd ? `${base},${frame.fd ? 1 : 0},${frame.brs ? 1 : 0},${frame.esi ? 1 : 0}\r\n` : `${base}\r\n`;
+  },
+  upgradeFd(text) {
+    const [header, ...rows] = text.split('\r\n');
+    return [`${header},fd,brs,esi`, ...rows.map((row) => (row === '' ? '' : `${row},0,0,0`))].join('\r\n');
   },
   dropLine: () => '',
 };

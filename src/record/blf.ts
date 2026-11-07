@@ -73,10 +73,10 @@ export function blfCanFdMessage64(frame: CanFrame, relativeNs: bigint): Uint8Arr
   v.setUint32(52, 0); // data-phase bit rate
   v.setUint32(56, 0); // BRS time offset
   v.setUint32(60, 0); // CRC-delimiter time offset
-  v.setUint32(64, 0); // bit count
-  v.setUint16(68, frame.direction === 'tx' ? 1 : 0, true);
-  v.setUint8(70, 0); // ext-data offset
-  v.setUint8(71, 0); // CRC
+  v.setUint16(64, 0, true); // bit count (uint16)
+  v.setUint8(66, frame.direction === 'tx' ? 1 : 0); // direction (uint8)
+  v.setUint8(67, 0); // ext-data offset (uint8)
+  v.setUint32(68, 0, true); // CRC (uint32)
   out.set(frame.data.subarray(0, 64), 72);
   return out;
 }

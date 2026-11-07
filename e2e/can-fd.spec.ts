@@ -155,21 +155,42 @@ test('recordings on an FD device carry CAN FD flags and the full 64-byte payload
     expect(check(text), format).toBe(true);
   }
 
+  // Record a real FD Tx echo and an injected FD Rx so the BLF direction byte is exercised both ways.
+  await page.getByLabel(FD_CAPABILITY, { exact: true }).check();
+  await page.getByLabel('Bit rate switch (BRS)', { exact: true }).check();
+  await page.getByLabel('ID (hex)').fill('123');
+  await page.getByLabel('Data (hex bytes)').fill(FD_HEX);
   await page.getByLabel('Recording format').selectOption('blf');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
-  device.injectFd(1, { id: 0x123, brs: true, esi: false, data: FD_DATA });
-  await expect(page.getByTestId('record-status')).toContainText(/Recording · [1-9]\d* frames/);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  device.injectFd(1, { id: 0x321, brs: true, esi: false, data: FD_DATA });
+  await expect(page.getByTestId('record-status')).toContainText(/Recording · [2-9]\d* frames/);
+
   const blfPath = info.outputPath('fd.blf');
   await saveRecording(page, blfPath);
   const bytes = await readFile(blfPath);
   expect(bytes.subarray(0, 4).toString('latin1')).toBe('LOGG');
   const containerSize = bytes.readUInt32LE(144 + 8);
   const raw = inflateSync(bytes.subarray(144 + 32, 144 + containerSize));
-  expect(raw.subarray(0, 4).toString('latin1')).toBe('LOBJ');
-  expect(raw.readUInt32LE(8)).toBe(136); // CAN_FD_MESSAGE_64 object
-  expect(raw.readUInt32LE(12)).toBe(101); // object type
-  expect(raw[34]).toBe(64); // valid payload bytes
-  expect([...raw.subarray(72, 72 + 64)]).toEqual([...FD_DATA]);
-  expect(raw.readUInt32LE(44)).toBe(0x3000); // FD + BRS flags
+  const objects: Uint8Array[] = [];
+  for (let at = 0; at + 136 <= raw.length; at += 136) objects.push(raw.subarray(at, at + 136));
+  expect(objects.length).toBeGreaterThanOrEqual(2);
+  expect(objects.map((o) => o[66])).toContain(1); // Tx
+  expect(objects.map((o) => o[66])).toContain(0); // Rx
+  const ids = objects.map((o) => new DataView(o.buffer, o.byteOffset).getUint32(36, true));
+  expect(ids).toContain(0x123); // the sent frame
+  expect(ids).toContain(0x321); // the injected frame
+  for (const object of objects) {
+    const view = new DataView(object.buffer, object.byteOffset);
+    expect(Buffer.from(object.subarray(0, 4)).toString('latin1')).toBe('LOBJ');
+    expect(view.getUint32(8, true)).toBe(136); // CAN_FD_MESSAGE_64 object
+    expect(view.getUint32(12, true)).toBe(101); // object type
+    expect(object[34]).toBe(64); // valid payload bytes
+    expect([...object.subarray(72, 72 + 64)]).toEqual([...FD_DATA]);
+    expect(view.getUint32(44, true)).toBe(0x3000); // FD + BRS flags
+    expect(view.getUint16(64, true)).toBe(0); // bit count
+    expect(object[67]).toBe(0); // extDataOffset
+    expect(view.getUint32(68, true)).toBe(0); // crc
+  }
   await device.close();
 });
