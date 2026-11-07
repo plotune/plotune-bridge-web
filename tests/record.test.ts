@@ -55,6 +55,50 @@ describe('formats (byte exact; ASC and candump were also read back with python-c
     expect(FORMATS.map((x) => [x.id, x.carriesDrops])).toEqual([['asc', true], ['blf', false], ['candump', false], ['csv', false]]);
     expect(formatSpec('asc').extension).toBe('asc');
   });
+
+  const fdFixture = (r: Recorder) => {
+    const first = Uint8Array.from({ length: 12 }, (_, i) => i);
+    const second = Uint8Array.from({ length: 64 }, (_, i) => i);
+    r.frame(f({ channel: 1, id: 0x123, fd: true, brs: true, esi: false, dlc: 9, data: first, timestampNs: 5_000_000_000n, direction: 'rx' }));
+    r.frame(f({ channel: 2, id: 0x7e8, fd: true, brs: false, esi: true, dlc: 15, data: second, timestampNs: 5_010_000_000n, direction: 'tx' }));
+  };
+
+  it('ASC writes CANFD lines with BRS/ESI, the DLC code, payload length and full data', () => {
+    const r = new Recorder('asc', START);
+    fdFixture(r);
+    expect(r.text()).toContain('   0.000000 CANFD 1 Rx   123             1 0 9 12 00 01 02 03 04 05 06 07 08 09 0A 0B 0 0 3000 0 0 0 0 0');
+    expect(r.text()).toContain('   0.010000 CANFD 2 Tx   7E8             0 1 F 64 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F 20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F 0 0 5000 0 0 0 0 0');
+  });
+
+  it('candump writes ## flags and the full FD payload', () => {
+    const r = new Recorder('candump', START);
+    fdFixture(r);
+    expect(r.text()).toBe([
+      '(0.000000) can0 123##1000102030405060708090A0B',
+      '(0.010000) can1 7E8##2000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F202122232425262728292A2B2C2D2E2F303132333435363738393A3B3C3D3E3F',
+      '',
+    ].join('\n'));
+  });
+
+  it('CSV adds fd,brs,esi columns when the device supports CAN FD', () => {
+    const r = new Recorder('csv', START, undefined, { canFd: true });
+    r.frame(f());
+    fdFixture(r);
+    expect(r.text()).toBe([
+      'time_s,channel,id_hex,extended,direction,remote,dlc,data_hex,fd,brs,esi',
+      '0.000000,1,123,0,rx,0,4,11223344,0,0,0',
+      '0.000000,1,123,0,rx,0,9,000102030405060708090A0B,1,1,0',
+      '0.010000,2,7E8,0,tx,0,15,000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F202122232425262728292A2B2C2D2E2F303132333435363738393A3B3C3D3E3F,1,0,1',
+      '',
+    ].join('\r\n'));
+  });
+
+  it('recording service chooses CSV columns from the connected device capability', () => {
+    const service = new RecordingService();
+    const store = { taps: new Set<unknown>(), getState: () => ({ descriptor: { canFd: true } }) } as unknown as WorkspaceStore;
+    service.start(store, 'csv', START);
+    expect(service.current!.text()).toContain('time_s,channel,id_hex,extended,direction,remote,dlc,data_hex,fd,brs,esi\r\n');
+  });
 });
 
 describe('Recorder', () => {

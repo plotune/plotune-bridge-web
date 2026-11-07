@@ -1,11 +1,16 @@
 import { formatRelativeNs } from '../lib/bytes';
 import type { CanFrame } from '../protocol/types';
 import type { StreamTap, WorkspaceStore } from '../state/store';
-import { BLF_OBJECT_SIZE, blfCanMessage, buildBlf, buildBlfBytes } from './blf';
+import { blfObject, blfObjectSize, buildBlf, buildBlfBytes } from './blf';
 import { formatSpec, type FormatSpec, type RecordFormat } from './formats';
 
 /** Browsers without streaming to disk keep the recording in memory, so it is bounded. */
 export const DEFAULT_CAP_BYTES = 64 * 1024 * 1024;
+
+export interface RecorderOptions {
+  /** True when the connected device advertises CAN FD; CSV uses it to choose its columns. */
+  canFd?: boolean;
+}
 
 /**
  * Writes every frame it is given, in order, in one file format. It reads the stream itself, not the trace, so it does not
@@ -24,10 +29,12 @@ export class Recorder implements StreamTap {
   private lastNs: bigint | null = null;
   private readonly chunks: string[] = [];
   private readonly objects: Uint8Array[] = [];
+  private readonly canFd: boolean;
 
-  constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES) {
+  constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES, options: RecorderOptions = {}) {
     this.spec = formatSpec(format);
-    if (!this.spec.binary) this.write(this.spec.header(startedAt));
+    this.canFd = options.canFd === true;
+    if (!this.spec.binary) this.write(this.spec.header(startedAt, this.canFd));
   }
 
   /** Seconds of device time between the first and the last recorded frame. */
@@ -40,9 +47,9 @@ export class Recorder implements StreamTap {
     this.origin ??= frame.timestampNs;
     this.lastNs = frame.timestampNs;
     if (this.spec.binary) {
-      if (!this.reserve(BLF_OBJECT_SIZE)) return;
-      this.objects.push(blfCanMessage(frame, frame.timestampNs - this.origin));
-    } else if (!this.write(this.spec.line(frame, formatRelativeNs(frame.timestampNs, this.origin)))) return;
+      if (!this.reserve(blfObjectSize(frame))) return;
+      this.objects.push(blfObject(frame, frame.timestampNs - this.origin));
+    } else if (!this.write(this.spec.line(frame, formatRelativeNs(frame.timestampNs, this.origin), this.canFd))) return;
     this.frames += 1;
   }
 
@@ -120,7 +127,8 @@ export class RecordingService {
 
   start(store: WorkspaceStore, format: RecordFormat, now = new Date()): void {
     void this.finish();
-    const recorder = new Recorder(format, now);
+    const canFd = store.getState?.().descriptor?.canFd === true;
+    const recorder = new Recorder(format, now, DEFAULT_CAP_BYTES, { canFd });
     store.taps.add(recorder);
     this.store = store;
     this.current = recorder;

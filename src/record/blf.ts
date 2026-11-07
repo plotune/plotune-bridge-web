@@ -1,22 +1,29 @@
 import type { CanFrame } from '../protocol/types';
 
-// Vector Binary Logging Format (BLF), Classic CAN only. The layout follows the structures python-can reads and writes:
-// a 144-byte file header ("LOGG"), then log containers ("LOBJ", type 10) holding zlib-compressed CAN message objects (type 1).
+// Vector Binary Logging Format (BLF). The layout follows the structures python-can reads and writes:
+// a 144-byte file header ("LOGG"), then log containers ("LOBJ", type 10) holding zlib-compressed
+// Classic CAN message objects (type 1) or CAN FD message objects (type 101).
 
 const FILE_HEADER_SIZE = 144;
 const OBJ_BASE = 16; // signature, header size, version, object size, object type
 const OBJ_V1 = 16; // flags, client index, object version, timestamp
 const CONTAINER_HEADER = 16; // method, uncompressed size
 const CAN_MESSAGE = 1;
+const CAN_FD_MESSAGE_64 = 101;
 const LOG_CONTAINER = 10;
 const ZLIB_DEFLATE = 2;
 const TIME_ONE_NANS = 2;
 const CAN_MSG_EXT = 0x8000_0000;
 const REMOTE_FLAG = 0x80;
 const DIR_TX = 0x01;
+const FD_EDL = 0x1000;
+const FD_BRS = 0x2000;
+const FD_ESI = 0x4000;
 const MAX_CONTAINER = 128 * 1024;
 
 export const BLF_OBJECT_SIZE = OBJ_BASE + OBJ_V1 + 16;
+/** CAN_FD_MESSAGE_64: object header + a 104-byte CAN FD payload structure (including 64 data bytes). */
+export const BLF_FD_OBJECT_SIZE = OBJ_BASE + OBJ_V1 + 104;
 
 /** One CAN message object (48 bytes). `relativeNs` is the time since the first recorded frame. */
 export function blfCanMessage(frame: CanFrame, relativeNs: bigint): Uint8Array {
@@ -36,6 +43,48 @@ export function blfCanMessage(frame: CanFrame, relativeNs: bigint): Uint8Array {
   if (!frame.rtr) out.set(frame.data.subarray(0, 8), 40);
   return out;
 }
+
+/**
+ * One CAN_FD_MESSAGE_64 object (136 bytes). The fields follow python-can's CAN_FD_MSG_64_STRUCT:
+ * channel, DLC, valid bytes, tx count, id, frame length, FD flags, bit rates, time offsets,
+ * bit count, direction, ext-data offset, CRC, then the full 64-byte data field.
+ */
+export function blfCanFdMessage64(frame: CanFrame, relativeNs: bigint): Uint8Array {
+  const out = new Uint8Array(BLF_FD_OBJECT_SIZE);
+  const v = new DataView(out.buffer);
+  out.set([0x4c, 0x4f, 0x42, 0x4a], 0); // "LOBJ"
+  v.setUint16(4, OBJ_BASE + OBJ_V1, true);
+  v.setUint16(6, 1, true);
+  v.setUint32(8, BLF_FD_OBJECT_SIZE, true);
+  v.setUint32(12, CAN_FD_MESSAGE_64, true);
+  v.setUint32(16, TIME_ONE_NANS, true);
+  v.setBigUint64(24, relativeNs < 0n ? 0n : relativeNs, true);
+  v.setUint8(32, frame.channel);
+  v.setUint8(33, frame.dlc);
+  v.setUint8(34, frame.data.length);
+  v.setUint8(35, 0); // tx count
+  v.setUint32(36, (frame.id | (frame.extended ? CAN_MSG_EXT : 0)) >>> 0, true);
+  v.setUint32(40, 0); // frame length (not used by readers)
+  let fdFlags = FD_EDL;
+  if (frame.brs) fdFlags |= FD_BRS;
+  if (frame.esi) fdFlags |= FD_ESI;
+  v.setUint32(44, fdFlags, true);
+  v.setUint32(48, 0); // arbitration-phase bit rate
+  v.setUint32(52, 0); // data-phase bit rate
+  v.setUint32(56, 0); // BRS time offset
+  v.setUint32(60, 0); // CRC-delimiter time offset
+  v.setUint32(64, 0); // bit count
+  v.setUint16(68, frame.direction === 'tx' ? 1 : 0, true);
+  v.setUint8(70, 0); // ext-data offset
+  v.setUint8(71, 0); // CRC
+  out.set(frame.data.subarray(0, 64), 72);
+  return out;
+}
+
+/** The BLF object size and bytes for a frame, choosing the Classic or CAN FD writer. */
+export const blfObjectSize = (frame: CanFrame): number => (frame.fd === true ? BLF_FD_OBJECT_SIZE : BLF_OBJECT_SIZE);
+export const blfObject = (frame: CanFrame, relativeNs: bigint): Uint8Array =>
+  frame.fd === true ? blfCanFdMessage64(frame, relativeNs) : blfCanMessage(frame, relativeNs);
 
 async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
   // "deflate" in CompressionStream is the zlib format (RFC 1950), which is what BLF containers use.

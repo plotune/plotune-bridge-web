@@ -1003,6 +1003,28 @@ input[aria-invalid='true'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A 64-byte FD payload does not fit the data column; keep every byte reachable by scrolling it. */
+.bw-trace-row[data-fd='1'] .bw-c-data {
+  overflow-x: auto;
+  text-overflow: clip;
+  scrollbar-width: thin;
+}
+.bw-fd-tags {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.bw-fd-tag {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--color-chrome);
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
 /* Channel identity is the text (CAN1, CAN2); the coloured edge is only a second cue. Ink text keeps contrast well above 4.5:1. */
 .bw-chip {
   display: inline-block;

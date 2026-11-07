@@ -62,7 +62,7 @@ const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, me
   if (row.kind === 'frame') {
     const f = row.frame;
     return (
-      <div className={`bw-trace-row bw-ch-${f.channel} bw-dir-${f.direction}`} style={style} role="row" data-channel={f.channel} data-direction={f.direction}>
+      <div className={`bw-trace-row bw-ch-${f.channel} bw-dir-${f.direction}`} style={style} role="row" data-channel={f.channel} data-direction={f.direction} data-fd={f.fd ? '1' : undefined} data-brs={f.brs ? '1' : undefined} data-esi={f.esi ? '1' : undefined}>
         <span role="cell" className="bw-mono bw-c-time">{formatRelativeNs(f.timestampNs, row.originNs ?? originNs ?? f.timestampNs)}</span>
         {showDevice && <span role="cell" className="bw-c-dev">{row.device}</span>}
         <span role="cell" className="bw-c-ch"><span className="bw-chip">CAN{f.channel}</span></span>
@@ -76,10 +76,18 @@ const Row = memo(function Row({ row, originNs, top, showDevice, radix, named, me
             ) : null}
           </span>
         )}
-        <span role="cell" className="bw-c-type">{f.extended ? 'Ext' : 'Std'} {f.rtr ? 'Remote' : 'Data'}</span>
+        <span role="cell" className="bw-c-type">{f.extended ? 'Ext' : 'Std'} {f.rtr ? 'Remote' : f.fd ? 'FD' : 'Data'}</span>
         <span role="cell" className="bw-c-dir">{f.direction === 'rx' ? 'Rx' : 'Tx'}</span>
         <span role="cell" className="bw-mono bw-c-dlc">{f.dlc}</span>
-        <span role="cell" className="bw-mono bw-c-data">{f.rtr ? `remote request for ${f.dlc} bytes` : <Marked text={formatTraceData(f.data, radix)} query={query} />}</span>
+        <span role="cell" className="bw-mono bw-c-data" title={f.rtr ? undefined : formatTraceData(f.data, radix)}>
+          {f.fd && (f.brs || f.esi) && (
+            <span className="bw-fd-tags">
+              {f.brs && <span className="bw-fd-tag">BRS</span>}
+              {f.esi && <span className="bw-fd-tag">ESI</span>}
+            </span>
+          )}
+          {f.rtr ? `remote request for ${f.dlc} bytes` : <Marked text={formatTraceData(f.data, radix)} query={query} />}
+        </span>
       </div>
     );
   }
