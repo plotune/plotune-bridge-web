@@ -114,10 +114,59 @@ describe('DeviceSession', () => {
     expect(transport.isOpen).toBe(false);
   });
 
-  it('refuses a device that advertises CAN FD and closes the link', async () => {
+  it('accepts a device that advertises CAN FD and keeps the link open', async () => {
     const { session, transport } = setup({ advertiseCanFd: true });
-    expect(await code(session.connect())).toBe('INTERNAL_ERROR');
-    expect(transport.isOpen).toBe(false);
+    const d = await session.connect();
+    expect(d.canFd).toBe(true);
+    expect(transport.isOpen).toBe(true);
+  });
+
+  it('sends fd/brs/esi only on CAN FD transmits', async () => {
+    const { session, transport } = setup({ advertiseCanFd: true });
+    await session.connect();
+    await session.setBitrate(1, 500000);
+    await session.transmit({ channel: 1, id: 0x123, extended: false, rtr: false, fd: true, brs: true, esi: true, dlc: 15, data: new Uint8Array(64) });
+    const fd = transport.sent.at(-1) as { op: string; params: { frame: Record<string, unknown> } };
+    expect(fd.op).toBe('transmit');
+    expect(fd.params.frame).toMatchObject({ channel: 1, id: 0x123, fd: true, brs: true, esi: true, dlc: 15 });
+    expect(fd.params.frame.data).toBe('00'.repeat(64));
+    await session.transmit({ channel: 1, id: 0x124, extended: false, rtr: false, dlc: 2, data: Uint8Array.of(1, 2) });
+    const classic = transport.sent.at(-1) as { params: { frame: Record<string, unknown> } };
+    expect(classic.params.frame).not.toHaveProperty('fd');
+    expect(classic.params.frame).not.toHaveProperty('brs');
+    expect(classic.params.frame).not.toHaveProperty('esi');
+  });
+
+  it('delivers CAN FD frames with flags, DLC 15 and the full 64-byte payload', async () => {
+    const { session, device, batches } = setup({ advertiseCanFd: true });
+    await session.connect();
+    await session.setBitrate(1, 500000);
+    await session.startRx([1]);
+    const data = Uint8Array.from({ length: 64 }, (_, i) => i);
+    device.injectRx(1, { id: 0x321, fd: true, brs: true, esi: false, data });
+    device.deliver();
+    await Promise.resolve();
+    const frame: CanFrame = batches[0].frames[0];
+    expect(frame).toMatchObject({ channel: 1, id: 0x321, fd: true, brs: true, esi: false, dlc: 15, direction: 'rx' });
+    expect(frame.data).toHaveLength(64);
+  });
+
+  it('rejects an invalid frame before sending it', async () => {
+    const { session, transport } = setup({ advertiseCanFd: true });
+    await session.connect();
+    const sent = transport.sent.length;
+    expect(await code(session.transmit({ channel: 1, id: 0x123, extended: false, rtr: true, fd: true, dlc: 9, data: new Uint8Array() }))).toBe('INVALID_DATA');
+    expect(await code(session.transmit({ channel: 1, id: 0x123, extended: false, rtr: false, brs: true, dlc: 2, data: Uint8Array.of(1, 2) }))).toBe('MALFORMED_REQUEST');
+    expect(await code(session.transmit({ channel: 1, id: 0x123, extended: false, rtr: false, fd: true, dlc: 9, data: new Uint8Array(9) }))).toBe('INVALID_DLC');
+    expect(transport.sent.length).toBe(sent);
+  });
+
+  it('rejects an FD frame when the connected device advertises Classical CAN only', async () => {
+    const { session, transport } = setup();
+    await session.connect();
+    const sent = transport.sent.length;
+    expect(await code(session.transmit({ channel: 1, id: 0x123, extended: false, rtr: false, fd: true, dlc: 9, data: new Uint8Array(12) }))).toBe('UNSUPPORTED_FEATURE');
+    expect(transport.sent.length).toBe(sent);
   });
 
   it('closes the link on a malformed batch instead of guessing', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLF_OBJECT_SIZE, blfCanMessage, buildBlfBytes } from '../src/record/blf';
+import { BLF_FD_OBJECT_SIZE, BLF_OBJECT_SIZE, blfCanFdMessage64, blfCanMessage, buildBlfBytes } from '../src/record/blf';
 import { Recorder } from '../src/record/recorder';
 import type { CanFrame } from '../src/protocol/types';
 
@@ -37,6 +37,44 @@ describe('BLF writer (also read with python-can 4.6.1 and compared with its own 
     const tx = blfCanMessage(f({ direction: 'tx' }), 0n);
     expect(tx[34]).toBe(0x01);
     expect(hex(tx.subarray(36, 40))).toBe('23010000');
+  });
+
+  it('writes a 136-byte CAN_FD_MESSAGE_64 object with the full 64-byte payload and FD flags', () => {
+    const data = Uint8Array.from({ length: 64 }, (_, i) => i);
+    const o = blfCanFdMessage64(f({ channel: 2, id: 0x18da10f1, extended: true, dlc: 15, data, fd: true, brs: true, esi: false, direction: 'tx' }), 12_345_678n);
+    expect(o.length).toBe(BLF_FD_OBJECT_SIZE);
+    expect(hex(o)).toBe(
+      [
+        '4c4f424a', '2000', '0100', '88000000', '65000000', '02000000', '0000', '0000', '4e61bc0000000000',
+        '02', '0f', '40', '00', 'f110da98', '00000000', '00300000', '00000000', '00000000', '00000000', '00000000',
+        '0000', '01', '00', '00000000',
+        '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f',
+      ].join(''),
+    );
+  });
+
+  it('puts the uint16 bit count, uint8 direction, uint8 extDataOffset and uint32 crc at the CAN_FD_MSG_64 offsets', () => {
+    const tx = blfCanFdMessage64(f({ fd: true, dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i), direction: 'tx' }), 0n);
+    const rx = blfCanFdMessage64(f({ fd: true, dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i), direction: 'rx' }), 0n);
+    const view = new DataView(tx.buffer);
+    expect(view.getUint16(64, true)).toBe(0); // bit count
+    expect(tx[66]).toBe(1); // Tx
+    expect(tx[67]).toBe(0); // extDataOffset
+    expect(view.getUint32(68, true)).toBe(0); // crc
+    expect(rx[66]).toBe(0); // Rx
+    expect(rx.subarray(72, 84)).toEqual(Uint8Array.from({ length: 12 }, (_, i) => i));
+    expect(tx.subarray(84, 136)).toEqual(new Uint8Array(52)); // payload is zero-padded
+  });
+
+  it('maps ESI and the receive direction into the FD64 flags', () => {
+    const o = blfCanFdMessage64(f({ fd: true, brs: false, esi: true, direction: 'rx', dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i) }), 0n);
+    const v = new DataView(o.buffer);
+    expect([o[33], o[34], o[35]]).toEqual([9, 12, 0]); // dlc, valid bytes, tx count
+    expect(v.getUint32(44, true)).toBe(0x5000); // FD + ESI
+    expect(v.getUint16(64, true)).toBe(0); // bit count
+    expect(o[66]).toBe(0); // receive
+    expect(o[67]).toBe(0); // extDataOffset
+    expect(v.getUint32(68, true)).toBe(0); // crc
   });
 
   it('writes the file header and a zlib container whose content is exactly the objects', async () => {
@@ -89,5 +127,18 @@ describe('BLF writer (also read with python-can 4.6.1 and compared with its own 
     small.frame(f());
     small.frame(f());
     expect([small.frames, small.capped]).toEqual([2, true]);
+  });
+
+  it('records FD frames with the 136-byte object, full payload and the right size accounting', async () => {
+    const r = new Recorder('blf', new Date(0));
+    r.frame(f({ fd: true, dlc: 9, data: Uint8Array.from({ length: 12 }, (_, i) => i) }));
+    r.frame(f({ fd: true, dlc: 15, data: new Uint8Array(64) }));
+    expect([r.frames, r.bytes]).toEqual([2, 2 * BLF_FD_OBJECT_SIZE]);
+    const { objects } = await firstContainer(await r.blfBytes());
+    const v = new DataView(objects.buffer, objects.byteOffset);
+    expect([v.getUint32(8, true), v.getUint32(12, true)]).toEqual([BLF_FD_OBJECT_SIZE, 101]);
+    expect([objects[33], objects[34], objects[35]]).toEqual([9, 12, 0]);
+    const second = new DataView(objects.buffer, objects.byteOffset + BLF_FD_OBJECT_SIZE);
+    expect([second.getUint32(8, true), second.getUint32(12, true), second.getUint8(34)]).toEqual([BLF_FD_OBJECT_SIZE, 101, 64]);
   });
 });

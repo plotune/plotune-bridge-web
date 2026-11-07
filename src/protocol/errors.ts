@@ -23,7 +23,7 @@ export class ProtocolViolation extends Error {
 
 const PLAIN: Record<ErrorCode, string> = {
   INVALID_ID: 'The CAN ID is not valid. Standard IDs go up to 7FF and extended IDs up to 1FFFFFFF (hex).',
-  INVALID_DLC: 'The data length does not match. A CAN frame carries 0 to 8 bytes.',
+  INVALID_DLC: 'The data length does not match the DLC. Classical CAN carries 0 to 8 bytes; CAN FD carries up to 64 depending on the DLC.',
   INVALID_DATA: 'The data is not valid. Use pairs of hex digits, and no data for a remote request.',
   UNKNOWN_CHANNEL: 'This device does not have that channel.',
   UNSUPPORTED_BITRATE: 'The device does not support that bit rate.',

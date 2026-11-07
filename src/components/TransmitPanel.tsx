@@ -8,11 +8,20 @@ import { Panel } from './Panel';
 export function TransmitPanel() {
   const store = useStore();
   const state = useWorkspace();
-  const [form, setForm] = useState<TxForm>({ channel: state.transmitChannel, id: '123', extended: false, rtr: false, dlc: '0', data: '11 22 33 44' });
+  const [form, setForm] = useState<TxForm>({ channel: state.transmitChannel, id: '123', extended: false, rtr: false, dlc: '0', data: '11 22 33 44', fd: false, brs: false, esi: false });
   const [touched, setTouched] = useState(false);
-  const selectedForm = { ...form, channel: state.transmitChannel };
-  const { frame, errors } = validateTx(selectedForm);
+  const canFd = state.descriptor?.canFd === true;
+  const selectedForm = {
+    ...form,
+    channel: state.transmitChannel,
+    fd: canFd && form.fd,
+    brs: canFd && form.fd && form.brs,
+    esi: canFd && form.fd && form.esi,
+  };
+  const { frame, errors } = validateTx(selectedForm, { canFd });
+  const remote = !selectedForm.fd && selectedForm.rtr;
   const set = (patch: Partial<TxForm>) => setForm((f) => ({ ...f, ...patch }));
+  const setFd = (fd: boolean) => set(fd ? { fd: true, rtr: false } : { fd: false, brs: false, esi: false });
   const channel = state.channels.find((c) => c.channel === state.transmitChannel);
   const unconfigured = !channel || channel.bitrate === null || state.phase !== 'connected';
 
@@ -48,13 +57,30 @@ export function TransmitPanel() {
           </label>
           <label className="bw-field">
             <span>Frame type</span>
-            <select value={form.rtr ? 'rtr' : 'data'} onChange={(e) => set({ rtr: e.target.value === 'rtr' })}>
+            <select value={remote ? 'rtr' : 'data'} disabled={selectedForm.fd} onChange={(e) => set({ rtr: e.target.value === 'rtr' })}>
               <option value="data">Data</option>
               <option value="rtr">Remote request</option>
             </select>
           </label>
         </div>
-        {form.rtr ? (
+        {canFd && (
+          <div className="bw-form-row">
+            <label className="bw-field bw-check-field">
+              <span>CAN FD</span>
+              <input type="checkbox" checked={selectedForm.fd} aria-invalid={touched && !!errors.fd} aria-describedby={touched && errors.fd ? 'tx-fd-error' : undefined} onChange={(e) => setFd(e.target.checked)} />
+            </label>
+            <label className="bw-field bw-check-field">
+              <span>Bit rate switch (BRS)</span>
+              <input type="checkbox" checked={selectedForm.brs} disabled={!selectedForm.fd} onChange={(e) => set({ brs: e.target.checked })} />
+            </label>
+            <label className="bw-field bw-check-field">
+              <span>Error state indicator (ESI)</span>
+              <input type="checkbox" checked={selectedForm.esi} disabled={!selectedForm.fd} onChange={(e) => set({ esi: e.target.checked })} />
+            </label>
+          </div>
+        )}
+        {touched && errors.fd && <small id="tx-fd-error" className="bw-error-text">{errors.fd}</small>}
+        {remote ? (
           <label className="bw-field">
             <span>Requested length (0 to 8)</span>
             <input value={form.dlc} onChange={(e) => set({ dlc: e.target.value })} className="bw-mono bw-narrow" inputMode="numeric" aria-invalid={touched && !!errors.dlc} />
@@ -64,7 +90,7 @@ export function TransmitPanel() {
           <label className="bw-field">
             <span>Data (hex bytes)</span>
             <input value={form.data} onChange={(e) => set({ data: e.target.value })} className="bw-mono" aria-invalid={touched && !!errors.data} aria-describedby={touched && errors.data ? 'tx-data-error' : undefined} spellCheck={false} autoComplete="off" />
-            {touched && errors.data ? <small id="tx-data-error" className="bw-error-text">{errors.data}</small> : <small>{frame ? `${frame.dlc} ${frame.dlc === 1 ? 'byte' : 'bytes'}` : ''}</small>}
+            {touched && errors.data ? <small id="tx-data-error" className="bw-error-text">{errors.data}</small> : <small>{frame ? `${frame.data.length} ${frame.data.length === 1 ? 'byte' : 'bytes'}` : ''}</small>}
           </label>
         )}
         {unconfigured && <p className="bw-hint">{state.phase === 'connected' && channel ? `Set a bit rate on ${channel.name} before sending.` : 'Connect a device to send a frame.'}</p>}
@@ -79,7 +105,7 @@ export function TransmitPanel() {
           <li key={entry.id} className={entry.ok ? 'is-ok' : 'is-error'}>
             {entry.ok ? <IconCheck /> : <IconAlert />}
             <span className="bw-mono">
-              CAN{entry.frame.channel} · {formatId(entry.frame.id, entry.frame.extended)} · {entry.frame.rtr ? `remote ${entry.frame.dlc}` : bytesToHex(entry.frame.data, ' ').toUpperCase() || 'no data'}
+              {entry.frame.fd ? 'FD ' : ''}CAN{entry.frame.channel} · {formatId(entry.frame.id, entry.frame.extended)} · {entry.frame.rtr ? `remote ${entry.frame.dlc}` : bytesToHex(entry.frame.data, ' ').toUpperCase() || 'no data'}
             </span>
             <span className="bw-muted">{entry.message}</span>
           </li>

@@ -7,6 +7,10 @@ import { MockDeviceCore, serialize, type MockDeviceOptions } from '../tests/help
 
 const LOCALHOST = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
+/**
+ * `MockDeviceOptions` includes `advertiseCanFd`: pass `advertiseCanFd: true` for an FD-capable
+ * device. The default stays Classical CAN, so existing specs keep their classic device.
+ */
 export interface MockServerOptions extends MockDeviceOptions {
   port?: number;
   /** Extra origins allowed besides localhost ones. Requests without an Origin header are always allowed. */
@@ -99,6 +103,11 @@ export class MockDeviceServer {
   generate(channel: number, hz: number, id = 0x100): void {
     let n = 0;
     this.generators.push(setInterval(() => this.core.injectRx(channel, { id, data: Uint8Array.of(n++ & 0xff, 0xaa) }), 1000 / hz));
+  }
+
+  /** Injects one CAN FD frame. The core must be FD-capable (`advertiseCanFd: true`). */
+  injectFd(channel: number, frame: { id: number; extended?: boolean; brs?: boolean; esi?: boolean; data?: Uint8Array; timestampNs?: bigint }): void {
+    this.core.injectRx(channel, { ...frame, fd: true });
   }
 
   async close(): Promise<void> {

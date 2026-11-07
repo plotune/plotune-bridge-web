@@ -1,11 +1,26 @@
-// Domain types for the Bridge CAN device contract v0.1.0 (Classic CAN only).
+// Domain types for the Bridge CAN device contract v0.1.0 (Classical CAN and CAN FD).
 // Wire names are snake_case; these are the camelCase forms. Nothing is renamed semantically:
 // channel numbers, device timestamps, direction and drop counters are carried through unchanged.
 
 export const CONTRACT_VERSION = '0.1.0';
 export const MAX_DLC = 8;
+export const MAX_FD_DLC = 15;
+export const MAX_FD_PAYLOAD = 64;
+/** CAN FD DLC 0..8 are byte counts; 9..15 select these lengths. */
+export const FD_PAYLOAD_LENGTHS: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64];
 export const MAX_STANDARD_ID = 0x7ff;
 export const MAX_EXTENDED_ID = 0x1fff_ffff;
+
+/** Payload bytes for a CAN FD DLC code. DLC 0..8 equal their byte count. */
+export function fdPayloadLength(dlc: number): number {
+  return FD_PAYLOAD_LENGTHS[dlc]!;
+}
+
+/** DLC code for an exact CAN FD payload length, or null when the length is not a valid DLC length. */
+export function fdDlcForPayload(length: number): number | null {
+  const dlc = FD_PAYLOAD_LENGTHS.indexOf(length);
+  return dlc === -1 ? null : dlc;
+}
 /** SPEC section 1: adapters accept requests of at least this many UTF-8 bytes; clients must not send more. */
 export const MAX_REQUEST_BYTES = 4096;
 export const UINT64_MAX = (1n << 64n) - 1n;
@@ -41,6 +56,12 @@ export interface TxFrame {
   id: number;
   extended: boolean;
   rtr: boolean;
+  /** CAN FD frame. Absent or false means Classical CAN. Decoded frames always carry a boolean. */
+  fd?: boolean;
+  /** CAN FD bit-rate switch. Only meaningful when fd is true. */
+  brs?: boolean;
+  /** CAN FD error-state indicator. Only meaningful when fd is true. */
+  esi?: boolean;
   dlc: number;
   data: Uint8Array;
 }
@@ -86,7 +107,7 @@ export interface DeviceDescriptor {
   deviceId: string;
   firmware: string;
   profile: string;
-  canFd: false;
+  canFd: boolean;
   supportedBitrates: number[];
   rxQueueCapacity: number;
   clock: ClockInfo;

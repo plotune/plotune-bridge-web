@@ -102,15 +102,28 @@
         "rtr": {
           "type": "boolean"
         },
+        "fd": {
+          "type": "boolean",
+          "description": "CAN FD frame. False/omitted for Classical CAN."
+        },
+        "brs": {
+          "type": "boolean",
+          "description": "CAN FD bit-rate switch; false/omitted for Classical CAN."
+        },
+        "esi": {
+          "type": "boolean",
+          "description": "CAN FD error-state indicator; false/omitted for Classical CAN."
+        },
         "dlc": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 8
+          "maximum": 15,
+          "description": "Classical 0..8, or CAN FD DLC 0..15. FD payload length mapping: 9=12, 10=16, 11=20, 12=24, 13=32, 14=48, 15=64 bytes."
         },
         "data": {
           "type": "string",
-          "pattern": "^([0-9a-f]{2}){0,8}$",
-          "description": "Lowercase hex, no separators. Empty for RTR. For data frames its byte length MUST equal dlc (not expressible in JSON Schema; enforced by implementations)."
+          "pattern": "^([0-9a-f]{2}){0,64}$",
+          "description": "Lowercase hex, no separators. Empty for RTR. For data frames its byte length MUST equal the DLC payload length (not expressible in JSON Schema; enforced by implementations)."
         }
       },
       "required": [
@@ -200,15 +213,28 @@
         "rtr": {
           "type": "boolean"
         },
+        "fd": {
+          "type": "boolean",
+          "description": "CAN FD frame. False/omitted for Classical CAN."
+        },
+        "brs": {
+          "type": "boolean",
+          "description": "CAN FD bit-rate switch; false/omitted for Classical CAN."
+        },
+        "esi": {
+          "type": "boolean",
+          "description": "CAN FD error-state indicator; false/omitted for Classical CAN."
+        },
         "dlc": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 8
+          "maximum": 15,
+          "description": "Classical 0..8, or CAN FD DLC 0..15. FD payload length mapping: 9=12, 10=16, 11=20, 12=24, 13=32, 14=48, 15=64 bytes."
         },
         "data": {
           "type": "string",
-          "pattern": "^([0-9a-f]{2}){0,8}$",
-          "description": "Lowercase hex, no separators. Empty for RTR. For data frames its byte length MUST equal dlc (not expressible in JSON Schema; enforced by implementations)."
+          "pattern": "^([0-9a-f]{2}){0,64}$",
+          "description": "Lowercase hex, no separators. Empty for RTR. For data frames its byte length MUST equal the DLC payload length (not expressible in JSON Schema; enforced by implementations)."
         },
         "timestamp_ns": {
           "type": "integer",
@@ -435,8 +461,8 @@
           "type": "string"
         },
         "can_fd": {
-          "const": false,
-          "description": "Always false in V1; CAN FD is not advertised."
+          "type": "boolean",
+          "description": "True when every selected controller supports CAN FD transmission; Classic desk controllers report false."
         },
         "supported_bitrates": {
           "type": "array",

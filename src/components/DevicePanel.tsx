@@ -48,7 +48,7 @@ export function DeviceBody() {
         <dl className="bw-facts" data-testid="device-facts">
           <div><dt>Device</dt><dd className="bw-mono">{d.deviceId}</dd></div>
           <div><dt>Software</dt><dd className="bw-mono">{d.firmware}</dd></div>
-          <div><dt>Channels</dt><dd>{d.channels.length === 1 ? '1 (CAN1)' : '2 (CAN1, CAN2)'} · classic CAN</dd></div>
+          <div><dt>Channels</dt><dd>{d.channels.length === 1 ? '1 (CAN1)' : '2 (CAN1, CAN2)'} · {d.canFd ? 'CAN FD' : 'classic CAN'}</dd></div>
           <div><dt>Address</dt><dd className="bw-mono">{state.target}</dd></div>
           <div>
             <dt>Connection</dt>

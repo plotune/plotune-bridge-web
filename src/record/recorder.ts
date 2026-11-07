@@ -1,7 +1,7 @@
 import { formatRelativeNs } from '../lib/bytes';
 import type { CanFrame } from '../protocol/types';
 import type { StreamTap, WorkspaceStore } from '../state/store';
-import { BLF_OBJECT_SIZE, blfCanMessage, buildBlf, buildBlfBytes } from './blf';
+import { blfObject, blfObjectSize, buildBlf, buildBlfBytes } from './blf';
 import { formatSpec, type FormatSpec, type RecordFormat } from './formats';
 
 /** Browsers without streaming to disk keep the recording in memory, so it is bounded. */
@@ -24,10 +24,12 @@ export class Recorder implements StreamTap {
   private lastNs: bigint | null = null;
   private readonly chunks: string[] = [];
   private readonly objects: Uint8Array[] = [];
+  /** False until this recording sees its first CAN FD frame; the CSV header/rows are upgraded then. */
+  private canFd = false;
 
   constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES) {
     this.spec = formatSpec(format);
-    if (!this.spec.binary) this.write(this.spec.header(startedAt));
+    if (!this.spec.binary) this.write(this.spec.header(startedAt, this.canFd));
   }
 
   /** Seconds of device time between the first and the last recorded frame. */
@@ -37,12 +39,13 @@ export class Recorder implements StreamTap {
 
   frame(frame: CanFrame): void {
     if (!this.running) return;
+    if (frame.fd === true && !this.canFd) this.upgradeForFd();
     this.origin ??= frame.timestampNs;
     this.lastNs = frame.timestampNs;
     if (this.spec.binary) {
-      if (!this.reserve(BLF_OBJECT_SIZE)) return;
-      this.objects.push(blfCanMessage(frame, frame.timestampNs - this.origin));
-    } else if (!this.write(this.spec.line(frame, formatRelativeNs(frame.timestampNs, this.origin)))) return;
+      if (!this.reserve(blfObjectSize(frame))) return;
+      this.objects.push(blfObject(frame, frame.timestampNs - this.origin));
+    } else if (!this.write(this.spec.line(frame, formatRelativeNs(frame.timestampNs, this.origin), this.canFd))) return;
     this.frames += 1;
   }
 
@@ -51,6 +54,22 @@ export class Recorder implements StreamTap {
     this.dropped += count;
     const time = this.origin === null || this.lastNs === null ? '0.000000' : formatRelativeNs(this.lastNs, this.origin);
     this.write(this.spec.dropLine(channel, count, time));
+  }
+
+  /**
+   * A recording may start on a Classical device and later see an FD frame after a reconnect.
+   * CSV cannot know the columns at start, so the first FD frame rewrites the header and every
+   * earlier row: prior rows get 0,0,0. A recording that never sees an FD frame is byte-identical
+   * to the previous Classic output. Other text formats use the frame's own FD fields.
+   */
+  private upgradeForFd(): void {
+    this.canFd = true;
+    if (!this.spec.upgradeFd) return;
+    const before = this.chunks.join('');
+    const after = this.spec.upgradeFd(before);
+    this.bytes += after.length - before.length;
+    this.chunks.length = 0;
+    this.chunks.push(after);
   }
 
   /** Counts `size` bytes unless they would pass the cap; at the cap the recording stops and says so. */
