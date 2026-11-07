@@ -98,3 +98,34 @@ describe('conformance fixture from plotune-nexus (contract/examples)', () => {
     expect(digits.some((v) => v > 9007199254740992n)).toBe(true);
   });
 });
+
+describe('CAN FD wire messages against the synced schema', () => {
+  it('validates and decodes an FD frames event with DLC 15 and 64 bytes', () => {
+    const text = JSON.stringify({
+      type: 'event', event: 'frames',
+      data: { seq: 0, channel: 1, dropped: 0, frames: [
+        { channel: 1, id: 0x123, extended: false, rtr: false, fd: true, brs: true, esi: false, dlc: 15, data: '00'.repeat(64), timestamp_ns: 5, direction: 'rx' },
+      ] },
+    });
+    assertSchemaValid(text);
+    const message = parseWire(text) as { data: unknown };
+    const frame = decodeBatch(message.data).frames[0];
+    expect(frame).toMatchObject({ fd: true, brs: true, esi: false, dlc: 15 });
+    expect(frame.data).toHaveLength(64);
+  });
+
+  it('validates and decodes an FD-capable hello response', () => {
+    const text = JSON.stringify({
+      type: 'response', id: 1, ok: true,
+      result: {
+        contract_version: '0.1.0', session_id: 's', device_id: 'd', firmware: 'f', profile: 'prototype2', can_fd: true,
+        supported_bitrates: [500000, 1000000], rx_queue_capacity: 256,
+        clock: { monotonic_ns: 1, wall_clock_ns: null, wall_clock_synced: false },
+        channels: [{ channel: 1, name: 'CAN1', bitrate: null, termination: false, bus_state: 'error_active', streaming: false, rx_queue_depth: 0, rx_queue_capacity: 256 }],
+      },
+    });
+    assertSchemaValid(text);
+    const message = parseWire(text) as { result: unknown };
+    expect(decodeDescriptor(message.result).canFd).toBe(true);
+  });
+});

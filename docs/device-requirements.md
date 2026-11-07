@@ -30,7 +30,7 @@ An Origin check protects against other web pages talking to a device. It is **no
 - One **UTF-8 JSON text frame per contract message**. No newline delimiting, no binary frames (the page closes the link with code 4000 if the device sends one).
 - Accept requests of at least **4096 bytes**; the page never sends more.
 - `timestamp_ns`, `since_ns`, `monotonic_ns` and `wall_clock_ns` are **unsigned 64-bit integers written as plain JSON integers**. The page reads them as `BigInt` and never converts them to a double.
-- Reply to `hello` with `can_fd: false`. The page refuses a device that advertises CAN FD.
+- Reply to `hello` with a boolean `can_fd`. `false` keeps the device Classical CAN-only; `true` allows CAN FD frames with `fd`/`brs`/`esi`, DLC 0–15 and payloads up to 64 bytes. The page still rejects malformed descriptors and frames.
 - Answer WebSocket pings so the page's link-loss detection stays quiet.
 
 ## 3. One session at a time, and what the user sees on a close

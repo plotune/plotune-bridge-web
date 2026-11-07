@@ -2,6 +2,7 @@
 // workspace is exercised against realistic messages: unconfigured bit rates, termination off, bounded queues with
 // explicit drop reporting, transmit echoes, replace-on-connect (done by whoever hosts it) and 64-bit nanosecond clocks.
 import type { WireObject } from '../../src/protocol/wire';
+import { fdDlcForPayload, fdPayloadLength } from '../../src/protocol/types';
 import { MockEcu } from './mockEcu';
 
 export interface MockDeviceOptions {
@@ -15,7 +16,7 @@ export interface MockDeviceOptions {
   wallOffsetNs?: bigint | null;
   ecu?: MockEcu;
   contractVersion?: string;
-  /** Override the can_fd field to prove the workspace refuses a device that advertises it. */
+  /** Whether this device advertises and accepts CAN FD. The default stays Classical CAN-only. */
   advertiseCanFd?: boolean;
 }
 
@@ -197,17 +198,28 @@ export class MockDeviceCore {
     const c = this.ch(f.channel);
     if (!c) return err(id, 'UNKNOWN_CHANNEL');
     const ext = f.extended === true;
+    const fd = f.fd === true;
+    const brs = f.brs === true;
+    const esi = f.esi === true;
+    if (!fd && (brs || esi)) return err(id, 'MALFORMED_REQUEST');
+    if (fd && !this.options.advertiseCanFd) return err(id, 'UNSUPPORTED_FEATURE', 'controller does not support CAN FD');
+    if (fd && f.rtr === true) return err(id, 'INVALID_DATA');
     if (!isInt(f.id) || f.id < 0 || f.id > (ext ? 0x1fffffff : 0x7ff)) return err(id, 'INVALID_ID');
-    if (!isInt(f.dlc) || f.dlc < 0 || f.dlc > 8) return err(id, 'INVALID_DLC');
+    if (!isInt(f.dlc) || f.dlc < 0 || f.dlc > (fd ? 15 : 8)) return err(id, 'INVALID_DLC');
     if (typeof f.data !== 'string' || !/^([0-9a-f]{2})*$/.test(f.data)) return err(id, 'INVALID_DATA');
     const data = fromHex(f.data);
-    if (f.rtr === true ? data.length !== 0 : data.length !== f.dlc) return err(id, f.rtr === true ? 'INVALID_DATA' : 'INVALID_DLC');
+    const expected = f.rtr === true ? 0 : fd ? fdPayloadLength(f.dlc) : f.dlc;
+    if (data.length !== expected) return err(id, f.rtr === true ? 'INVALID_DATA' : 'INVALID_DLC');
     if (c.bitrate === null) return err(id, 'CHANNEL_NOT_CONFIGURED');
     if (c.busState === 'bus_off') return err(id, 'BUS_OFF');
     c.stats.tx_sent += 1;
     const ts = this.stamp(c);
-    if (c.streaming && this.includeTx) this.enqueue(c, { channel: c.id, id: f.id, extended: ext, rtr: f.rtr === true, dlc: f.dlc, data: f.data, timestamp_ns: ts, direction: 'tx' }, 'tx');
-    if (this.options.ecu && !f.rtr) {
+    if (c.streaming && this.includeTx) {
+      const echo: WireObject = { channel: c.id, id: f.id, extended: ext, rtr: f.rtr === true, dlc: f.dlc, data: f.data, timestamp_ns: ts, direction: 'tx' };
+      if (fd) Object.assign(echo, { fd: true, brs, esi });
+      this.enqueue(c, echo, 'tx');
+    }
+    if (this.options.ecu && !f.rtr && !fd) {
       for (const reply of this.options.ecu.receive({ id: f.id, extended: ext, data })) this.injectRx(c.id, { id: reply.id, extended: reply.extended, data: reply.data });
     }
     return ok(id, { accepted: true });
@@ -231,12 +243,17 @@ export class MockDeviceCore {
   }
 
   /** A frame arrives from the bus (only captured while the channel's stream is armed). */
-  injectRx(channel: number, f: { id: number; extended?: boolean; rtr?: boolean; data?: Uint8Array; timestampNs?: bigint }): void {
+  injectRx(channel: number, f: { id: number; extended?: boolean; rtr?: boolean; fd?: boolean; brs?: boolean; esi?: boolean; data?: Uint8Array; dlc?: number; timestampNs?: bigint }): void {
     const c = this.ch(channel);
     if (!c || !c.streaming) return;
     const data = f.data ?? new Uint8Array();
+    const fd = f.fd === true;
+    const dlc = f.dlc ?? (fd ? fdDlcForPayload(data.length) : data.length);
+    if (dlc === null) throw new Error('CAN FD payload length must be one of 0..8, 12, 16, 20, 24, 32, 48 or 64 bytes');
     c.stats.rx_received += 1;
-    this.enqueue(c, { channel, id: f.id, extended: f.extended === true, rtr: f.rtr === true, dlc: data.length, data: hex(data), timestamp_ns: f.timestampNs ?? this.stamp(c), direction: 'rx' }, 'rx');
+    const frame: WireObject = { channel, id: f.id, extended: f.extended === true, rtr: f.rtr === true, dlc, data: hex(data), timestamp_ns: f.timestampNs ?? this.stamp(c), direction: 'rx' };
+    if (fd) Object.assign(frame, { fd: true, brs: f.brs === true, esi: f.esi === true });
+    this.enqueue(c, frame, 'rx');
   }
 
   /** Flushes every channel's queue to the attached client as `frames` batches. */

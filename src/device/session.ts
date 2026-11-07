@@ -14,6 +14,7 @@ import {
   type TxFrame,
 } from '../protocol/types';
 import type { WireObject } from '../protocol/wire';
+import { validateTxFrame } from '../protocol/validate';
 import { bytesToHex } from '../lib/bytes';
 import { TransportError, type CloseInfo, type DeviceTransport } from '../transport/types';
 
@@ -103,9 +104,15 @@ export class DeviceSession {
   }
 
   async transmit(frame: TxFrame): Promise<void> {
-    await this.request('transmit', {
-      frame: { channel: frame.channel, id: frame.id, extended: frame.extended, rtr: frame.rtr, dlc: frame.dlc, data: bytesToHex(frame.data) },
-    });
+    validateTxFrame(frame, { canFd: this.descriptor?.canFd });
+    const wire: WireObject = { channel: frame.channel, id: frame.id, extended: frame.extended, rtr: frame.rtr, dlc: frame.dlc, data: bytesToHex(frame.data) };
+    // Classical requests stay byte-identical; FD flags are present only on FD frames.
+    if (frame.fd === true) {
+      wire.fd = true;
+      wire.brs = frame.brs === true;
+      wire.esi = frame.esi === true;
+    }
+    await this.request('transmit', { frame: wire });
   }
 
   async statistics(channels?: number[], reset = false): Promise<StatisticsResult> {

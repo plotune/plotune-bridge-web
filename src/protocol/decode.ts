@@ -12,7 +12,7 @@ import type {
   FrameBatch,
   StatisticsResult,
 } from './types';
-import { MAX_DLC, MAX_EXTENDED_ID, MAX_STANDARD_ID } from './types';
+import { fdPayloadLength, MAX_DLC, MAX_EXTENDED_ID, MAX_FD_DLC, MAX_STANDARD_ID } from './types';
 
 const BUS_STATES: BusState[] = ['error_active', 'error_warning', 'error_passive', 'bus_off'];
 
@@ -52,12 +52,21 @@ export function decodeFrame(wire: unknown): CanFrame {
   const w = obj(wire, 'frame');
   const extended = bool(w.extended, 'frame.extended');
   const rtr = bool(w.rtr, 'frame.rtr');
+  const fd = w.fd === undefined ? false : bool(w.fd, 'frame.fd');
+  const brs = w.brs === undefined ? false : bool(w.brs, 'frame.brs');
+  const esi = w.esi === undefined ? false : bool(w.esi, 'frame.esi');
   const id = uint(w.id, 'frame.id');
   if (id > (extended ? MAX_EXTENDED_ID : MAX_STANDARD_ID)) throw new ProtocolViolation('frame.id is out of range for its format');
   const dlc = uint(w.dlc, 'frame.dlc');
-  if (dlc > MAX_DLC) throw new ProtocolViolation('frame.dlc exceeds 8');
+  if (dlc > (fd ? MAX_FD_DLC : MAX_DLC)) throw new ProtocolViolation(fd ? 'frame.dlc exceeds 15' : 'frame.dlc exceeds 8');
+  if (!fd && (brs || esi)) throw new ProtocolViolation('frame.brs and frame.esi require a CAN FD frame');
+  if (fd && rtr) throw new ProtocolViolation('CAN FD frames cannot be remote frames');
   const data = hexToBytesStrict(str(w.data, 'frame.data'), 'frame.data');
-  if (rtr ? data.length !== 0 : data.length !== dlc) throw new ProtocolViolation('frame.data length does not match dlc');
+  if (fd) {
+    if (data.length !== fdPayloadLength(dlc)) throw new ProtocolViolation('frame.data length does not match the CAN FD DLC payload length');
+  } else if (rtr ? data.length !== 0 : data.length !== dlc) {
+    throw new ProtocolViolation('frame.data length does not match dlc');
+  }
   const direction = str(w.direction, 'frame.direction');
   if (direction !== 'rx' && direction !== 'tx') throw new ProtocolViolation('frame.direction must be rx or tx');
   return {
@@ -65,6 +74,9 @@ export function decodeFrame(wire: unknown): CanFrame {
     id,
     extended,
     rtr,
+    fd,
+    brs,
+    esi,
     dlc,
     data,
     timestampNs: big(w.timestamp_ns, 'frame.timestamp_ns'),
@@ -121,7 +133,7 @@ function decodeClock(wire: unknown): ClockInfo {
 
 export function decodeDescriptor(wire: unknown): DeviceDescriptor {
   const w = obj(wire, 'hello result');
-  if (w.can_fd !== false) throw new ProtocolViolation('can_fd must be false: this workspace supports classic CAN only');
+  const canFd = bool(w.can_fd, 'can_fd');
   const supported = arr(w.supported_bitrates, 'supported_bitrates').map((v) => uint(v, 'supported_bitrates item'));
   const channels = arr(w.channels, 'channels').map(decodeChannelStatus);
   if (channels.length < 1 || channels.length > 2) throw new ProtocolViolation('a device exposes one or two channels');
@@ -131,7 +143,7 @@ export function decodeDescriptor(wire: unknown): DeviceDescriptor {
     deviceId: str(w.device_id, 'device_id'),
     firmware: str(w.firmware, 'firmware'),
     profile: str(w.profile, 'profile'),
-    canFd: false,
+    canFd,
     supportedBitrates: supported,
     rxQueueCapacity: uint(w.rx_queue_capacity, 'rx_queue_capacity'),
     clock: decodeClock(w.clock),

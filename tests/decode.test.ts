@@ -7,7 +7,7 @@ const frame = (over: Record<string, unknown> = {}) => ({ channel: 1, id: 0x123, 
 
 describe('frame decoding keeps channel, timestamp and direction exactly', () => {
   it('decodes a data frame', () => {
-    expect(decodeFrame(frame())).toEqual({ channel: 1, id: 0x123, extended: false, rtr: false, dlc: 2, data: Uint8Array.of(0xab, 0xcd), timestampNs: 5n, direction: 'rx' });
+    expect(decodeFrame(frame())).toEqual({ channel: 1, id: 0x123, extended: false, rtr: false, fd: false, brs: false, esi: false, dlc: 2, data: Uint8Array.of(0xab, 0xcd), timestampNs: 5n, direction: 'rx' });
   });
   it('keeps a transmitted echo as direction tx on its own channel', () => {
     expect(decodeFrame(frame({ channel: 2, direction: 'tx' }))).toMatchObject({ channel: 2, direction: 'tx' });
@@ -19,7 +19,7 @@ describe('frame decoding keeps channel, timestamp and direction exactly', () => 
   it.each([
     ['standard id out of range', { id: 0x800 }],
     ['extended id out of range', { id: 0x20000000, extended: true }],
-    ['dlc above 8', { dlc: 9, data: '00'.repeat(9) }],
+    ['classic dlc above 8', { dlc: 9, data: '00'.repeat(9) }],
     ['data shorter than dlc', { dlc: 3 }],
     ['data on an RTR frame', { rtr: true }],
     ['uppercase hex', { data: 'ABCD' }],
@@ -27,6 +27,32 @@ describe('frame decoding keeps channel, timestamp and direction exactly', () => 
     ['unknown direction', { direction: 'both' }],
     ['timestamp not 64-bit', { timestamp_ns: 5 }],
     ['negative channel', { channel: -1 }],
+  ])('rejects %s', (_name, over) => {
+    expect(() => decodeFrame(frame(over))).toThrow(ProtocolViolation);
+  });
+});
+
+describe('CAN FD frames', () => {
+  it('decodes fd/brs/esi with DLC 15 and a 64-byte payload', () => {
+    const decoded = decodeFrame(frame({ fd: true, brs: true, esi: false, dlc: 15, data: '00'.repeat(64) }));
+    expect(decoded).toMatchObject({ fd: true, brs: true, esi: false, dlc: 15 });
+    expect(decoded.data).toHaveLength(64);
+  });
+
+  it.each([[9, 12], [10, 16], [11, 20], [12, 24], [13, 32], [14, 48], [15, 64]])('maps FD DLC %i to %i payload bytes', (dlc, length) => {
+    const decoded = decodeFrame(frame({ fd: true, dlc, data: '00'.repeat(length) }));
+    expect(decoded).toMatchObject({ fd: true, dlc });
+    expect(decoded.data).toHaveLength(length);
+  });
+
+  it.each([
+    ['non-canonical 9-byte payload for DLC 9', { fd: true, dlc: 9, data: '00'.repeat(9) }],
+    ['short 63-byte payload for DLC 15', { fd: true, dlc: 15, data: '00'.repeat(63) }],
+    ['FD DLC above 15', { fd: true, dlc: 16, data: '00'.repeat(64) }],
+    ['FD remote frame', { fd: true, rtr: true, dlc: 9, data: '' }],
+    ['BRS on a Classical CAN frame', { brs: true }],
+    ['ESI on a Classical CAN frame', { esi: true }],
+    ['non-boolean fd', { fd: 'yes' }],
   ])('rejects %s', (_name, over) => {
     expect(() => decodeFrame(frame(over))).toThrow(ProtocolViolation);
   });
@@ -49,8 +75,12 @@ describe('batches and descriptors', () => {
     const d = decodeDescriptor(descriptor());
     expect(d.channels[0]).toMatchObject({ bitrate: null, termination: false });
   });
-  it('refuses a device that advertises CAN FD', () => {
-    expect(() => decodeDescriptor(descriptor({ can_fd: true }))).toThrow(ProtocolViolation);
+  it('accepts a device that advertises CAN FD and keeps the capability', () => {
+    expect(decodeDescriptor(descriptor({ can_fd: true })).canFd).toBe(true);
+  });
+  it('refuses a descriptor without a boolean can_fd', () => {
+    expect(() => decodeDescriptor(descriptor({ can_fd: undefined }))).toThrow(ProtocolViolation);
+    expect(() => decodeDescriptor(descriptor({ can_fd: 'yes' }))).toThrow(ProtocolViolation);
   });
   it('refuses zero or three channels', () => {
     expect(() => decodeDescriptor(descriptor({ channels: [] }))).toThrow(ProtocolViolation);
