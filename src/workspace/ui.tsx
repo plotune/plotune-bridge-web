@@ -8,6 +8,7 @@ const FOCUSABLE = 'a[href],button:not(:disabled),input:not(:disabled),select:not
 export function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const descriptionId = useId();
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
     // The field marked for focus first (the Close button comes earlier in the document, so one selector list would pick it).
@@ -23,6 +24,7 @@ export function Modal({ title, onClose, children, footer, wide }: { title: strin
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         tabIndex={-1}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
@@ -39,7 +41,7 @@ export function Modal({ title, onClose, children, footer, wide }: { title: strin
           <h2 id={titleId}>{title}</h2>
           <button type="button" className="bw-icon-button" aria-label="Close" onClick={onClose}>×</button>
         </div>
-        <div className="bw-modal-body">{children}</div>
+        <div className="bw-modal-body" id={descriptionId}>{children}</div>
         {footer && <div className="bw-modal-foot">{footer}</div>}
       </div>
     </div>,

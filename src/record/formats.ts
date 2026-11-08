@@ -3,6 +3,34 @@ import type { CanFrame } from '../protocol/types';
 
 export type RecordFormat = 'asc' | 'blf' | 'candump' | 'csv';
 
+/** Fields of a source frame that an exporter may or may not be able to represent. */
+export type RecordingField =
+  | 'identifier'
+  | 'identifierFormat'
+  | 'fd'
+  | 'brs'
+  | 'esi'
+  | 'direction'
+  | 'channel'
+  | 'payload'
+  | 'dlc'
+  | 'timestamp'
+  | 'remote';
+
+export const FIELD_LABELS: Record<RecordingField, string> = {
+  identifier: 'identifier',
+  identifierFormat: 'identifier format (standard/extended)',
+  fd: 'CAN FD flag',
+  brs: 'BRS',
+  esi: 'ESI',
+  direction: 'direction (Rx/Tx)',
+  channel: 'channel',
+  payload: 'payload',
+  dlc: 'RTR requested length (DLC)',
+  timestamp: 'device timestamp',
+  remote: 'remote flag',
+};
+
 export interface FormatSpec {
   id: RecordFormat;
   label: string;
@@ -12,6 +40,8 @@ export interface FormatSpec {
   mime: string;
   /** Whether the file can say that the device reported lost frames. */
   carriesDrops: boolean;
+  /** Mandatory source fields this format cannot represent without loss. */
+  unsupported: readonly RecordingField[];
   /** Binary formats are built by their own writer (see blf.ts); `header` and `line` are not used. */
   binary?: boolean;
   /** `canFd` is true once the recording has seen a CAN FD frame; CSV upgrades its columns then. */
@@ -30,7 +60,7 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 
-/** Vector ASCII log. Timestamps are the device clock from the first recorded frame; Classic CAN only. */
+/** Vector ASCII log. Timestamps are the device clock from the first recorded frame. */
 const asc: FormatSpec = {
   id: 'asc',
   label: 'ASC (Vector text)',
@@ -38,6 +68,7 @@ const asc: FormatSpec = {
   extension: 'asc',
   mime: 'text/plain',
   carriesDrops: true,
+  unsupported: [],
   header(d) {
     const hours = d.getHours() % 12 === 0 ? 12 : d.getHours() % 12;
     const stamp = `${DAYS[d.getDay()]} ${MONTHS[d.getMonth()]} ${d.getDate()} ${pad(hours)}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)} ${d.getHours() < 12 ? 'am' : 'pm'} ${d.getFullYear()}`;
@@ -69,6 +100,7 @@ const candump: FormatSpec = {
   extension: 'log',
   mime: 'text/plain',
   carriesDrops: false,
+  unsupported: ['direction', 'dlc'],
   header: () => '',
   line(frame, time) {
     const id = frame.id.toString(16).toUpperCase().padStart(frame.extended ? 8 : 3, '0');
@@ -90,6 +122,7 @@ const blf: FormatSpec = {
   extension: 'blf',
   mime: 'application/octet-stream',
   carriesDrops: false,
+  unsupported: [],
   binary: true,
   header: () => '',
   line: () => '',
@@ -103,6 +136,7 @@ const csv: FormatSpec = {
   extension: 'csv',
   mime: 'text/csv',
   carriesDrops: false,
+  unsupported: [],
   header: (_startedAt, canFd = false) => `time_s,channel,id_hex,extended,direction,remote,dlc,data_hex${canFd ? ',fd,brs,esi' : ''}\r\n`,
   line(frame, time, canFd = false) {
     const base = `${time},${frame.channel},${frame.id.toString(16).toUpperCase()},${frame.extended ? 1 : 0},${frame.direction},${frame.rtr ? 1 : 0},${frame.dlc},${bytesToHex(frame.data).toUpperCase()}`;

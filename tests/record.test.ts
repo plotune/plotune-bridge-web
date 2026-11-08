@@ -53,6 +53,7 @@ describe('formats (byte exact; ASC and candump were also read back with python-c
 
   it('says which formats can carry a note about lost frames', () => {
     expect(FORMATS.map((x) => [x.id, x.carriesDrops])).toEqual([['asc', true], ['blf', false], ['candump', false], ['csv', false]]);
+    expect(FORMATS.map((x) => [x.id, x.unsupported])).toEqual([['asc', []], ['blf', []], ['candump', ['direction', 'dlc']], ['csv', []]]);
     expect(formatSpec('asc').extension).toBe('asc');
   });
 
@@ -110,6 +111,22 @@ describe('formats (byte exact; ASC and candump were also read back with python-c
 });
 
 describe('Recorder', () => {
+  it('reports only the mandatory fields the recording used and the format cannot preserve', () => {
+    const empty = new Recorder('candump', START);
+    expect(empty.lossFields).toEqual([]); // no frames, nothing can be lost
+    const candump = new Recorder('candump', START);
+    candump.frame(f());
+    expect(candump.lossFields).toEqual(['direction']);
+    const remote = new Recorder('candump', START);
+    remote.frame(f({ rtr: true, dlc: 5, data: new Uint8Array() }));
+    expect(remote.lossFields).toEqual(['direction', 'dlc']); // #R carries no requested length
+    for (const format of ['asc', 'blf', 'csv'] as const) {
+      const r = new Recorder(format, START);
+      r.frame(f());
+      expect(r.lossFields, format).toEqual([]);
+    }
+  });
+
   it('counts frames, bytes, duration and the drops the device reported, even in formats that cannot write them', () => {
     const r = new Recorder('candump', START);
     fixture(r);
@@ -168,6 +185,14 @@ describe('RecordingService', () => {
     expect(service.last).toEqual(done.summary);
     expect(changes).toBe(2);
     expect(await service.stop()).toBeNull();
+  });
+
+  it('puts the loss fields in the summary', async () => {
+    const service = new RecordingService();
+    service.start(fakeStore(), 'candump', START);
+    service.current!.frame(f());
+    const done = (await service.stop())!;
+    expect(done.summary.lossFields).toEqual(['direction']);
   });
 
   it('a new recording replaces a running one without leaving a tap behind', () => {

@@ -16,8 +16,20 @@ async function expectNoAxeViolations(page: Page, label: string): Promise<void> {
   expect(summary, `${label}: accessibility violations`).toEqual([]);
 }
 
-async function saveRecording(page: Page, outPath: string): Promise<void> {
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Stop and save' }).click()]);
+/** Saves through the loss gate. `expectedLoss` must name every field the dialog should show; empty asserts no dialog. */
+async function saveRecording(page: Page, outPath: string, expectedLoss: string[] = []): Promise<void> {
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Stop and save' }).click();
+  const loss = page.getByRole('dialog', { name: 'Export with loss?' });
+  if (expectedLoss.length === 0) {
+    await page.waitForTimeout(100); // let a wrong prompt render before asserting it is absent
+    await expect(loss).toHaveCount(0);
+  } else {
+    await expect(loss).toBeVisible();
+    for (const field of expectedLoss) await expect(loss).toContainText(field);
+    await loss.getByRole('button', { name: /Export anyway/ }).click();
+  }
+  const download = await downloadPromise;
   await download.saveAs(outPath);
 }
 
@@ -138,19 +150,19 @@ test('recordings on an FD device carry CAN FD flags and the full 64-byte payload
   await configureBothChannels(page);
   await startCapture(page);
 
-  const textFormats = [
-    ['asc', (text: string) => text.includes('CANFD 1 Rx') && text.includes('1 0 F 64') && text.includes(FD_HEX)],
-    ['candump', (text: string) => text.includes(`can0 123##1${FD_HEX_COMPACT}`)],
-    ['csv', (text: string) => text.startsWith('time_s,channel,id_hex,extended,direction,remote,dlc,data_hex,fd,brs,esi\r\n') && text.includes(`1,123,0,rx,0,15,${FD_HEX_COMPACT},1,1,0`)],
-  ] as const;
+  const textFormats: { format: 'asc' | 'candump' | 'csv'; expectedLoss: string[]; check: (text: string) => boolean }[] = [
+    { format: 'asc', expectedLoss: [], check: (text) => text.includes('CANFD 1 Rx') && text.includes('1 0 F 64') && text.includes(FD_HEX) },
+    { format: 'candump', expectedLoss: ['direction (Rx/Tx)'], check: (text) => text.includes(`can0 123##1${FD_HEX_COMPACT}`) },
+    { format: 'csv', expectedLoss: [], check: (text) => text.startsWith('time_s,channel,id_hex,extended,direction,remote,dlc,data_hex,fd,brs,esi\r\n') && text.includes(`1,123,0,rx,0,15,${FD_HEX_COMPACT},1,1,0`) },
+  ];
 
-  for (const [format, check] of textFormats) {
+  for (const { format, expectedLoss, check } of textFormats) {
     await page.getByLabel('Recording format').selectOption(format);
     await page.getByRole('button', { name: 'Record', exact: true }).click();
     device.injectFd(1, { id: 0x123, brs: true, esi: false, data: FD_DATA });
     await expect(page.getByTestId('record-status')).toContainText(/Recording · [1-9]\d* frames/);
     const path = info.outputPath(`fd.${format}`);
-    await saveRecording(page, path);
+    await saveRecording(page, path, expectedLoss);
     const text = await readFile(path, 'utf8');
     expect(check(text), format).toBe(true);
   }
@@ -167,7 +179,7 @@ test('recordings on an FD device carry CAN FD flags and the full 64-byte payload
   await expect(page.getByTestId('record-status')).toContainText(/Recording · [2-9]\d* frames/);
 
   const blfPath = info.outputPath('fd.blf');
-  await saveRecording(page, blfPath);
+  await saveRecording(page, blfPath, []);
   const bytes = await readFile(blfPath);
   expect(bytes.subarray(0, 4).toString('latin1')).toBe('LOGG');
   const containerSize = bytes.readUInt32LE(144 + 8);
