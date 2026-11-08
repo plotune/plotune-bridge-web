@@ -262,13 +262,13 @@ function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal, onSeria
 
   return (
     <div className="bw-add-device">
-      {product === 'serial' ? <section className="bw-card"><h1>Bridge Serial</h1><p>Connect to a local Serial device in the persistent workspace session.</p><button className="bw-button bw-primary" onClick={onSerialOpen}>Open Serial session</button></section> : <>
+      {product === 'serial' ? <section className="bw-card"><h1>Bridge Serial</h1><p>Connect to a local Serial device in the persistent workspace session.</p><button type="button" className="bw-button" onClick={() => setProduct('can')}>Choose Bridge CAN</button><button type="button" className="bw-button bw-primary" onClick={onSerialOpen}>Open Serial session</button></section> : <>
         <div className="bw-actions"><button type="button" className="bw-button" onClick={() => setProduct('serial')}>Choose Bridge Serial</button></div>
         <ConnectView browser={browser} pageOrigin={pageOrigin} />
       </>}
       {!connecting && (
         <>
-          <button type="button" className="bw-link-button" onClick={() => onMode('account')}>
+          <button type="button" className="bw-link-button" onClick={() => { setProduct('can'); onMode('account'); }}>
             Use my Plotune account
           </button>
           {cancel}

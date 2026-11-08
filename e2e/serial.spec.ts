@@ -18,9 +18,9 @@ test('Bridge Serial configures channels, preserves numeric u64, loss-only events
     device.inject(1);await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText('18446744073709551000 ns');await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText('dropped 2 bytes');
     device.inject(1,'',7,18446744073709551001n);await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText('(loss-only event)');
     await page.getByRole('button',{name:'Close this pane'}).click();await expect(page.getByText(/Bridge Serial session connected to MOCK-SER-01/)).toBeVisible();await page.getByRole('button',{name:'Open Serial session'}).click();
-    await page.getByLabel('Hex bytes').fill('00 41 ff');await page.getByRole('button',{name:'Send bytes'}).click();await expect(page.getByRole('alert')).toContainText('physical transmission is not confirmed');
+    await page.getByLabel('Hex bytes').fill('00 41 ff');await page.getByRole('button',{name:'Send bytes'}).click();await expect(page.getByRole('status').filter({hasText:'physical transmission is not confirmed'})).toBeVisible();
     const replaced=await context.newPage();await replaced.goto('/');await replaced.evaluate(async url=>{const ws=new WebSocket(url);await new Promise<void>((resolve,reject)=>{ws.onopen=()=>resolve();ws.onerror=()=>reject(new Error('open'));});ws.send(JSON.stringify({type:'request',id:1,op:'hello',params:{contract_version:'0.1.0'}}));},device.url);
-    await expect(page.getByRole('alert')).toContainText('Another client may have taken over');await replaced.close();
+    await expect(page.getByRole('alert')).toContainText('Another client took over');await replaced.close();
   }finally{await device.close();}
 });
 
@@ -45,10 +45,110 @@ test('accepts both descriptor channel orders and presents channels in numeric or
 
 test('bounds rendered Serial rows and reports source gaps and unknown-count overruns',async({page})=>{
   const device=await new MockSerialServer().ready();try{await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await armFirstChannel(page);for(let i=0;i<320;i++)device.inject(1,'ff',0,18446744073709551000n+BigInt(i),i+1);await expect(page.getByRole('list',{name:'Serial byte events'}).locator('li')).toHaveCount(300);await expect(page.getByText(/trace evictions: 20 rows/)).toBeVisible();
-    device.inject(1,'00',0,18446744073709551610n,324);await expect(page.getByText(/Source sequence gaps: 3 events/)).toBeVisible();device.recordOverrun(1,3);await page.getByRole('button',{name:'Refresh Serial statistics'}).click();await expect(page.getByLabel('Serial 1 statistics')).toContainText('UART overruns 3');
+    device.inject(1,'00',0,18446744073709551610n,324);await expect(page.getByText(/source sequence gaps: 3 events/i)).toBeVisible();device.recordOverrun(1,3);await page.getByRole('button',{name:'Refresh Serial statistics'}).click();await expect(page.getByRole('region',{name:'Device statistics'})).toContainText('UART overruns 3');
   }finally{await device.close();}
 });
 
 test('explicit disconnect updates the visible session and malformed events close the peer',async({page})=>{
-  const device=await new MockSerialServer().ready();try{await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await armFirstChannel(page);device.inject(1,'zz');await expect(page.getByRole('alert')).toContainText('invalid rx_data event');await expect(page.getByRole('heading',{name:'Connect to a Bridge Serial device'})).toBeVisible();await page.getByRole('button',{name:'Connect Serial'}).click();await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await page.getByRole('button',{name:'Disconnect Serial'}).click();await expect(page.getByRole('heading',{name:'Connect to a Bridge Serial device'})).toBeVisible();await expect(page.getByRole('alert')).toContainText('Serial device disconnected');}finally{await device.close();}
+  const device=await new MockSerialServer().ready();try{await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await armFirstChannel(page);device.inject(1,'zz');await expect(page.getByRole('alert')).toContainText('Serial protocol error: Serial protocol: invalid rx_data event');await expect(page.getByRole('heading',{name:'Connect to a Bridge Serial device'})).toBeVisible();await page.getByRole('button',{name:'Connect Serial'}).click();await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await page.getByRole('button',{name:'Disconnect Serial'}).click();await expect(page.getByRole('heading',{name:'Connect to a Bridge Serial device'})).toBeVisible();await expect(page.getByRole('alert')).toContainText('Serial device disconnected');}finally{await device.close();}
+});
+
+test('switches back to Bridge CAN from the Bridge Serial chooser',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'Add a device'}).click();
+  await page.getByRole('button',{name:'Choose Bridge Serial'}).click();
+  await expect(page.getByRole('button',{name:'Open Serial session'})).toBeVisible();
+  await page.getByRole('button',{name:'Choose Bridge CAN'}).click();
+  await expect(page.getByRole('button',{name:'Open Serial session'})).toHaveCount(0);
+  await expect(page.getByTestId('permission-explainer')).toBeVisible();
+});
+
+test('a device-side abnormal close reports connection loss and allows manual reconnect',async({page})=>{
+  const device=await new MockSerialServer().ready();try{
+    await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+    device.closeCurrent(1006);
+    await expect(page.getByRole('alert')).toContainText('connection was lost');
+    await expect(page.getByRole('alert')).not.toContainText('took over');
+    await page.getByRole('button',{name:'Connect Serial'}).click();
+    await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+  }finally{await device.close();}
+});
+
+test('flushes received Serial data already queued in the browser when the device disconnects',async({page})=>{
+  const device=await new MockSerialServer().ready();try{
+    await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await armFirstChannel(page);
+    device.injectThenClose(1,'dead');
+    await expect(page.getByRole('alert')).toContainText('close code 4002');
+    await page.getByRole('button',{name:'Connect Serial'}).click();await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+    await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText('dead');
+  }finally{await device.close();}
+});
+
+test('UART overrun becomes a live loss indicator and a trace marker without Refresh',async({page})=>{
+  const device=await new MockSerialServer().ready();try{
+    await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+    await expect(page.getByRole('region',{name:'Device statistics'})).toContainText('UART overruns 0');
+    device.recordOverrun(1,2);
+    await expect(page.getByText(/UART overruns observed: 2 events.*byte count may be unknown/i)).toBeVisible({timeout:7000});
+    await expect(page.getByRole('alert')).toContainText('UART data loss detected');
+    await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText(/UART overrun detected on Serial 1.*byte count unknown/i);
+  }finally{await device.close();}
+});
+
+test('reconnect preserves known loss counters and explains possible queue loss',async({page})=>{
+  const device=await new MockSerialServer().ready();try{
+    await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await armFirstChannel(page);
+    await expect(page.getByRole('region',{name:'Device statistics'})).toContainText('UART overruns 0');
+    device.recordOverrun(1,2);await expect(page.getByText(/UART overruns observed: 2 events/)).toBeVisible({timeout:7000});
+    device.inject(1,'aa',3,18446744073709551000n,1);
+    await expect(page.getByText(/reported device byte loss: 3/)).toBeVisible();
+    device.closeCurrent(1006);await expect(page.getByRole('alert')).toContainText('connection was lost');
+    await page.getByRole('button',{name:'Connect Serial'}).click();await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+    await expect(page.getByText(/reported device byte loss: 3/)).toBeVisible();
+    await expect(page.getByText(/unread device queue data may also have been lost/i)).toBeVisible();
+    await expect(page.getByText(/UART overruns observed: 2 events/)).toBeVisible();
+    device.recordOverrun(1,1);await expect(page.getByText(/UART overruns observed: 3 events/)).toBeVisible({timeout:7000});
+  }finally{await device.close();}
+});
+
+test('tracks another device separately while keeping page-session overrun totals explicit',async({page})=>{
+  const first=await new MockSerialServer().ready();const second=await new MockSerialServer().ready();second.deviceId='MOCK-SER-02';try{
+    await openSerial(page,first);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();await armFirstChannel(page);first.inject(1,'aa',0,18446744073709551000n,5);
+    await expect(page.getByRole('region',{name:'Device statistics'})).toContainText('UART overruns 0');
+    first.recordOverrun(1,2);await expect(page.getByText(/UART overruns observed: 2 events/)).toBeVisible({timeout:7000});
+    first.closeCurrent(1006);await expect(page.getByRole('alert')).toContainText('connection was lost');
+    await page.getByLabel('Device address').fill(second.url);await page.getByRole('button',{name:'Connect Serial'}).click();
+    await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-02'})).toBeVisible();
+    await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText('Device changed from MOCK-SER-01 to MOCK-SER-02');
+    await expect(page.getByText(/UART overruns observed: 2 events/)).toBeVisible();
+    await armFirstChannel(page);second.inject(1,'bb',0,18446744073709551000n,1000);
+    await expect(page.getByRole('list',{name:'Serial byte events'})).toContainText('bb');
+    await expect(page.getByText(/source sequence gaps: 0 events/i)).toBeVisible();
+    second.recordOverrun(2,1);await expect(page.getByText(/UART overruns observed: 3 events/)).toBeVisible({timeout:7000});
+  }finally{await first.close();await second.close();}
+});
+
+test('stopped channels reject mock RX injection instead of silently dropping the test event',async({page})=>{
+  const device=await new MockSerialServer().ready();try{
+    await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+    expect(()=>device.inject(1)).toThrow(/channel 1 is stopped/);
+  }finally{await device.close();}
+});
+
+test('transmit success is a polite status, payload size is capped, and the trace has a named section',async({page})=>{
+  const device=await new MockSerialServer().ready();try{
+    await openSerial(page,device);await expect(page.getByRole('heading',{name:'Serial device: MOCK-SER-01'})).toBeVisible();
+    await armFirstChannel(page);
+    const trace=page.getByRole('region',{name:'Serial byte stream'});await expect(trace).toBeVisible();
+    const summary=trace.locator('p').filter({hasText:'Source sequence gaps'});await expect(summary).toBeVisible();await expect(summary).not.toHaveAttribute('role','status');await expect(summary).not.toHaveAttribute('aria-live');
+    const txLimit=Math.floor((4096-JSON.stringify({type:'request',id:Number.MAX_SAFE_INTEGER,op:'transmit',params:{channel:1,data:''}}).length)/2);
+    await page.getByLabel('Hex bytes').fill('aa'.repeat(txLimit));await page.getByRole('button',{name:'Send bytes'}).click();
+    const success=page.getByRole('status').filter({hasText:'physical transmission is not confirmed'});await expect(success).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    const statusBefore=await success.textContent();
+    device.inject(1,'fe',0,18446744073709551000n,1);
+    await expect(trace.getByRole('list',{name:'Serial byte events'})).toContainText('fe');
+    await expect(success).toHaveText(statusBefore!);
+    await page.getByLabel('Hex bytes').fill('aa'.repeat(txLimit+1));await page.getByRole('button',{name:'Send bytes'}).click();
+    await expect(page.getByRole('alert')).toContainText('exceeds the 4096-byte request limit');
+  }finally{await device.close();}
 });

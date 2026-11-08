@@ -38,7 +38,7 @@ export function validateSerialDescriptor(x:unknown):SerialDescriptor {
   if(x.channels.some(raw=>{const c=raw as SerialChannel;return c.config!==null&&(!modes.includes(c.config.mode)||!rates.includes(c.config.baud_rate));}))throw serialError('channel config exceeds advertised capabilities');
   return {...x,channels:[...(x.channels as SerialChannel[])].sort((a,b)=>a.channel-b.channel)} as unknown as SerialDescriptor;
 }
-function validateRx(x:unknown):SerialRx {
+export function validateSerialRx(x:unknown):SerialRx {
   if(!record(x)||!exact(x,['seq','channel','dropped','timestamp_ns','direction','data'])||!int(x.seq,0,Number.MAX_SAFE_INTEGER)||!int(x.channel,1,2)||!int(x.dropped)||!uint64(x.timestamp_ns)||!['rx','tx'].includes(String(x.direction))||typeof x.data!=='string'||x.data.length%2!==0||!/^([0-9a-f]{2})*$/.test(x.data)||(!x.data&&!(x.direction==='rx'&&Number(x.dropped)>0))) throw serialError('invalid rx_data event');
   return x as unknown as SerialRx;
 }
@@ -96,7 +96,7 @@ export class SerialClient {
       return;
     }
     if(m.type==='event'&&exact(m,['type','event','data'])&&typeof m.event==='string'&&'data'in m) {
-      if(m.event==='rx_data') {const x=validateRx(m.data);if(this.seq!==null&&x.seq>this.seq+1){/* gaps are represented in the trace by the view */}if(this.seq!==null&&x.seq<=this.seq)return this.violation('non-increasing event sequence');this.seq=x.seq;this.events.rx?.(x);return;}
+      if(m.event==='rx_data') {const x=validateSerialRx(m.data);if(this.seq!==null&&x.seq<=this.seq)return this.violation('non-increasing event sequence');this.seq=x.seq;this.events.rx?.(x);return;}
       if(m.event==='channel_status'){const status=validateStatus(m.data,this.supportedModes,this.supportedRates);this.events.status?.(status);return;}
       return this.violation(`unknown event ${m.event}`);
     }

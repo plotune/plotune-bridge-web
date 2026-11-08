@@ -1,6 +1,6 @@
 # Bridge Serial integration plan for Bridge Web
 
-**Status:** integration plan and future acceptance target. The accompanying local WebSocket preview and mock browser tests implement only a subset of Phase 2; the scenarios below are a roadmap, not a claim that every scenario or hardware behavior is verified. The merged [Bridge Serial v0.1.0 contract](https://github.com/plotune/plotune-nexus/blob/9d3769802912488399b81e8bcca02479600a86c0/plotune-bridge/plotune-bridge-serial/contract/SPEC.md) is the draft baseline.
+**Status:** integration plan and future acceptance target. The accompanying local WebSocket preview and mock browser tests implement only a subset of Phase 2; the scenarios below are a roadmap, not a claim that every scenario or hardware behavior is verified. Bridge Serial contract v0.1.0 is the draft baseline.
 
 ## Decisions
 
@@ -103,7 +103,3 @@ Use the production preview and a deterministic contract-faithful mock WebSocket 
 - **Authentication:** Origin allow-lists are not authentication. LAN direct mode needs an access-control story appropriate for sensitive serial traffic and arbitrary TX.
 - **Hardware-specific proof:** electrical standards, connector pinout, isolation, termination/bias and actual error detection need explicit hardware gates; simulator acceptance cannot close them.
 - **Browser matrix:** existing local-network prompt is native and simulated in Playwright. Safari itself, iOS, real Firefox, trusted device certificates, and high-rate mobile rendering remain separate qualification work.
-
-## Milestone 3 handoff gate
-
-Before opening the Bridge Web PR, independently review the complete diff and run typecheck, lint, the whole unit suite and the whole Playwright suite against browser build 1194 at `/var/lib/plotune-nexus/playwright-browsers`. Verify the existing `e2e/can-fd.spec.ts` remains green and restore any tracked screenshots changed by tests. Record exact counts, skips and browser evidence in the lead state. The Bridge Web PR stays open for the lead to review and merge: a merge deploys the live site.
