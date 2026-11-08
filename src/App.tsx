@@ -9,6 +9,7 @@ import type { PaintScheduler } from './cloud/paint';
 import { AccountDevices } from './components/AccountDevices';
 import { AccountMenu } from './components/AccountMenu';
 import { ConnectView } from './components/ConnectView';
+import { SerialConnectView } from './components/SerialConnectView';
 import { IconStart, IconStop } from './components/icons';
 import { NoticeCard } from './components/Notice';
 import { DeviceSettings } from './components/DeviceSettings';
@@ -210,12 +211,13 @@ function ConnectionBanner({ onLocal }: { onLocal: () => void }) {
 }
 
 /** The add-device pane. The Plotune account is the default; the local-network address form stays behind "Advanced". */
-function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal }: { browser: BrowserInfo; pageOrigin: string } & AddModeProps) {
+function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal, onSerialOpen }: { browser: BrowserInfo; pageOrigin: string; onSerialOpen:()=>void } & AddModeProps) {
   const hub = useHub();
   const store = useStore();
   const state = useWorkspace();
   // Starts in the local-network form only when the user asked for it; the request is used up when this pane closes.
   const [mode, setMode] = useState<'account' | 'local'>(() => (startLocal ? 'local' : 'account'));
+  const [product, setProduct] = useState<'can'|'serial'>('can');
   const onMode = setMode;
   useEffect(() => () => setStartLocal(false), [setStartLocal]);
   const connecting = state.phase === 'connecting';
@@ -234,6 +236,7 @@ function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal }: { bro
     const retry = remoteNotice !== null && remoteNotice.kind !== 'signed-out' && remoteNotice.kind !== 'ended';
     return (
       <div className="bw-add-device">
+        <div className="bw-actions"><button type="button" className="bw-button" onClick={() => { onMode('local'); setProduct('serial'); }}>Choose Bridge Serial</button></div>
         {remoteNotice && (
           <NoticeCard
             notice={remoteNotice}
@@ -259,7 +262,10 @@ function AddDevicePane({ browser, pageOrigin, startLocal, setStartLocal }: { bro
 
   return (
     <div className="bw-add-device">
-      <ConnectView browser={browser} pageOrigin={pageOrigin} />
+      {product === 'serial' ? <section className="bw-card"><h1>Bridge Serial</h1><p>Connect to a local Serial device in the persistent workspace session.</p><button className="bw-button bw-primary" onClick={onSerialOpen}>Open Serial session</button></section> : <>
+        <div className="bw-actions"><button type="button" className="bw-button" onClick={() => setProduct('serial')}>Choose Bridge Serial</button></div>
+        <ConnectView browser={browser} pageOrigin={pageOrigin} />
+      </>}
       {!connecting && (
         <>
           <button type="button" className="bw-link-button" onClick={() => onMode('account')}>
@@ -310,7 +316,7 @@ interface AddModeProps {
   setStartLocal: (value: boolean) => void;
 }
 
-function WorkspaceBody({ browser, pageOrigin, startLocal, setStartLocal, onLocalNetwork }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void } & AddModeProps) {
+function WorkspaceBody({ browser, pageOrigin, startLocal, setStartLocal, onLocalNetwork, serialOpen, onSerialOpen }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void; serialOpen:boolean; onSerialOpen:()=>void } & AddModeProps) {
   const { editingId, activeId } = useHubState();
   const state = useWorkspace();
   const cloud = useCloud();
@@ -318,18 +324,18 @@ function WorkspaceBody({ browser, pageOrigin, startLocal, setStartLocal, onLocal
   // Each screen has exactly one h1: the banner title, or this hidden one.
   const titled = bannerHasTitle(state.phase, state.target, state.notice?.kind, cloud.status);
   return (
-    <main className="bw-main">
+    <>
       <SignInBanner />
-      {editing ? (
-        <AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} />
-      ) : (
+      {editing && !serialOpen ? (
+        <AddDevicePane browser={browser} pageOrigin={pageOrigin} startLocal={startLocal} setStartLocal={setStartLocal} onSerialOpen={onSerialOpen} />
+      ) : !serialOpen ? (
         <>
           {!titled && <h1 className="bw-sr-only">Plotune Bridge workspace</h1>}
           <ConnectionBanner onLocal={onLocalNetwork} />
           <CanvasView />
         </>
-      )}
-    </main>
+      ) : null}
+    </>
   );
 }
 
@@ -341,15 +347,22 @@ function ActiveStore({ children }: { children: React.ReactNode }) {
 }
 
 function Workspace({ browser, pageOrigin, onLocalNetwork, explorerOpen, closeExplorer, settingsFor, closeSettings, ...add }: { browser: BrowserInfo; pageOrigin: string; onLocalNetwork: () => void; explorerOpen: boolean; closeExplorer: () => void; settingsFor: string | null; closeSettings: () => void } & AddModeProps) {
-  const { activeId } = useHubState();
   const sheet = useSheet();
+  const hub = useHub();
+  const { activeId } = useHubState();
+  const [serialEnabled,setSerialEnabled]=useState(false);
+  const [serialOpen,setSerialOpen]=useState(false);
+  const openSerial=useCallback(()=>{hub.cancelEdit();setSerialEnabled(true);setSerialOpen(true);},[hub]);
   return (
     <ActiveStore>
       <DiagnosticsProvider>
         <div className={`bw-shell ${explorerOpen ? 'has-explorer' : ''}`}>
           {explorerOpen && <Explorer onAway={closeExplorer} />}
           {explorerOpen && sheet && <div className="bw-scrim" onClick={closeExplorer} aria-hidden="true" />}
-          <WorkspaceBody key={activeId} browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} {...add} />
+          <main className="bw-main">
+            <WorkspaceBody key={activeId} browser={browser} pageOrigin={pageOrigin} onLocalNetwork={onLocalNetwork} serialOpen={serialOpen} onSerialOpen={openSerial} {...add} />
+            <SerialConnectView enabled={serialEnabled} open={serialOpen} onBack={()=>setSerialOpen(x=>!x)} />
+          </main>
         </div>
         {settingsFor !== null && <DeviceSettings deviceId={settingsFor} onClose={closeSettings} />}
       </DiagnosticsProvider>
