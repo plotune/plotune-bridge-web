@@ -2,7 +2,7 @@ import { formatRelativeNs } from '../lib/bytes';
 import type { CanFrame } from '../protocol/types';
 import type { StreamTap, WorkspaceStore } from '../state/store';
 import { blfObject, blfObjectSize, buildBlf, buildBlfBytes } from './blf';
-import { formatSpec, type FormatSpec, type RecordFormat } from './formats';
+import { formatSpec, type FormatSpec, type RecordFormat, type RecordingField } from './formats';
 
 /** Browsers without streaming to disk keep the recording in memory, so it is bounded. */
 export const DEFAULT_CAP_BYTES = 64 * 1024 * 1024;
@@ -26,6 +26,8 @@ export class Recorder implements StreamTap {
   private readonly objects: Uint8Array[] = [];
   /** False until this recording sees its first CAN FD frame; the CSV header/rows are upgraded then. */
   private canFd = false;
+  /** Source fields this recording actually used, for the format's loss report. */
+  private readonly used = new Set<RecordingField>();
 
   constructor(format: RecordFormat, readonly startedAt: Date, readonly capBytes = DEFAULT_CAP_BYTES) {
     this.spec = formatSpec(format);
@@ -37,8 +39,28 @@ export class Recorder implements StreamTap {
     return this.origin === null || this.lastNs === null ? 0 : Number(this.lastNs - this.origin) / 1e9;
   }
 
+  /** Mandatory fields this recording used that its format cannot represent. Empty means lossless. */
+  get lossFields(): RecordingField[] {
+    return this.spec.unsupported.filter((field) => this.used.has(field));
+  }
+
   frame(frame: CanFrame): void {
     if (!this.running) return;
+    this.used.add('identifier');
+    this.used.add('identifierFormat');
+    this.used.add('direction');
+    this.used.add('channel');
+    this.used.add('payload');
+    this.used.add('timestamp');
+    if (frame.rtr) {
+      this.used.add('remote');
+      this.used.add('dlc'); // candump's #R does not carry the requested length
+    }
+    if (frame.fd === true) {
+      this.used.add('fd');
+      this.used.add('brs');
+      this.used.add('esi');
+    }
     if (frame.fd === true && !this.canFd) this.upgradeForFd();
     this.origin ??= frame.timestampNs;
     this.lastNs = frame.timestampNs;
@@ -115,6 +137,8 @@ export interface RecordingSummary {
   dropped: number;
   capped: boolean;
   carriesDrops: boolean;
+  /** Mandatory fields the export dropped. Empty means lossless. */
+  lossFields: RecordingField[];
 }
 
 export const recordingFileName = (d: Date, extension: string): string => {
@@ -151,8 +175,9 @@ export class RecordingService {
   async stop(now = new Date()): Promise<{ blob: Blob; summary: RecordingSummary } | null> {
     const recorder = this.current;
     if (!recorder) return null;
+    const lossFields = recorder.lossFields;
     const blob = await this.finish();
-    const summary: RecordingSummary = { fileName: recordingFileName(now, recorder.spec.extension), frames: recorder.frames, bytes: recorder.bytes, dropped: recorder.dropped, capped: recorder.capped, carriesDrops: recorder.spec.carriesDrops };
+    const summary: RecordingSummary = { fileName: recordingFileName(now, recorder.spec.extension), frames: recorder.frames, bytes: recorder.bytes, dropped: recorder.dropped, capped: recorder.capped, carriesDrops: recorder.spec.carriesDrops, lossFields };
     this.last = summary;
     this.changed();
     return blob ? { blob, summary } : null;
