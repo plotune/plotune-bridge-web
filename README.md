@@ -1,6 +1,6 @@
 # Plotune Bridge Web
 
-The static Plotune Bridge workspace, served from GitHub Pages at **https://bridge.plotune.net**. It connects straight from the browser to a Bridge CAN device (or the reference virtual device) and gives you a two-channel trace, send, status and drop reporting, plus client-side ISO-TP, generic UDS and XCP-on-CAN tools.
+The static Plotune Bridge workspace, served from GitHub Pages at **https://bridge.plotune.net**. It connects straight from the browser to a Bridge CAN device (or the reference virtual device) and gives you a two-channel trace, send, status and drop reporting, plus client-side ISO-TP, generic UDS and XCP-on-CAN tools. A separate Bridge Serial path implements the browser-facing subset of Serial contract v0.1.0.
 
 This repository is public. It is a static build: **no server-side code, no secrets, nothing private**.
 
@@ -157,6 +157,12 @@ The page sets its own Content-Security-Policy through a `<meta>` tag because Git
 **Built:** device connection over WebSocket; permission explanation, denial handling and retry; unsupported-browser notice; replace-on-connect and close-code handling; two-channel capture with a basic live trace; channel and device status; drop, overflow and transit-loss display; send frame; client-side ISO-TP, generic UDS and XCP-on-CAN; maximizable and full-screen panels with a show/hide menu; light Plotune theme; Plotune account sign-in through plotune.net; remote access through the Plotune cloud relay (WebRTC).
 
 **Not built (candidates, not commitments):** trace filtering and search, plots and numeric panels, ASC recording/export, DBC import and signal decoding. The trace is deliberately a plain live table. Also not built: any CAN FD view (Classic CAN only).
+
+### Bridge Serial (preview)
+
+Choose **Add a device → Choose Bridge Serial → Open Serial session** to connect to a local Serial contract v0.1.x WebSocket endpoint. The persistent byte view supports independent per-channel mode/baud/framing/termination/bias configuration, per-channel start/stop, exact device timestamps, known byte loss, sequence gaps, bounded trace eviction, device statistics (including unknown-count UART overruns), hex transmit acceptance, and explicit disconnect. Closing the pane keeps the session in the workspace; commands are not replayed after disconnect. Serial payloads stay bytes and never appear as CAN frames. This path does not use the CAN capture controls, CAN diagnostics, or saved hardware configuration.
+
+The UI and Playwright mock cover version negotiation, strict descriptor/event validation, configuration, per-channel RX control, numeric uint64 timestamps, loss reporting, statistics, TX acceptance, disconnect, replacement, and trace bounds. The mock is software-only; no physical Serial hardware, electrical behavior, UART timing, or hardware commands are exercised. This preview supports direct local WebSocket connections only; it does not claim cloud relay or physical device qualification. Origin allow-lists reduce cross-origin access but do not authenticate a device. The browser sends only actions explicitly selected in this view; it does not replay or automatically restore hardware commands.
 
 ## Assumptions
 
